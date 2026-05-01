@@ -8,6 +8,11 @@ pub fn get_branches(path: &str) -> Vec<String> {
         .collect()
 }
 
+pub fn get_current_branch(path: &str) -> String {
+    let out = run_git(path, &["branch", "--show-current"]);
+    out.trim().to_string()
+}
+
 pub fn has_unique_commits(path: &str, branch: &str) -> bool {
     let out = run_git(path, &[
         "rev-list",

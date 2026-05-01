@@ -7,5 +7,8 @@ pub fn run_git(path: &str, args: &[&str]) -> String {
         .output()
         .expect("git failed");
 
-    String::from_utf8_lossy(&output.stdout).to_string()
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    
+    format!("{}{}", stdout, stderr).to_string()
 }

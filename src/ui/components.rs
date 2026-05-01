@@ -31,6 +31,8 @@ pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
             BranchStatus::Local => icons.push('L'),
             BranchStatus::Stashed => icons.push('S'),
             BranchStatus::Safe => icons.push('●'),
+            BranchStatus::RemoteTracked => icons.push('R'),
+            BranchStatus::RemoteUntracked => icons.push('U'),
         }
     }
     (icons, color)

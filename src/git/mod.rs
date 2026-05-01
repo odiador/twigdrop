@@ -1,6 +1,8 @@
 pub mod commands;
 pub mod status;
 
+pub use status::get_current_branch;
+
 use crate::models::{Branch, BranchStatus};
 use crate::git::status::{
     get_branches, get_merged_branches, get_upstream_tracks, get_stashed_branches, has_unique_commits
@@ -22,7 +24,11 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
             if let Some(ti) = track_info {
                 if !ti.has_upstream {
                     status.push(BranchStatus::Local);
+                    status.push(BranchStatus::RemoteUntracked);
+                } else {
+                    status.push(BranchStatus::RemoteTracked);
                 }
+                
                 if ti.track.contains("[gone]") {
                     status.push(BranchStatus::Gone);
                 }
@@ -34,6 +40,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
                 }
             } else {
                 status.push(BranchStatus::Local);
+                status.push(BranchStatus::RemoteUntracked);
             }
 
             if merged.contains(&name) {

@@ -1,16 +1,17 @@
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum BranchStatus {
-    Safe,
-    Gone,
     Merged,
     HasUniqueCommits,
+    Gone,
     Ahead,
     Behind,
-    Local,
     Stashed,
+    Local,
+    Safe,
+    RemoteTracked,
+    RemoteUntracked,
 }
 
-#[derive(Debug, Clone)]
 pub struct Branch {
     pub name: String,
     pub status: Vec<BranchStatus>,
