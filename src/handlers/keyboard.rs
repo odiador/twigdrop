@@ -74,6 +74,7 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                     0 => { // Checkout
                         let msg = checkout_branch(path, &name);
                         app.branches = git::build_branches(path);
+                        app.refresh_filtered_branches();
                         app.current_branch = git::get_current_branch(path);
                         app.mode = AppMode::Message(msg);
                     }
@@ -85,6 +86,7 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                     2 => { // Delete
                         let msg = delete_branch(path, &name);
                         app.branches = git::build_branches(path);
+                        app.refresh_filtered_branches();
                         app.current_branch = git::get_current_branch(path);
                         app.mode = AppMode::Message(msg);
                     }
@@ -109,6 +111,7 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                 9 => Some(BranchStatus::RemoteUntracked),
                 _ => None,
             };
+            app.refresh_filtered_branches();
             app.selected = 0;
             app.mode = AppMode::Normal;
         }

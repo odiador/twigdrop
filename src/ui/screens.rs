@@ -11,8 +11,7 @@ use crate::ui::components::get_status_icons;
 use crate::ui::ASCII_LOGO;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
-    let filtered_branches = app.get_filtered_branches();
-    let branches_len = filtered_branches.len();
+    let branches_len = app.filtered_indices.len();
     let inner_height = area.height.saturating_sub(2) as usize;
 
     if inner_height == 0 { return; }
@@ -30,6 +29,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         }
     }
     app.list_start_index = start;
+    let filtered_branches = app.get_filtered_branches();
 
     let show_top_dots = start > 0;
     let show_bottom_dots = (start + inner_height) < branches_len;
@@ -42,8 +42,6 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     let branch_items_to_show = inner_height 
         - (if show_top_dots { 1 } else { 0 }) 
         - (if show_bottom_dots { 1 } else { 0 });
-
-    let filtered_branches = app.get_filtered_branches();
 
     for i in 0..branch_items_to_show {
         let branch_idx = start + i;
