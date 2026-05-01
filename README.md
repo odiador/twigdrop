@@ -21,11 +21,13 @@ cargo build --release
 ```
 
 You can run it directly:
+
 ```bash
 cargo run
 ```
 
 Or install it globally:
+
 ```bash
 cargo install --path .
 ```
@@ -33,28 +35,30 @@ cargo install --path .
 ## Usage
 
 Navigate to any git repository and run:
+
 ```bash
 twigdrop
 ```
 
 You can also pass a path to a specific repository:
+
 ```bash
 twigdrop /path/to/your/repo
 ```
 
 ### Keybindings
 
-| Key / Mouse | Action |
-|-------------|--------|
-| `↑` / `k`   | Move selection up (or scroll up in info panel) |
-| `↓` / `j`   | Move selection down (or scroll down in info panel) |
-| `Space`     | Toggle mark on the selected branch for batch deletion |
-| `d`         | Delete all marked branches |
-| `c`         | Checkout the currently selected branch |
-| `Tab`       | Toggle the Info/Diff panel for the selected branch |
-| `Left Click`| Jump to a specific branch in the list |
-| `h`         | Toggle the Help & Legend modal |
-| `q` / `Esc` | Quit the application (or close opened modals) |
+| Key / Mouse  | Action                                                |
+| ------------ | ----------------------------------------------------- |
+| `↑` / `k`    | Move selection up (or scroll up in info panel)        |
+| `↓` / `j`    | Move selection down (or scroll down in info panel)    |
+| `Space`      | Toggle mark on the selected branch for batch deletion |
+| `d`          | Delete all marked branches                            |
+| `c`          | Checkout the currently selected branch                |
+| `Tab`        | Toggle the Info/Diff panel for the selected branch    |
+| `Left Click` | Jump to a specific branch in the list                 |
+| `h`          | Toggle the Help & Legend modal                        |
+| `q` / `Esc`  | Quit the application (or close opened modals)         |
 
 ### Legend
 
@@ -65,4 +69,6 @@ twigdrop /path/to/your/repo
 - `●` (Green): **Normal / Safe** - Up-to-date or generic safe state.
 
 ---
+
+Inspired by [deadbranch](https://github.com/armgabrielyan/deadbranch).
 Made by: **odiador** ❤️ for the community.
