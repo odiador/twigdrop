@@ -10,6 +10,8 @@ use crate::app::{App, AppMode};
 use crate::ui::components::get_status_icons;
 use crate::ui::ASCII_LOGO;
 
+use ratatui::text::Span;
+
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     let branches_len = app.filtered_indices.len();
     let inner_height = area.height.saturating_sub(2) as usize;
@@ -150,6 +152,7 @@ pub fn render_help(f: &mut Frame) {
         .constraints([
             Constraint::Length(8), // Logo
             Constraint::Min(10),   // Content
+            Constraint::Length(1), // Footer
         ].as_ref())
         .split(area);
 
@@ -197,6 +200,16 @@ pub fn render_help(f: &mut Frame) {
         .split(chunks[1])[1];
 
     f.render_widget(p, help_inner);
+
+    let footer_text = vec![
+        Line::from(vec![
+            Span::raw("Made by: "),
+            Span::styled("odiador", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
+            Span::raw(" ❤️ for the community"),
+        ]),
+    ];
+    let footer_p = Paragraph::new(footer_text).alignment(Alignment::Center);
+    f.render_widget(footer_p, chunks[2]);
 }
 
 pub fn render_manage(f: &mut Frame, app: &App) {

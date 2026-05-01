@@ -15,6 +15,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if app.mode != AppMode::Normal {
                 app.mode = AppMode::Normal;
                 false
+            } else if app.current_filter.is_some() {
+                app.current_filter = None;
+                app.refresh_filtered_branches();
+                app.selected = 0;
+                false
             } else {
                 true // Signal to quit
             }
@@ -48,6 +53,25 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 AppMode::Manage => { if app.manage_selected > 0 { app.manage_selected -= 1; } }
                 AppMode::Filter => { if app.filter_selected > 0 { app.filter_selected -= 1; } }
                 _ => app.previous(),
+            }
+            false
+        }
+        KeyCode::Char(c) if c.is_digit(10) => {
+            let digit = c.to_digit(10).unwrap() as usize;
+            match app.mode {
+                AppMode::Filter => {
+                    if digit < 10 {
+                        app.filter_selected = digit;
+                        handle_enter_or_selection(app, path);
+                    }
+                }
+                AppMode::Manage => {
+                    if digit >= 1 && digit <= 5 {
+                        app.manage_selected = digit - 1;
+                        handle_enter_or_selection(app, path);
+                    }
+                }
+                _ => {}
             }
             false
         }
