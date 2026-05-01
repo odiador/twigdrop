@@ -56,6 +56,11 @@ fn run_app(
     path: &str,
 ) -> io::Result<()> {
     loop {
+        if app.needs_clear {
+            terminal.clear()?;
+            app.needs_clear = false;
+        }
+
         terminal.draw(|f| ui::draw(f, app))?;
 
         if handle_event(app, path)? {

@@ -13,7 +13,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
             if app.mode != AppMode::Normal {
+                if app.mode == AppMode::Help {
+                    app.branches = git::build_branches(path);
+                    app.refresh_filtered_branches();
+                }
                 app.mode = AppMode::Normal;
+                app.needs_clear = true;
                 false
             } else if app.current_filter.is_some() {
                 app.current_filter = None;

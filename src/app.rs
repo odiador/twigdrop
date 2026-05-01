@@ -27,6 +27,7 @@ pub struct App {
     // Double click support
     pub last_click_time: Instant,
     pub last_click_row: Option<usize>,
+    pub needs_clear: bool,
 }
 
 impl App {
@@ -45,6 +46,7 @@ impl App {
             filtered_indices: vec![],
             last_click_time: Instant::now(),
             last_click_row: None,
+            needs_clear: false,
         };
         app.refresh_filtered_branches();
         app
@@ -61,6 +63,12 @@ impl App {
         } else {
             (0..self.branches.len()).collect()
         };
+
+        // Clamp selected index
+        let max = self.filtered_indices.len().saturating_sub(1);
+        if self.selected > max {
+            self.selected = max;
+        }
     }
 
     pub fn get_filtered_branches(&self) -> Vec<&Branch> {
