@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::app::{App, AppMode};
-use crate::ui::screens::{render_main_list, render_help, render_manage};
+use crate::ui::screens::{render_main_list, render_help, render_manage, render_filter, render_message};
 
 pub const ASCII_LOGO: &str = r#"
 ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
@@ -31,13 +31,15 @@ pub fn draw(f: &mut Frame, app: &mut App) {
 
     render_main_list(f, chunks[1], app);
 
-    let shortcuts = Paragraph::new(" ↑/k: move │ Space: mark │ d: delete │ m: manage │ h: help │ q: quit ")
+    let shortcuts = Paragraph::new(" ↑/k: move │ f: filter │ m/Enter: manage │ h: help │ q: quit ")
         .style(Style::default().fg(Color::DarkGray));
     f.render_widget(shortcuts, chunks[2]);
 
-    match app.mode {
+    match &app.mode {
         AppMode::Help => render_help(f),
         AppMode::Manage => render_manage(f, app),
+        AppMode::Filter => render_filter(f, app),
+        AppMode::Message(msg) => render_message(f, msg),
         _ => {}
     }
 }

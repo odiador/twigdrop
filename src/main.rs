@@ -24,7 +24,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let path = args.get(1).cloned().unwrap_or_else(|| ".".to_string());
 
     let branches = git::build_branches(&path);
-    let mut app = App::new(branches);
+    let current_branch = git::get_current_branch(&path);
+    let mut app = App::new(branches, current_branch);
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
