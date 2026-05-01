@@ -5,6 +5,9 @@ pub enum BranchStatus {
     Merged,
     HasUniqueCommits,
     Ahead,
+    Behind,
+    Local,
+    Stashed,
 }
 
 #[derive(Debug, Clone)]
