@@ -8,9 +8,6 @@ use ratatui::{
 
 use crate::app::{App, AppMode};
 use crate::ui::components::get_status_icons;
-use crate::ui::ASCII_LOGO;
-
-use ratatui::text::Span;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     let branches_len = app.filtered_indices.len();
@@ -143,24 +140,7 @@ pub fn render_filter(f: &mut Frame, app: &App) {
     f.render_widget(list, inner);
 }
 
-pub fn render_help(f: &mut Frame) {
-    let area = f.area();
-    f.render_widget(Clear, area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(8), // Logo
-            Constraint::Min(10),   // Content
-            Constraint::Length(1), // Footer
-        ].as_ref())
-        .split(area);
-
-    let logo = Paragraph::new(ASCII_LOGO)
-        .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center);
-    f.render_widget(logo, chunks[0]);
-
+pub fn render_help_content(f: &mut Frame, area: Rect) {
     let block = Block::default()
         .title(Line::from(" Help & Legend ").alignment(Alignment::Left))
         .title(Line::from(" [X] ").alignment(Alignment::Right))
@@ -197,19 +177,9 @@ pub fn render_help(f: &mut Frame) {
     let help_inner = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(15), Constraint::Percentage(70), Constraint::Percentage(15)].as_ref())
-        .split(chunks[1])[1];
+        .split(area)[1];
 
     f.render_widget(p, help_inner);
-
-    let footer_text = vec![
-        Line::from(vec![
-            Span::raw("Made by: "),
-            Span::styled("odiador", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-            Span::raw(" ❤️ for the community"),
-        ]),
-    ];
-    let footer_p = Paragraph::new(footer_text).alignment(Alignment::Center);
-    f.render_widget(footer_p, chunks[2]);
 }
 
 pub fn render_manage(f: &mut Frame, app: &App) {
@@ -272,7 +242,7 @@ pub fn render_message(f: &mut Frame, msg: &str) {
 
     let p = Paragraph::new(msg)
         .block(block)
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Left)
         .style(Style::default().fg(Color::White))
         .wrap(ratatui::widgets::Wrap { trim: true });
 
