@@ -110,10 +110,23 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Left => {
             if app.mode == AppMode::DirectorySearcher
                 && let Some(entry) = app.file_tree.get(app.file_selected)
-                && entry.is_dir
-                && entry.is_open
             {
-                app.toggle_file_dir(path);
+                if entry.is_dir && entry.is_open {
+                    // Close if open
+                    app.toggle_file_dir(path);
+                } else if entry.depth > 0 {
+                    // Find parent and close it
+                    let current_depth = entry.depth;
+                    for i in (0..app.file_selected).rev() {
+                        if app.file_tree[i].depth < current_depth {
+                            app.file_selected = i;
+                            if app.file_tree[i].is_open {
+                                app.toggle_file_dir(path);
+                            }
+                            break;
+                        }
+                    }
+                }
             }
             false
         }
