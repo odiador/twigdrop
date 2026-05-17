@@ -1,6 +1,7 @@
+use std::path::Path;
 use std::process::Command;
 
-pub fn open_terminal(dir: &std::path::Path) {
+pub fn open_terminal(dir: &Path) {
     if is_ghostty_available() {
         let _ = Command::new("ghostty")
             .arg("--working-directory")
@@ -41,6 +42,10 @@ pub fn open_terminal(dir: &std::path::Path) {
                 .spawn();
         }
     }
+}
+
+pub fn open_ide(dir: &Path, command: &str) {
+    let _ = Command::new(command).arg(dir).spawn();
 }
 
 fn is_ghostty_available() -> bool {
