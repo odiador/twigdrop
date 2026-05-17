@@ -49,6 +49,23 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
+        KeyCode::Char('o')
+            if key
+                .modifiers
+                .contains(ratatui::crossterm::event::KeyModifiers::CONTROL) =>
+        {
+            let target_path = if app.alt_pressed && app.mode == AppMode::DirectorySearcher {
+                if let Some(entry) = app.file_tree.get(app.file_selected) {
+                    std::path::PathBuf::from(path).join(&entry.path)
+                } else {
+                    std::path::PathBuf::from(path)
+                }
+            } else {
+                std::path::PathBuf::from(path)
+            };
+            crate::utils::terminal::open_ide(&target_path, &app.config.ide_command);
+            false
+        }
         KeyCode::Char('S') => {
             if app.mode == AppMode::Normal {
                 app.load_stashes(path);
@@ -153,8 +170,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if app.mode == AppMode::DirectorySearcher
                 && let Some(entry) = app.file_tree.get(app.file_selected)
             {
-                let full_path = std::path::PathBuf::from(path).join(&entry.path);
-                let _ = std::process::Command::new("code").arg(full_path).spawn();
+                let target_path = if app.alt_pressed {
+                    std::path::PathBuf::from(path).join(&entry.path)
+                } else {
+                    std::path::PathBuf::from(path)
+                };
+                crate::utils::terminal::open_ide(&target_path, &app.config.ide_command);
             }
             false
         }
@@ -179,10 +200,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if app.mode == AppMode::DirectorySearcher
                 && let Some(entry) = app.file_tree.get(app.file_selected)
             {
-                let full_path = std::path::PathBuf::from(path).join(&entry.path);
-                let _ = std::process::Command::new("antigravity")
-                    .arg(full_path)
-                    .spawn();
+                let target_path = if app.alt_pressed {
+                    std::path::PathBuf::from(path).join(&entry.path)
+                } else {
+                    std::path::PathBuf::from(path)
+                };
+                crate::utils::terminal::open_ide(&target_path, &app.config.alternative_ide_command);
             } else if app.mode == AppMode::StashDetail
                 && let Some(stash) = app.stashes.get(app.stash_selected)
             {

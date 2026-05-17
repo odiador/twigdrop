@@ -59,6 +59,7 @@ pub struct App {
     pub last_click_row: Option<usize>,
     pub needs_clear: bool,
     pub alt_pressed: bool,
+    pub config: crate::utils::config::Config,
 
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
@@ -105,6 +106,7 @@ impl App {
             last_click_row: None,
             needs_clear: false,
             alt_pressed: false,
+            config: crate::utils::config::load_config(),
             rx,
             trigger_tx,
             ai_rx,

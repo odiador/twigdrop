@@ -44,20 +44,20 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     let footer_text = if app.alt_pressed {
         match &app.mode {
             AppMode::DirectorySearcher => {
-                " q: back │ Enter: open/close │ v: Visual │ T: Inline TTY (Bottom) │ a: Antigravity "
+                " q: back │ Enter: open/close │ v: IDE (Path) │ T: Inline TTY │ a: Alt IDE (Path) "
             }
             AppMode::Normal => {
-                " ↑/↓: move │ Ctrl+b: files │ S: stash │ p: prune │ f: filter │ m: manage │ h: help │ q: quit "
+                " ↑/↓: move │ Ctrl+b: files │ Ctrl+o: IDE (Path) │ S: stash │ p: prune │ f: filter │ m: manage │ h: help "
             }
             _ => " q: back ",
         }
     } else {
         match &app.mode {
             AppMode::DirectorySearcher => {
-                " q: back │ Enter: open/close │ v: Visual │ t: External TTY │ a: Antigravity "
+                " q: back │ Enter: open/close │ v: IDE (Root) │ t: External TTY │ a: Alt IDE (Root) "
             }
             AppMode::Normal => {
-                " ↑/↓: move │ Ctrl+b: files │ S: stash │ p: prune │ f: filter │ m: manage │ h: help │ q: quit "
+                " ↑/↓: move │ Ctrl+b: files │ Ctrl+o: IDE (Root) │ S: stash │ p: prune │ f: filter │ m: manage │ h: help "
             }
             _ => " q: back ",
         }
