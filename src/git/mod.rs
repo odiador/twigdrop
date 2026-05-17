@@ -1,19 +1,23 @@
 pub mod commands;
+pub mod files;
+pub mod stash;
 pub mod status;
 
 pub use status::get_current_branch;
 
-use crate::models::{Branch, BranchStatus};
+use crate::git::commands::{run_git, run_git_with_status};
 use crate::git::status::{
-    get_branches, get_merged_branches, get_upstream_tracks, get_stashed_branches, has_unique_commits
+    get_branch_metadata, get_branches, get_merged_branches, get_stashed_branches,
+    get_upstream_tracks, has_unique_commits,
 };
-use crate::git::commands::run_git;
+use crate::models::{Branch, BranchStatus, MergeStatus};
 
 pub fn build_branches(path: &str) -> Vec<Branch> {
     let names = get_branches(path);
     let merged = get_merged_branches(path);
     let tracks = get_upstream_tracks(path);
     let stashed = get_stashed_branches(path);
+    let metadata = get_branch_metadata(path);
 
     names
         .into_iter()
@@ -28,7 +32,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
                 } else {
                     status.push(BranchStatus::RemoteTracked);
                 }
-                
+
                 if ti.track.contains("[gone]") {
                     status.push(BranchStatus::Gone);
                 }
@@ -57,11 +61,95 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
                 status.push(BranchStatus::Safe);
             }
 
-            Branch { name, status }
+            let meta = metadata.get(&name);
+            let age = meta.map(|m| m.age.clone()).unwrap_or_default();
+            let author = meta.map(|m| m.author.clone()).unwrap_or_default();
+            let commit_date = meta.map(|m| m.commit_date.clone()).unwrap_or_default();
+
+            Branch {
+                name,
+                status,
+                merge_status: MergeStatus::NotAnalyzed,
+                age,
+                author,
+                commit_date,
+            }
         })
         .collect()
 }
 
 pub fn get_branch_info(path: &str, branch: &str) -> String {
-    run_git(path, &["log", "-n", "3", "--stat", "-p", "--color=never", branch])
+    run_git(
+        path,
+        &["log", "-n", "3", "--stat", "-p", "--color=never", branch],
+    )
+}
+
+pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &str) -> MergeStatus {
+    if target_branch == current_branch {
+        return MergeStatus::Clean;
+    }
+
+    // 1. Get merge base
+    let merge_base = run_git(path, &["merge-base", current_branch, target_branch])
+        .trim()
+        .to_string();
+    if merge_base.is_empty() {
+        return MergeStatus::Conflict("No common ancestor found".to_string());
+    }
+
+    // 2. Get commits to apply
+    let commits_str = run_git(
+        path,
+        &[
+            "log",
+            "--reverse",
+            "--format=%H",
+            &format!("{}..{}", merge_base, target_branch),
+        ],
+    );
+    let commits: Vec<&str> = commits_str.lines().collect();
+
+    if commits.is_empty() {
+        return MergeStatus::Clean;
+    }
+
+    let mut current_tree = run_git(
+        path,
+        &["rev-parse", &format!("{}^{{tree}}", current_branch)],
+    )
+    .trim()
+    .to_string();
+    let total_commits = commits.len();
+    let mut safe_commits = 0;
+
+    for commit in commits {
+        // Try to merge the commit into the current_tree
+        // Since we are doing it commit by commit, the base for this specific merge is the parent of the commit
+        // BUT wait, if we want to see if it can be applied onto our current state,
+        // the "base" for the merge-tree should be the merge-base if we were doing a full merge.
+        // However, the user suggested "Cálculo Lineal Silencioso".
+
+        let parent = run_git(path, &["rev-parse", &format!("{}^1", commit)])
+            .trim()
+            .to_string();
+
+        let (output, code) = run_git_with_status(
+            path,
+            &["merge-tree", "--write-tree", &parent, &current_tree, commit],
+        );
+
+        if code == 0 {
+            current_tree = output.trim().to_string();
+            safe_commits += 1;
+        } else {
+            return MergeStatus::SafeLimit(safe_commits, total_commits);
+        }
+    }
+
+    if safe_commits == total_commits {
+        MergeStatus::Clean
+    } else {
+        MergeStatus::SafeLimit(safe_commits, total_commits)
+    }
 }

@@ -1,16 +1,16 @@
 pub mod keyboard;
 pub mod mouse;
 
-use ratatui::crossterm::event::{self, Event};
 use crate::app::App;
 use crate::handlers::keyboard::handle_keyboard;
 use crate::handlers::mouse::handle_mouse;
+use ratatui::crossterm::event::{self, Event};
 
 pub fn handle_event(app: &mut App, path: &str) -> Result<bool, std::io::Error> {
     // Wait for the first event (blocking)
     let first_event = event::read()?;
     let mut quit = process_single_event(app, first_event, path);
-    
+
     // Process any other events already in the queue to avoid lag
     while event::poll(std::time::Duration::from_millis(0))? {
         let next_event = event::read()?;
@@ -18,7 +18,7 @@ pub fn handle_event(app: &mut App, path: &str) -> Result<bool, std::io::Error> {
             quit = true;
         }
     }
-    
+
     Ok(quit)
 }
 
@@ -28,7 +28,7 @@ fn process_single_event(app: &mut App, event: Event, path: &str) -> bool {
             return handle_keyboard(app, key, path);
         }
         Event::Mouse(mouse) => {
-            handle_mouse(app, mouse);
+            handle_mouse(app, mouse, path);
         }
         _ => {}
     }

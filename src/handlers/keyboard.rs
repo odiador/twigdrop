@@ -1,8 +1,10 @@
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use crate::actions::{
+    apply_stash, bulk_delete_branches, checkout_branch, delete_branch, prune_branches,
+};
 use crate::app::{App, AppMode};
 use crate::git;
 use crate::models::BranchStatus;
-use crate::actions::{delete_branch, checkout_branch};
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     if let AppMode::Message(_) = app.mode {
@@ -14,8 +16,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('q') | KeyCode::Esc => {
             if app.mode != AppMode::Normal {
                 if app.mode == AppMode::Help {
-                    app.branches = git::build_branches(path);
-                    app.refresh_filtered_branches();
+                    app.refresh_branches(path);
                 }
                 app.mode = AppMode::Normal;
                 app.needs_clear = true;
@@ -33,6 +34,89 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.toggle_help();
             false
         }
+        KeyCode::Char('b')
+            if key
+                .modifiers
+                .contains(ratatui::crossterm::event::KeyModifiers::CONTROL) =>
+        {
+            if app.mode == AppMode::Normal {
+                app.load_file_tree(path);
+                app.mode = AppMode::DirectorySearcher;
+            }
+            false
+        }
+        KeyCode::Char('S') => {
+            if app.mode == AppMode::Normal {
+                app.load_stashes(path);
+                app.load_stash_detail(path);
+                app.mode = AppMode::StashDetail;
+            }
+            false
+        }
+        KeyCode::Char('p') => {
+            if app.mode == AppMode::Normal {
+                let msg = prune_branches(path, &app.branches, &app.current_branch);
+                app.refresh_branches(path);
+                app.mode = AppMode::Message(msg);
+            }
+            false
+        }
+        KeyCode::Char('i') => {
+            if app.mode == AppMode::Normal
+                && let Some(branch) = app.get_filtered_branches().get(app.selected)
+            {
+                let branch_name = branch.name.clone();
+                let path_clone = path.to_string();
+                let _ = app
+                    .ai_trigger_tx
+                    .try_send((path_clone, branch_name.clone()));
+                app.ai_analysis = Some("Initializing AI analysis...".to_string());
+
+                // Switch to Diff mode to show the analysis panel
+                let info = git::get_branch_info(path, &branch_name);
+                app.branch_info = info;
+                app.info_scroll = 0;
+                app.mode = AppMode::Diff;
+            }
+            false
+        }
+        KeyCode::Char(' ') | KeyCode::Char('d') => {
+            if app.mode == AppMode::Normal {
+                app.toggle_selection();
+            }
+            false
+        }
+        KeyCode::Char('D') => {
+            if app.mode == AppMode::Normal && !app.bulk_selected.is_empty() {
+                let names: Vec<String> = app.bulk_selected.iter().cloned().collect();
+                let msg = bulk_delete_branches(path, &names);
+                app.bulk_selected.clear();
+                app.refresh_branches(path);
+                app.current_branch = git::get_current_branch(path);
+                app.mode = AppMode::Message(msg);
+            }
+            false
+        }
+        KeyCode::Right => {
+            if app.mode == AppMode::DirectorySearcher
+                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && entry.is_dir
+                && !entry.is_open
+            {
+                app.toggle_file_dir(path);
+            }
+            false
+        }
+        KeyCode::Left => {
+            if app.mode == AppMode::DirectorySearcher
+                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && entry.is_dir
+                && entry.is_open
+            {
+                app.toggle_file_dir(path);
+            }
+            false
+        }
         KeyCode::Char('f') => {
             if app.mode == AppMode::Normal {
                 app.mode = AppMode::Filter;
@@ -41,13 +125,83 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('m') | KeyCode::Tab | KeyCode::Enter => {
-            handle_enter_or_selection(app, path)
+            if app.mode == AppMode::DirectorySearcher {
+                app.toggle_file_dir(path);
+                false
+            } else if app.mode == AppMode::StashDetail {
+                app.load_stash_detail(path);
+                false
+            } else {
+                handle_enter_or_selection(app, path)
+            }
+        }
+        KeyCode::Char('v') => {
+            if app.mode == AppMode::DirectorySearcher
+                && let Some(entry) = app.file_tree.get(app.file_selected)
+            {
+                let full_path = std::path::PathBuf::from(path).join(&entry.path);
+                let _ = std::process::Command::new("code").arg(full_path).spawn();
+            }
+            false
+        }
+        KeyCode::Char('t') => {
+            if app.mode == AppMode::DirectorySearcher
+                && let Some(entry) = app.file_tree.get(app.file_selected)
+            {
+                let full_path = std::path::PathBuf::from(path).join(&entry.path);
+                let dir = if entry.is_dir {
+                    full_path
+                } else {
+                    full_path
+                        .parent()
+                        .unwrap_or(&std::path::PathBuf::from(path))
+                        .to_path_buf()
+                };
+                crate::utils::terminal::open_terminal(&dir);
+            }
+            false
+        }
+        KeyCode::Char('a') => {
+            if app.mode == AppMode::DirectorySearcher
+                && let Some(entry) = app.file_tree.get(app.file_selected)
+            {
+                let full_path = std::path::PathBuf::from(path).join(&entry.path);
+                let _ = std::process::Command::new("antigravity")
+                    .arg(full_path)
+                    .spawn();
+            } else if app.mode == AppMode::StashDetail
+                && let Some(stash) = app.stashes.get(app.stash_selected)
+            {
+                let msg = apply_stash(path, &stash.id);
+                app.refresh_branches(path);
+                app.mode = AppMode::Message(msg);
+            }
+            false
         }
         KeyCode::Down | KeyCode::Char('j') => {
             match app.mode {
                 AppMode::Diff => app.info_scroll += 1,
-                AppMode::Manage => { if app.manage_selected < 4 { app.manage_selected += 1; } }
-                AppMode::Filter => { if app.filter_selected < 9 { app.filter_selected += 1; } }
+                AppMode::DirectorySearcher => {
+                    if app.file_selected < app.file_tree.len().saturating_sub(1) {
+                        app.file_selected += 1;
+                    }
+                }
+                AppMode::StashDetail => {
+                    if app.stash_selected < app.stashes.len().saturating_sub(1) {
+                        app.stash_selected += 1;
+                        app.load_stash_detail(path);
+                    }
+                }
+                AppMode::Manage => {
+                    if app.manage_selected < 4 {
+                        app.manage_selected += 1;
+                    }
+                }
+                AppMode::Filter => {
+                    if app.filter_selected < 9 {
+                        app.filter_selected += 1;
+                    }
+                }
                 _ => app.next(),
             }
             false
@@ -55,42 +209,55 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Up | KeyCode::Char('k') => {
             match app.mode {
                 AppMode::Diff => app.info_scroll = app.info_scroll.saturating_sub(1),
-                AppMode::Manage => { if app.manage_selected > 0 { app.manage_selected -= 1; } }
-                AppMode::Filter => { if app.filter_selected > 0 { app.filter_selected -= 1; } }
+                AppMode::DirectorySearcher => {
+                    if app.file_selected > 0 {
+                        app.file_selected -= 1;
+                    }
+                }
+                AppMode::StashDetail => {
+                    if app.stash_selected > 0 {
+                        app.stash_selected -= 1;
+                        app.load_stash_detail(path);
+                    }
+                }
+                AppMode::Manage => {
+                    if app.manage_selected > 0 {
+                        app.manage_selected -= 1;
+                    }
+                }
+                AppMode::Filter => {
+                    if app.filter_selected > 0 {
+                        app.filter_selected -= 1;
+                    }
+                }
                 _ => app.previous(),
             }
             false
         }
-        KeyCode::Char(c) if c.is_digit(10) => {
+        KeyCode::Char(c) if c.is_ascii_digit() => {
             let digit = c.to_digit(10).unwrap() as usize;
             match app.mode {
-                AppMode::Filter => {
-                    if digit < 10 {
-                        app.filter_selected = digit;
-                        handle_enter_or_selection(app, path);
-                    }
+                AppMode::Filter if digit < 10 => {
+                    app.filter_selected = digit;
+                    handle_enter_or_selection(app, path);
                 }
-                AppMode::Manage => {
-                    if digit >= 1 && digit <= 5 {
-                        app.manage_selected = digit - 1;
-                        handle_enter_or_selection(app, path);
-                    }
+                AppMode::Manage if (1..=5).contains(&digit) => {
+                    app.manage_selected = digit - 1;
+                    handle_enter_or_selection(app, path);
                 }
                 _ => {}
             }
             false
         }
-        _ => false
+        _ => false,
     }
 }
 
 fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
     match app.mode {
-        AppMode::Normal => {
-            if !app.get_filtered_branches().is_empty() {
-                app.mode = AppMode::Manage;
-                app.manage_selected = 0;
-            }
+        AppMode::Normal if !app.get_filtered_branches().is_empty() => {
+            app.mode = AppMode::Manage;
+            app.manage_selected = 0;
         }
         AppMode::Manage => {
             let branch_name = {
@@ -100,22 +267,33 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
 
             if let Some(name) = branch_name {
                 match app.manage_selected {
-                    0 => { // Checkout
+                    0 => {
+                        // Checkout
                         let msg = checkout_branch(path, &name);
-                        app.branches = git::build_branches(path);
-                        app.refresh_filtered_branches();
+                        app.refresh_branches(path);
                         app.current_branch = git::get_current_branch(path);
                         app.mode = AppMode::Message(msg);
                     }
-                    1 => { // Diff
-                        app.branch_info = git::get_branch_info(path, &name);
+                    1 => {
+                        // Diff
+                        let mut info = git::get_branch_info(path, &name);
+                        let branch = app.get_filtered_branches().get(app.selected).copied();
+                        if let Some(crate::models::MergeStatus::SafeLimit(safe, total)) =
+                            branch.map(|b| &b.merge_status)
+                        {
+                            info = format!(
+                                "--- CONFLICT DETECTED ---\nSafe commits: {}/{}\n\n{}",
+                                safe, total, info
+                            );
+                        }
+                        app.branch_info = info;
                         app.info_scroll = 0;
                         app.mode = AppMode::Diff;
                     }
-                    2 => { // Delete
+                    2 => {
+                        // Delete
                         let msg = delete_branch(path, &name);
-                        app.branches = git::build_branches(path);
-                        app.refresh_filtered_branches();
+                        app.refresh_branches(path);
                         app.current_branch = git::get_current_branch(path);
                         app.mode = AppMode::Message(msg);
                     }
