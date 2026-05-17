@@ -1,24 +1,22 @@
+use crate::models::{BranchStatus, MergeStatus};
 use ratatui::style::Color;
-use crate::models::BranchStatus;
 
 pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
     let mut icons = String::new();
-    let mut color = Color::Green;
+    let mut color = Color::Rgb(161, 229, 193); // Mint Green (Safe/Default)
 
     if status.contains(&BranchStatus::HasUniqueCommits) {
-        color = Color::Red;
+        color = Color::Rgb(245, 194, 231); // Pastel Pink
     } else if status.contains(&BranchStatus::Gone) {
-        color = Color::DarkGray;
+        color = Color::Rgb(140, 143, 161); // Faded Gray
     } else if status.contains(&BranchStatus::Ahead) {
-        color = Color::Yellow;
+        color = Color::Rgb(249, 226, 175); // Warm Yellow
     } else if status.contains(&BranchStatus::Behind) {
-        color = Color::Cyan;
-    } else if status.contains(&BranchStatus::Merged) {
-        color = Color::Blue;
-    } else if status.contains(&BranchStatus::Stashed) {
-        color = Color::Green;
+        color = Color::Rgb(180, 190, 254); // Lavender
+    } else if status.contains(&BranchStatus::Merged) || status.contains(&BranchStatus::Stashed) {
+        color = Color::Rgb(161, 229, 193); // Mint Green
     } else if status.contains(&BranchStatus::Local) {
-        color = Color::Magenta;
+        color = Color::Rgb(180, 190, 254); // Lavender
     }
 
     for s in status {
@@ -36,4 +34,30 @@ pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
         }
     }
     (icons, color)
+}
+
+pub fn get_merge_status_display(status: &MergeStatus) -> (String, Color) {
+    match status {
+        MergeStatus::NotAnalyzed => ("?".to_string(), Color::Rgb(140, 143, 161)), // Faded Gray
+        MergeStatus::Checking => ("∞ Checking".to_string(), Color::Rgb(249, 226, 175)), // Warm Yellow
+        MergeStatus::Clean => ("✓ Clean".to_string(), Color::Rgb(161, 229, 193)), // Mint Green
+        MergeStatus::Conflict(_) => ("⨯ Conflict".to_string(), Color::Rgb(245, 194, 231)), // Pastel Pink
+        MergeStatus::SafeLimit(safe, total) => {
+            let total_f = *total as f32;
+            let safe_f = *safe as f32;
+            let bar_len = 10;
+            let filled = ((safe_f / total_f) * bar_len as f32).round() as usize;
+            let mut bar = String::new();
+            for _ in 0..filled {
+                bar.push('█');
+            }
+            for _ in filled..bar_len {
+                bar.push('░');
+            }
+            (
+                format!("{} {}/{}", bar, safe, total),
+                Color::Rgb(249, 226, 175), // Warm Yellow
+            )
+        }
+    }
 }
