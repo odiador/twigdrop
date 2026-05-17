@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use ignore::WalkBuilder;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -74,7 +75,7 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
         map.insert(file_path.to_string(), refined_status.clone());
 
         // Propagate status to parent directories
-        let path_obj = std::path::Path::new(file_path);
+        let path_obj = Path::new(file_path);
         for ancestor in path_obj.ancestors().skip(1) {
             let ancestor_str = ancestor.to_string_lossy().to_string();
             if ancestor_str.is_empty() || ancestor_str == "." {
@@ -109,47 +110,76 @@ pub fn build_file_tree(
     statuses: &std::collections::HashMap<String, FileStatus>,
 ) -> Vec<FileEntry> {
     let mut entries = vec![];
-    let path = PathBuf::from(root).join(current_dir);
+    let base_path = Path::new(root);
+    let search_path = base_path.join(current_dir);
 
-    if let Ok(read_dir) = std::fs::read_dir(path) {
-        let mut dir_entries: Vec<_> = read_dir.filter_map(|e| e.ok()).collect();
-        // Sort: dirs first, then files
-        dir_entries.sort_by(|a, b| {
-            let a_is_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            let b_is_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            if a_is_dir != b_is_dir {
-                b_is_dir.cmp(&a_is_dir)
-            } else {
-                a.file_name().cmp(&b.file_name())
-            }
-        });
+    // Use ignore crate to walk the directory one level deep
+    let walker = WalkBuilder::new(&search_path)
+        .max_depth(Some(1))
+        .add_custom_ignore_filename(".twigignore")
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .require_git(false) // Still work even if not in a git repo
+        .hidden(true) // Ignore hidden files by default
+        .build();
 
-        for entry in dir_entries {
-            let file_name = entry.file_name().to_string_lossy().to_string();
-            if file_name == ".git" || file_name == "target" {
-                continue;
-            }
+    let mut dir_entries = vec![];
+    for entry in walker.flatten() {
+        let path = entry.path();
 
-            let rel_path = if current_dir.is_empty() {
-                file_name.clone()
-            } else {
-                format!("{}/{}", current_dir, file_name)
-            };
-
-            let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
-            let status = statuses
-                .get(&rel_path)
-                .cloned()
-                .unwrap_or(FileStatus::Normal);
-
-            entries.push(FileEntry {
-                path: PathBuf::from(&rel_path),
-                is_dir,
-                status,
-                is_open: false,
-                depth,
-            });
+        // Skip the search_path itself
+        if path == search_path {
+            continue;
         }
+
+        let file_name = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        // Explicitly ignore .git and target if they aren't already ignored
+        if file_name == ".git" || file_name == "target" {
+            continue;
+        }
+
+        dir_entries.push(entry);
     }
+
+    // Sort: dirs first, then files
+    dir_entries.sort_by(|a, b| {
+        let a_is_dir = a.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let b_is_dir = b.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        if a_is_dir != b_is_dir {
+            b_is_dir.cmp(&a_is_dir)
+        } else {
+            a.file_name().cmp(b.file_name())
+        }
+    });
+
+    for entry in dir_entries {
+        let path = entry.path();
+        let rel_path = path
+            .strip_prefix(base_path)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+
+        let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let status = statuses
+            .get(&rel_path)
+            .cloned()
+            .unwrap_or(FileStatus::Normal);
+
+        entries.push(FileEntry {
+            path: PathBuf::from(&rel_path),
+            is_dir,
+            status,
+            is_open: false,
+            depth,
+        });
+    }
+
     entries
 }
