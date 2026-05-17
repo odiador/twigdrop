@@ -38,11 +38,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.toggle_help();
             false
         }
-        KeyCode::Char('b')
-            if key
-                .modifiers
-                .contains(ratatui::crossterm::event::KeyModifiers::CONTROL) =>
-        {
+        KeyCode::Char('d') => {
             if app.mode == AppMode::Normal {
                 app.load_file_tree(path);
                 app.mode = AppMode::DirectorySearcher;
@@ -101,7 +97,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::Char(' ') | KeyCode::Char('d') => {
+        KeyCode::Char(' ') => {
             if app.mode == AppMode::Normal {
                 app.toggle_selection();
             }
@@ -122,9 +118,16 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if app.mode == AppMode::DirectorySearcher
                 && let Some(entry) = app.file_tree.get(app.file_selected)
                 && entry.is_dir
-                && !entry.is_open
             {
-                app.toggle_file_dir(path);
+                if !entry.is_open {
+                    app.toggle_file_dir(path);
+                } else if app.file_selected + 1 < app.file_tree.len() {
+                    // Move into the folder (select the first child)
+                    let next_entry = &app.file_tree[app.file_selected + 1];
+                    if next_entry.depth > entry.depth {
+                        app.file_selected += 1;
+                    }
+                }
             }
             false
         }
@@ -192,7 +195,15 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         .unwrap_or(&std::path::PathBuf::from(path))
                         .to_path_buf()
                 };
-                crate::utils::terminal::open_terminal(&dir);
+
+                if app.alt_pressed {
+                    crate::utils::terminal::open_terminal(&dir);
+                } else {
+                    // TODO: Implement Inline TTY
+                    app.mode = AppMode::Message(
+                        "Inline TTY coming soon... (Use Alt+t for External)".to_string(),
+                    );
+                }
             }
             false
         }
