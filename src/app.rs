@@ -2,6 +2,12 @@ use crate::models::{Branch, BranchStatus, MergeStatus};
 use std::time::Instant;
 use tokio::sync::mpsc;
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum PrimaryMode {
+    Branches,
+    Files,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum AppMode {
     Normal,
@@ -9,7 +15,6 @@ pub enum AppMode {
     Manage,
     Filter,
     Diff,
-    DirectorySearcher,
     StashDetail,
     Message(String),
 }
@@ -27,6 +32,7 @@ pub struct App {
     pub branches: Vec<Branch>,
     pub current_branch: String,
     pub selected: usize,
+    pub primary_mode: PrimaryMode,
     pub mode: AppMode,
     pub branch_info: String,
     pub info_scroll: u16,
@@ -54,11 +60,12 @@ pub struct App {
     pub stash_files: Vec<String>,
     pub stash_diff: String,
 
-    // Double click support
+    // Modifiers & UI State
     pub last_click_time: Instant,
     pub last_click_row: Option<usize>,
     pub needs_clear: bool,
     pub alt_pressed: bool,
+    pub shift_pressed: bool,
     pub config: crate::utils::config::Config,
 
     // Background updates
@@ -82,6 +89,7 @@ impl App {
             branches,
             current_branch,
             selected: 0,
+            primary_mode: PrimaryMode::Branches,
             mode: AppMode::Normal,
             branch_info: String::new(),
             info_scroll: 0,
@@ -106,6 +114,7 @@ impl App {
             last_click_row: None,
             needs_clear: false,
             alt_pressed: false,
+            shift_pressed: false,
             config: crate::utils::config::load_config(),
             rx,
             trigger_tx,
@@ -172,23 +181,44 @@ impl App {
     }
 
     pub fn next(&mut self) {
-        let max = self.filtered_indices.len().saturating_sub(1);
-        if self.selected < max {
-            self.selected += 1;
+        match self.primary_mode {
+            PrimaryMode::Branches => {
+                let max = self.filtered_indices.len().saturating_sub(1);
+                if self.selected < max {
+                    self.selected += 1;
+                }
+            }
+            PrimaryMode::Files => {
+                if self.file_selected < self.file_tree.len().saturating_sub(1) {
+                    self.file_selected += 1;
+                }
+            }
         }
     }
 
     pub fn previous(&mut self) {
-        if self.selected > 0 {
-            self.selected -= 1;
+        match self.primary_mode {
+            PrimaryMode::Branches => {
+                if self.selected > 0 {
+                    self.selected -= 1;
+                }
+            }
+            PrimaryMode::Files => {
+                if self.file_selected > 0 {
+                    self.file_selected -= 1;
+                }
+            }
         }
     }
 
     pub fn load_file_tree(&mut self, path: &str) {
-        self.git_file_statuses = crate::git::files::get_git_file_statuses(path);
-        self.file_tree = crate::git::files::build_file_tree(path, "", 0, &self.git_file_statuses);
-        self.file_selected = 0;
-        self.file_scroll = 0;
+        if self.file_tree.is_empty() {
+            self.git_file_statuses = crate::git::files::get_git_file_statuses(path);
+            self.file_tree =
+                crate::git::files::build_file_tree(path, "", 0, &self.git_file_statuses);
+            self.file_selected = 0;
+            self.file_scroll = 0;
+        }
     }
 
     pub fn toggle_file_dir(&mut self, path_str: &str) {

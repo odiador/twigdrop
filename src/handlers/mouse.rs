@@ -1,4 +1,4 @@
-use crate::app::{App, AppMode};
+use crate::app::{App, AppMode, PrimaryMode};
 use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::crossterm::terminal;
 use std::time::Instant;
@@ -15,11 +15,9 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             return;
         }
 
-        match &app.mode {
-            AppMode::Normal => handle_list_click(app, row),
-            AppMode::DirectorySearcher => handle_directory_click(app, row, path),
-            AppMode::StashDetail => handle_stash_click(app, row, path),
-            _ => {}
+        match app.primary_mode {
+            PrimaryMode::Branches => handle_list_click(app, row),
+            PrimaryMode::Files => handle_directory_click(app, row, path),
         }
     }
 }
@@ -81,10 +79,6 @@ fn handle_modal_click(
 
 fn handle_list_click(app: &mut App, row: usize) {
     // Table starts at y=0 of chunks[0]
-    // Line 0: Border Top
-    // Line 1: Header
-    // Line 2: Margin (bottom_margin(1))
-    // Line 3: Data 0
     let list_top = 0;
     if row < list_top + 3 {
         return;
@@ -125,32 +119,6 @@ fn handle_directory_click(app: &mut App, row: usize, path: &str) {
         app.file_selected = target_idx;
         app.last_click_row = Some(target_idx);
         app.last_click_time = now;
-    }
-}
-
-fn handle_stash_click(app: &mut App, row: usize, path: &str) {
-    // Stash list is on the left, full height
-    let list_top = 0;
-    if row < list_top + 1 {
-        return;
-    }
-
-    let target_idx = row - list_top - 1;
-    if target_idx < app.stashes.len() {
-        let now = Instant::now();
-        if let Some(last_row) = app.last_click_row
-            && last_row == target_idx
-            && now.duration_since(app.last_click_time).as_millis() < 500
-        {
-            app.stash_selected = target_idx;
-            app.load_stash_detail(path);
-            app.last_click_row = None;
-            return;
-        }
-        app.stash_selected = target_idx;
-        app.last_click_row = Some(target_idx);
-        app.last_click_time = now;
-        app.load_stash_detail(path);
     }
 }
 

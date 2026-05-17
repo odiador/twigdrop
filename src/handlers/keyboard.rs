@@ -1,15 +1,18 @@
 use crate::actions::{
     apply_stash, bulk_delete_branches, checkout_branch, delete_branch, prune_branches,
 };
-use crate::app::{App, AppMode};
+use crate::app::{App, AppMode, PrimaryMode};
 use crate::git;
 use crate::models::BranchStatus;
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     app.alt_pressed = key
         .modifiers
         .contains(ratatui::crossterm::event::KeyModifiers::ALT);
+    app.shift_pressed = key
+        .modifiers
+        .contains(ratatui::crossterm::event::KeyModifiers::SHIFT);
 
     if let AppMode::Message(_) = app.mode {
         app.mode = AppMode::Normal;
@@ -40,29 +43,29 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('d') => {
             if app.mode == AppMode::Normal {
-                app.load_file_tree(path);
-                app.mode = AppMode::DirectorySearcher;
+                app.primary_mode = match app.primary_mode {
+                    PrimaryMode::Branches => {
+                        app.load_file_tree(path);
+                        PrimaryMode::Files
+                    }
+                    PrimaryMode::Files => PrimaryMode::Branches,
+                };
             }
             false
         }
-        KeyCode::Char('o')
-            if key
-                .modifiers
-                .contains(ratatui::crossterm::event::KeyModifiers::CONTROL) =>
-        {
-            let target_path = if app.alt_pressed && app.mode == AppMode::DirectorySearcher {
-                if let Some(entry) = app.file_tree.get(app.file_selected) {
-                    std::path::PathBuf::from(path).join(&entry.path)
-                } else {
-                    std::path::PathBuf::from(path)
-                }
+        KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            let target_path = if app.alt_pressed
+                && app.primary_mode == PrimaryMode::Files
+                && let Some(entry) = app.file_tree.get(app.file_selected)
+            {
+                std::path::PathBuf::from(path).join(&entry.path)
             } else {
                 std::path::PathBuf::from(path)
             };
             crate::utils::terminal::open_ide(&target_path, &app.config.ide_command);
             false
         }
-        KeyCode::Char('S') => {
+        KeyCode::Char('S') if app.shift_pressed => {
             if app.mode == AppMode::Normal {
                 app.load_stashes(path);
                 app.load_stash_detail(path);
@@ -71,7 +74,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('p') => {
-            if app.mode == AppMode::Normal {
+            if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
                 let msg = prune_branches(path, &app.branches, &app.current_branch);
                 app.refresh_branches(path);
                 app.mode = AppMode::Message(msg);
@@ -80,6 +83,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('i') => {
             if app.mode == AppMode::Normal
+                && app.primary_mode == PrimaryMode::Branches
                 && let Some(branch) = app.get_filtered_branches().get(app.selected)
             {
                 let branch_name = branch.name.clone();
@@ -98,13 +102,16 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char(' ') => {
-            if app.mode == AppMode::Normal {
+            if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
                 app.toggle_selection();
             }
             false
         }
-        KeyCode::Char('D') => {
-            if app.mode == AppMode::Normal && !app.bulk_selected.is_empty() {
+        KeyCode::Char('D') if app.shift_pressed => {
+            if app.mode == AppMode::Normal
+                && app.primary_mode == PrimaryMode::Branches
+                && !app.bulk_selected.is_empty()
+            {
                 let names: Vec<String> = app.bulk_selected.iter().cloned().collect();
                 let msg = bulk_delete_branches(path, &names);
                 app.bulk_selected.clear();
@@ -115,14 +122,14 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Right => {
-            if app.mode == AppMode::DirectorySearcher
+            if app.mode == AppMode::Normal
+                && app.primary_mode == PrimaryMode::Files
                 && let Some(entry) = app.file_tree.get(app.file_selected)
                 && entry.is_dir
             {
                 if !entry.is_open {
                     app.toggle_file_dir(path);
                 } else if app.file_selected + 1 < app.file_tree.len() {
-                    // Move into the folder (select the first child)
                     let next_entry = &app.file_tree[app.file_selected + 1];
                     if next_entry.depth > entry.depth {
                         app.file_selected += 1;
@@ -132,14 +139,13 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Left => {
-            if app.mode == AppMode::DirectorySearcher
+            if app.mode == AppMode::Normal
+                && app.primary_mode == PrimaryMode::Files
                 && let Some(entry) = app.file_tree.get(app.file_selected)
             {
                 if entry.is_dir && entry.is_open {
-                    // Close if open
                     app.toggle_file_dir(path);
                 } else if entry.depth > 0 {
-                    // Just move focus to parent
                     let current_depth = entry.depth;
                     for i in (0..app.file_selected).rev() {
                         if app.file_tree[i].depth < current_depth {
@@ -152,14 +158,14 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('f') => {
-            if app.mode == AppMode::Normal {
+            if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
                 app.mode = AppMode::Filter;
                 app.filter_selected = 0;
             }
             false
         }
         KeyCode::Char('m') | KeyCode::Tab | KeyCode::Enter => {
-            if app.mode == AppMode::DirectorySearcher {
+            if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Files {
                 app.toggle_file_dir(path);
                 false
             } else if app.mode == AppMode::StashDetail {
@@ -170,7 +176,8 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
         }
         KeyCode::Char('v') => {
-            if app.mode == AppMode::DirectorySearcher
+            if app.mode == AppMode::Normal
+                && app.primary_mode == PrimaryMode::Files
                 && let Some(entry) = app.file_tree.get(app.file_selected)
             {
                 let target_path = if app.alt_pressed {
@@ -183,7 +190,8 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('t') => {
-            if app.mode == AppMode::DirectorySearcher
+            if app.mode == AppMode::Normal
+                && app.primary_mode == PrimaryMode::Files
                 && let Some(entry) = app.file_tree.get(app.file_selected)
             {
                 let full_path = std::path::PathBuf::from(path).join(&entry.path);
@@ -199,7 +207,6 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 if app.alt_pressed {
                     crate::utils::terminal::open_terminal(&dir);
                 } else {
-                    // TODO: Implement Inline TTY
                     app.mode = AppMode::Message(
                         "Inline TTY coming soon... (Use Alt+t for External)".to_string(),
                     );
@@ -208,7 +215,8 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('a') => {
-            if app.mode == AppMode::DirectorySearcher
+            if app.mode == AppMode::Normal
+                && app.primary_mode == PrimaryMode::Files
                 && let Some(entry) = app.file_tree.get(app.file_selected)
             {
                 let target_path = if app.alt_pressed {
@@ -229,11 +237,6 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Down | KeyCode::Char('j') => {
             match app.mode {
                 AppMode::Diff => app.info_scroll += 1,
-                AppMode::DirectorySearcher => {
-                    if app.file_selected < app.file_tree.len().saturating_sub(1) {
-                        app.file_selected += 1;
-                    }
-                }
                 AppMode::StashDetail => {
                     if app.stash_selected < app.stashes.len().saturating_sub(1) {
                         app.stash_selected += 1;
@@ -257,11 +260,6 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Up | KeyCode::Char('k') => {
             match app.mode {
                 AppMode::Diff => app.info_scroll = app.info_scroll.saturating_sub(1),
-                AppMode::DirectorySearcher => {
-                    if app.file_selected > 0 {
-                        app.file_selected -= 1;
-                    }
-                }
                 AppMode::StashDetail => {
                     if app.stash_selected > 0 {
                         app.stash_selected -= 1;
@@ -303,7 +301,10 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 
 fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
     match app.mode {
-        AppMode::Normal if !app.get_filtered_branches().is_empty() => {
+        AppMode::Normal
+            if app.primary_mode == PrimaryMode::Branches
+                && !app.get_filtered_branches().is_empty() =>
+        {
             app.mode = AppMode::Manage;
             app.manage_selected = 0;
         }
@@ -316,14 +317,12 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
             if let Some(name) = branch_name {
                 match app.manage_selected {
                     0 => {
-                        // Checkout
                         let msg = checkout_branch(path, &name);
                         app.refresh_branches(path);
                         app.current_branch = git::get_current_branch(path);
                         app.mode = AppMode::Message(msg);
                     }
                     1 => {
-                        // Diff
                         let mut info = git::get_branch_info(path, &name);
                         let branch = app.get_filtered_branches().get(app.selected).copied();
                         if let Some(crate::models::MergeStatus::SafeLimit(safe, total)) =
@@ -339,7 +338,6 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                         app.mode = AppMode::Diff;
                     }
                     2 => {
-                        // Delete
                         let msg = delete_branch(path, &name);
                         app.refresh_branches(path);
                         app.current_branch = git::get_current_branch(path);

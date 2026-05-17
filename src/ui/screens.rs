@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table},
 };
 
-use crate::app::{App, AppMode};
+use crate::app::{App, AppMode, PrimaryMode};
 use crate::git::files::FileStatus;
 use crate::models::BranchStatus;
 use crate::ui::components::get_status_icons;
@@ -254,40 +254,65 @@ pub fn render_filter(f: &mut Frame, app: &App) {
     f.render_widget(list, inner);
 }
 
-pub fn render_help_content(f: &mut Frame, area: Rect) {
+pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
         .title(Line::from(" Help & Legend ").alignment(Alignment::Left))
         .title(Line::from(" [X] ").alignment(Alignment::Right))
         .borders(Borders::ALL)
         .style(Style::default().bg(Color::Reset));
 
-    let help_text = vec![
+    let mut help_text = vec![
         "Twigdrop helps you clean up your local branches safely.",
         "",
-        "Status Icons:",
-        "  ▲ (Red)     : Has Unique Commits (DANGER: Not in remote!)",
-        "  ⨯ (Gray)    : Gone (Upstream branch was deleted)",
-        "  ↑ (Yellow)  : Ahead of upstream (Local has new commits)",
-        "  ↓ (Cyan)    : Behind upstream (Remote has new commits)",
-        "  ✓ (Blue)    : Merged (Safe to delete)",
-        "  L (Magenta) : Local Only (No tracking branch)",
-        "  S (Green)   : Stashed changes exist for this branch",
-        "  R (White)   : Remote Tracked",
-        "  U (Gray)    : Remote Untracked",
-        "  ● (Green)   : Clean / Normal",
-        "",
-        "Shortcuts:",
-        "  ↑/k, ↓/j    : Navigate list",
-        "  d / Space   : Toggle branch selection (for bulk delete)",
-        "  D (Shift+D) : Bulk delete selected branches",
-        "  p           : Prune 'Gone' branches (Safe only)",
-        "  Ctrl+b      : Open Directory Searcher / File Tree",
-        "  S (Shift+S) : Open Stash Manager",
-        "  Double Click: Manage selected branch",
-        "  f           : Open Filters",
-        "  m / Enter   : Manage selected branch (Checkout, Diff, Delete)",
-        "  q / Esc     : Quit / Back",
     ];
+
+    if app.primary_mode == PrimaryMode::Branches {
+        help_text.extend(vec![
+            "Status Icons (Branches):",
+            "  ▲ (Red)     : Has Unique Commits (DANGER: Not in remote!)",
+            "  ⨯ (Gray)    : Gone (Upstream branch was deleted)",
+            "  ↑ (Yellow)  : Ahead of upstream (Local has new commits)",
+            "  ↓ (Cyan)    : Behind upstream (Remote has new commits)",
+            "  ✓ (Green)   : Merged (Safe to delete)",
+            "  L (Lavender) : Local Only (No tracking branch)",
+            "  S (Green)   : Stashed changes exist for this branch",
+            "",
+            "Shortcuts (Branches):",
+            "  ↑/k, ↓/j    : Navigate list",
+            "  Space       : Toggle branch selection (for bulk delete)",
+            "  D (Shift+D) : Bulk delete selected branches",
+            "  p           : Prune 'Gone' branches (Safe only)",
+            "  i           : AI Intelligence Analysis for branch",
+            "  f           : Open Filters",
+            "  m / Enter   : Manage selected branch (Checkout, Diff, Delete)",
+        ]);
+    } else {
+        help_text.extend(vec![
+            "Status Colors (Files):",
+            "  Yellow      : Modified",
+            "  Green       : Added / New",
+            "  Blue        : Staged (in index)",
+            "  Pink        : Untracked",
+            "  Gray        : Ignored (.gitignore / .twigignore)",
+            "",
+            "Shortcuts (Files):",
+            "  ↑/k, ↓/j    : Navigate tree",
+            "  → / Enter   : Open folder / Move into children",
+            "  ←           : Close folder / Move to parent",
+            "  v           : Open in IDE (Root by default, Path with Alt)",
+            "  t           : Internal TTY (Alt+t for External)",
+            "  a           : Alt IDE (Root by default, Path with Alt)",
+        ]);
+    }
+
+    help_text.extend(vec![
+        "",
+        "Global Shortcuts:",
+        "  d           : Switch between Branches and Files mode",
+        "  S (Shift+S) : Open Stash Manager",
+        "  Ctrl+o      : Open IDE (Root by default, Path with Alt)",
+        "  q / Esc     : Quit / Back",
+    ]);
 
     let p = Paragraph::new(help_text.join("\n"))
         .block(block)
@@ -416,7 +441,10 @@ pub fn render_message(f: &mut Frame, msg: &str) {
 
 pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
     let block = Block::default()
-        .title(Line::from(" 📂 Directory Searcher (Press 'q' to back, 'Enter' to open/close, 'v' Visual, 't' TTY) ").alignment(Alignment::Left))
+        .title(
+            Line::from(" 📂 Files (d: branches, v: IDE, t: TTY, h: help) ")
+                .alignment(Alignment::Left),
+        )
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Rgb(74, 79, 106)));
 
