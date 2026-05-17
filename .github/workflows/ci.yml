@@ -1,0 +1,40 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'preview/**'
+
+jobs:
+  build-and-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Binary
+        run: cargo build --release
+
+      - name: Create Tag
+        id: create_tag
+        run: |
+          # Create a tag based on PR number or branch name
+          TAG_NAME="preview-pr${{ github.event.pull_request.number }}-${{ github.run_number }}"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: twigdrop-${{ steps.create_tag.outputs.tag_name }}
+          path: target/release/twigdrop

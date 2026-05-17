@@ -12,7 +12,10 @@ use ratatui::{
     Terminal,
     backend::CrosstermBackend,
     crossterm::{
-        event::{DisableMouseCapture, EnableMouseCapture},
+        event::{
+            self, DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
+            PushKeyboardEnhancementFlags,
+        },
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
@@ -77,13 +80,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     // Background AI analyzer
-    // We need to pass the provider and db to the background task, but they are in App which is not Thread-safe for sharing this way easily.
-    // Actually, we can initialize a separate provider/db for the background task if needed, or just make AI calls from the main task.
-    // For now, I'll pass the config and let the background task handle it.
-
     let ai_path = path.clone();
     tokio::spawn(async move {
-        // Re-setup AI context for background thread
         let mut bg_app = App::new(
             vec![],
             "".to_string(),
@@ -104,7 +102,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut stdout = io::stdout();
     enable_raw_mode()?;
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(
+        stdout,
+        EnterAlternateScreen,
+        EnableMouseCapture,
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+    )?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -114,7 +117,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     execute!(
         terminal.backend_mut(),
         LeaveAlternateScreen,
-        DisableMouseCapture
+        DisableMouseCapture,
+        event::PopKeyboardEnhancementFlags
     )?;
     terminal.show_cursor()?;
 
@@ -140,7 +144,7 @@ async fn run_app(
 
         terminal.draw(|f| ui::draw(f, app))?;
 
-        if handle_event(app, path)? {
+        if event::poll(std::time::Duration::from_millis(50))? && handle_event(app, path)? {
             return Ok(());
         }
     }

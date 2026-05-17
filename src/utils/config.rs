@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
@@ -15,6 +17,26 @@ impl Default for Config {
     }
 }
 
+pub fn get_config_path() -> PathBuf {
+    PathBuf::from(".twigdrop")
+}
+
 pub fn load_config() -> Config {
-    confy::load("twigdrop", None).unwrap_or_default()
+    let path = get_config_path();
+    if path.exists()
+        && let Ok(content) = fs::read_to_string(path)
+        && let Ok(config) = toml::from_str(&content)
+    {
+        return config;
+    }
+    // If not found or error, create default
+    let config = Config::default();
+    save_config(&config);
+    config
+}
+
+pub fn save_config(config: &Config) {
+    if let Ok(content) = toml::to_string_pretty(config) {
+        let _ = fs::write(get_config_path(), content);
+    }
 }
