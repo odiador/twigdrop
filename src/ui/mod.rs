@@ -41,15 +41,26 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 
     // Footer shortcuts
-    let footer_text = match &app.mode {
-        AppMode::DirectorySearcher => {
-            " q: back │ Enter: open/close │ v: Visual │ t: TTY │ a: Antigravity "
+    let footer_text = if app.alt_pressed {
+        match &app.mode {
+            AppMode::DirectorySearcher => {
+                " q: back │ Enter: open/close │ v: Visual │ T: Inline TTY (Bottom) │ a: Antigravity "
+            }
+            AppMode::Normal => {
+                " ↑/↓: move │ Ctrl+b: files │ S: stash │ p: prune │ f: filter │ m: manage │ h: help │ q: quit "
+            }
+            _ => " q: back ",
         }
-        AppMode::StashDetail => " q: back │ ↑/↓: navigate │ Enter: reload ",
-        AppMode::Normal => {
-            " ↑/↓: move │ Ctrl+b: files │ S: stash │ p: prune │ f: filter │ m: manage │ h: help │ q: quit "
+    } else {
+        match &app.mode {
+            AppMode::DirectorySearcher => {
+                " q: back │ Enter: open/close │ v: Visual │ t: External TTY │ a: Antigravity "
+            }
+            AppMode::Normal => {
+                " ↑/↓: move │ Ctrl+b: files │ S: stash │ p: prune │ f: filter │ m: manage │ h: help │ q: quit "
+            }
+            _ => " q: back ",
         }
-        _ => " q: back ",
     };
 
     let footer = ratatui::widgets::Paragraph::new(footer_text)

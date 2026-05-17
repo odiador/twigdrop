@@ -58,6 +58,7 @@ pub struct App {
     pub last_click_time: Instant,
     pub last_click_row: Option<usize>,
     pub needs_clear: bool,
+    pub alt_pressed: bool,
 
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
@@ -103,6 +104,7 @@ impl App {
             last_click_time: Instant::now(),
             last_click_row: None,
             needs_clear: false,
+            alt_pressed: false,
             rx,
             trigger_tx,
             ai_rx,

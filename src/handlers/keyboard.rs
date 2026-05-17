@@ -7,6 +7,10 @@ use crate::models::BranchStatus;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
+    app.alt_pressed = key
+        .modifiers
+        .contains(ratatui::crossterm::event::KeyModifiers::ALT);
+
     if let AppMode::Message(_) = app.mode {
         app.mode = AppMode::Normal;
         return false;

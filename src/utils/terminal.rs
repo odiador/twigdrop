@@ -3,8 +3,8 @@ use std::process::Command;
 pub fn open_terminal(dir: &std::path::Path) {
     if is_ghostty_available() {
         let _ = Command::new("ghostty")
-            .arg("-e")
-            .arg(format!("cd {}; exec $SHELL", dir.to_string_lossy()))
+            .arg("--working-directory")
+            .arg(dir)
             .spawn();
         return;
     }
