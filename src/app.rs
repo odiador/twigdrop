@@ -1,7 +1,10 @@
 use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus};
+use crate::ui::animations::SnapAnimation;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use tokio::sync::mpsc;
+use syntect::parsing::SyntaxSet;
+use syntect::highlighting::ThemeSet;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
@@ -18,6 +21,8 @@ pub enum AppMode {
     Diff,
     StashDetail,
     Settings,
+    Search,
+    CodePreview(String, String), // (file_path, content)
     Message(String),
 }
 
@@ -48,6 +53,7 @@ pub struct BranchState {
     pub bulk_selected: HashSet<String>,
     pub branch_info: String,
     pub info_scroll: u16,
+    pub search_query: String,
 }
 
 #[derive(Default)]
@@ -100,7 +106,16 @@ pub struct App {
     pub needs_clear: bool,
     pub alt_pressed: bool,
     pub shift_pressed: bool,
+    pub show_terminal: bool,
     pub config: crate::utils::config::Config,
+
+    // Animations
+    pub snap_animation: Option<SnapAnimation>,
+    pub branch_screen_positions: Vec<(usize, u16)>, // (branch_index, screen_y)
+
+    // Syntax Highlighting
+    pub ps: SyntaxSet,
+    pub ts: ThemeSet,
 
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
@@ -119,6 +134,13 @@ impl App {
         conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
         conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
     ) -> Self {
+        let config = crate::utils::config::load_config();
+        let primary_mode = if config.last_primary_mode == 1 {
+            PrimaryMode::Files
+        } else {
+            PrimaryMode::Branches
+        };
+
         let mut app = Self {
             branch_state: BranchState {
                 branches,
@@ -137,19 +159,36 @@ impl App {
             },
             settings_state: SettingsState::default(),
             current_branch,
-            primary_mode: PrimaryMode::Branches,
+            primary_mode,
             mode: AppMode::Normal,
             last_click_time: Instant::now(),
             last_click_row: None,
             needs_clear: false,
             alt_pressed: false,
             shift_pressed: false,
-            config: crate::utils::config::load_config(),
+            show_terminal: false,
+            config,
+            snap_animation: None,
+            branch_screen_positions: Vec::new(),
+            ps: SyntaxSet::load_defaults_newlines(),
+            ts: ThemeSet::load_defaults(),
             rx,
             trigger_tx,
         };
         app.refresh_filtered_branches();
         app
+    }
+
+    pub fn toggle_primary_mode(&mut self) {
+        self.primary_mode = match self.primary_mode {
+            PrimaryMode::Branches => PrimaryMode::Files,
+            PrimaryMode::Files => PrimaryMode::Branches,
+        };
+        self.config.last_primary_mode = match self.primary_mode {
+            PrimaryMode::Branches => 0,
+            PrimaryMode::Files => 1,
+        };
+        crate::utils::config::save_config(&self.config);
     }
 
     pub fn refresh_branches(&mut self, path: &str) {
@@ -185,18 +224,28 @@ impl App {
     }
 
     pub fn refresh_filtered_branches(&mut self) {
-        self.branch_state.filtered_indices = if let Some(filter) = &self.branch_state.current_filter
-        {
-            self.branch_state
-                .branches
-                .iter()
-                .enumerate()
-                .filter(|(_, b)| b.status.contains(filter))
-                .map(|(i, _)| i)
-                .collect()
-        } else {
-            (0..self.branch_state.branches.len()).collect()
-        };
+        self.branch_state.filtered_indices = self.branch_state.branches
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| {
+                // Filter by status
+                let status_match = if let Some(filter) = &self.branch_state.current_filter {
+                    b.status.contains(filter)
+                } else {
+                    true
+                };
+                
+                // Filter by search query
+                let search_match = if !self.branch_state.search_query.is_empty() {
+                    b.name.to_lowercase().contains(&self.branch_state.search_query.to_lowercase())
+                } else {
+                    true
+                };
+                
+                status_match && search_match
+            })
+            .map(|(i, _)| i)
+            .collect();
 
         // Clamp selected index
         let max = self.branch_state.filtered_indices.len().saturating_sub(1);
@@ -348,6 +397,18 @@ impl App {
             } else {
                 self.branch_state.bulk_selected.insert(name);
             }
+        }
+    }
+
+    pub fn apply_snap_deletion(&mut self, path: &str) -> String {
+        if let Some(ref anim) = self.snap_animation {
+            let names: Vec<String> = anim.rows.iter().map(|r| r.branch_name.clone()).collect();
+            let msg = crate::actions::bulk_delete_branches(path, &names);
+            self.refresh_branches(path);
+            self.branch_state.bulk_selected.clear();
+            msg
+        } else {
+            String::new()
         }
     }
 }

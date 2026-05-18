@@ -1,9 +1,8 @@
-use crate::actions::{
-    apply_stash, bulk_delete_branches, checkout_branch, delete_branch, prune_branches,
-};
+use crate::actions::{apply_stash, checkout_branch, prune_branches};
 use crate::app::{App, AppMode, PrimaryMode};
 use crate::git;
 use crate::models::BranchStatus;
+use crate::ui::animations::SnapAnimation;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
@@ -17,6 +16,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 
     if let AppMode::Settings = app.mode {
         return handle_settings_keyboard(app, key);
+    }
+
+    if let AppMode::Search = app.mode {
+        return handle_search_keyboard(app, key);
+    }
+
+    if let AppMode::CodePreview(_, _) = app.mode {
+        if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
+            app.mode = AppMode::Normal;
+            app.needs_clear = true;
+        }
+        return false;
     }
 
     match key.code {
@@ -37,6 +48,14 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 true // Signal to quit
             }
         }
+        KeyCode::Char('/') => {
+            if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
+                app.mode = AppMode::Search;
+                app.branch_state.search_query.clear();
+                app.refresh_filtered_branches();
+            }
+            false
+        }
         KeyCode::BackTab => {
             // Shift+Tab toggles settings
             app.mode = AppMode::Settings;
@@ -50,14 +69,29 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('d') => {
             if app.mode == AppMode::Normal {
-                app.primary_mode = match app.primary_mode {
-                    PrimaryMode::Branches => {
-                        app.load_file_tree(path);
-                        PrimaryMode::Files
-                    }
-                    PrimaryMode::Files => PrimaryMode::Branches,
-                };
+                app.toggle_primary_mode();
+                if app.primary_mode == PrimaryMode::Files {
+                    app.load_file_tree(path);
+                }
             }
+            false
+        }
+        KeyCode::Char('e') => {
+            if app.mode == AppMode::Normal {
+                let target_path = if app.alt_pressed
+                    && app.primary_mode == PrimaryMode::Files
+                    && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
+                {
+                    std::path::PathBuf::from(path).join(&entry.path)
+                } else {
+                    std::path::PathBuf::from(path)
+                };
+                crate::utils::terminal::open_folder(&target_path);
+            }
+            false
+        }
+        KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::ALT) => {
+            app.show_terminal = !app.show_terminal;
             false
         }
         KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -83,10 +117,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('F') if app.shift_pressed => {
             if app.mode == AppMode::Diff {
                 // Trigger AI conflict resolution if conflicts exist
-                let branch = app.get_filtered_branches().get(app.branch_state.selected).copied();
-                if let Some(crate::models::MergeStatus::Conflict(conflicts)) = branch.map(|b| &b.merge_status) {
+                let branch = app
+                    .get_filtered_branches()
+                    .get(app.branch_state.selected)
+                    .copied();
+                if let Some(crate::models::MergeStatus::Conflict(conflicts)) =
+                    branch.map(|b| &b.merge_status)
+                {
                     for conflict in conflicts {
-                        let _ = app.ai_state.conflict_trigger_tx.try_send((path.to_string(), conflict.clone()));
+                        let _ = app
+                            .ai_state
+                            .conflict_trigger_tx
+                            .try_send((path.to_string(), conflict.clone()));
                     }
                     app.mode = AppMode::Message("AI Resolving conflicts...".to_string());
                 }
@@ -95,8 +137,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('p') => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
-                let msg =
-                    prune_branches(path, &app.branch_state.branches, &app.current_branch);
+                let msg = prune_branches(path, &app.branch_state.branches, &app.current_branch);
                 app.refresh_branches(path);
                 app.mode = AppMode::Message(msg);
             }
@@ -135,11 +176,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 && !app.branch_state.bulk_selected.is_empty()
             {
                 let names: Vec<String> = app.branch_state.bulk_selected.iter().cloned().collect();
-                let msg = bulk_delete_branches(path, &names);
-                app.branch_state.bulk_selected.clear();
-                app.refresh_branches(path);
-                app.current_branch = git::get_current_branch(path);
-                app.mode = AppMode::Message(msg);
+                app.snap_animation = Some(SnapAnimation::new(names));
             }
             false
         }
@@ -188,7 +225,20 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('m') | KeyCode::Tab | KeyCode::Enter => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Files {
-                app.toggle_file_dir(path);
+                if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
+                    if entry.is_dir {
+                        app.toggle_file_dir(path);
+                    } else {
+                        // Open code preview
+                        let full_path = std::path::Path::new(path).join(&entry.path);
+                        if let Ok(content) = std::fs::read_to_string(&full_path) {
+                            app.mode = AppMode::CodePreview(
+                                entry.path.to_string_lossy().to_string(),
+                                content,
+                            );
+                        }
+                    }
+                }
                 false
             } else if app.mode == AppMode::StashDetail
                 && let Some(stash) = app.stash_state.stashes.get(app.stash_state.stash_selected)
@@ -244,17 +294,17 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Files
                 && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
-            {
-                let target_path = if app.alt_pressed {
-                    std::path::PathBuf::from(path).join(&entry.path)
-                } else {
-                    std::path::PathBuf::from(path)
-                };
-                crate::utils::terminal::open_ide(
-                    &target_path,
-                    &app.config.alternative_ide_command,
-                );
-            } else if app.mode == AppMode::StashDetail
+                {
+                    let target_path = if app.alt_pressed {
+                        std::path::PathBuf::from(path).join(&entry.path)
+                    } else {
+                        std::path::PathBuf::from(path)
+                    };
+                    crate::utils::terminal::open_ide(
+                        &target_path,
+                        &app.config.alternative_ide_command,
+                    );
+                } else if app.mode == AppMode::StashDetail
                 && let Some(stash) = app.stash_state.stashes.get(app.stash_state.stash_selected)
             {
                 let msg = apply_stash(path, &stash.id);
@@ -332,6 +382,24 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     }
 }
 
+fn handle_search_keyboard(app: &mut App, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Enter | KeyCode::Esc => {
+            app.mode = AppMode::Normal;
+        }
+        KeyCode::Char(c) => {
+            app.branch_state.search_query.push(c);
+            app.refresh_filtered_branches();
+        }
+        KeyCode::Backspace => {
+            app.branch_state.search_query.pop();
+            app.refresh_filtered_branches();
+        }
+        _ => {}
+    }
+    false
+}
+
 fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
     if app.settings_state.editing {
         match key.code {
@@ -366,12 +434,17 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
             app.settings_state.selected += 1;
         }
         KeyCode::Enter => {
-            app.settings_state.editing = true;
-            app.settings_state.input = match app.settings_state.selected {
-                0 => app.config.ide_command.clone(),
-                1 => app.config.alternative_ide_command.clone(),
-                _ => String::new(),
-            };
+            if app.settings_state.selected == 2 {
+                crate::utils::config::save_config(&app.config);
+                app.mode = AppMode::Normal;
+            } else {
+                app.settings_state.editing = true;
+                app.settings_state.input = match app.settings_state.selected {
+                    0 => app.config.ide_command.clone(),
+                    1 => app.config.alternative_ide_command.clone(),
+                    _ => String::new(),
+                };
+            }
         }
         KeyCode::Char('q') | KeyCode::Esc | KeyCode::BackTab => {
             app.mode = AppMode::Normal;
@@ -419,10 +492,11 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                                 "--- CONFLICT DETECTED ---\nSafe commits: {}/{}\n\n{}",
                                 safe, total, info
                             );
-                        } else if let Some(crate::models::MergeStatus::Conflict(conflicts)) = 
-                            branch.map(|b| &b.merge_status) 
+                        } else if let Some(crate::models::MergeStatus::Conflict(conflicts)) =
+                            branch.map(|b| &b.merge_status)
                         {
-                            let files: Vec<String> = conflicts.iter().map(|c| c.file_path.clone()).collect();
+                            let files: Vec<String> =
+                                conflicts.iter().map(|c| c.file_path.clone()).collect();
                             info = format!(
                                 "--- CONFLICTS FOUND IN {} FILES ---\n[Shift+F] to resolve with AI\n\nFiles:\n{}\n\n{}",
                                 conflicts.len(),
@@ -435,10 +509,11 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                         app.mode = AppMode::Diff;
                     }
                     2 => {
-                        let msg = delete_branch(path, &name);
-                        app.refresh_branches(path);
-                        app.current_branch = git::get_current_branch(path);
-                        app.mode = AppMode::Message(msg);
+                        // Individual delete also triggers snap if we want consistency, 
+                        // but let's just do it for bulk for now as requested.
+                        // Or we can just start the snap for this one branch.
+                        app.snap_animation = Some(SnapAnimation::new(vec![name]));
+                        app.mode = AppMode::Normal;
                     }
                     3 => app.mode = AppMode::Help,
                     _ => app.mode = AppMode::Normal,

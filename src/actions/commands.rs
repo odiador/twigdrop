@@ -1,6 +1,7 @@
 use crate::git::commands::run_git;
 use std::fs;
 
+#[allow(dead_code)]
 pub fn delete_branch(path: &str, name: &str) -> String {
     match run_git(path, &["branch", "-D", name]) {
         Ok(output) => format!("> git branch -D {}\n{}", name, output.trim()),

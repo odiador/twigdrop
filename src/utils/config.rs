@@ -7,6 +7,7 @@ use std::path::PathBuf;
 pub struct Config {
     pub ide_command: String,
     pub alternative_ide_command: String, // e.g., antigravity
+    pub last_primary_mode: usize,        // 0: Branches, 1: Files
 }
 
 impl Default for Config {
@@ -14,6 +15,7 @@ impl Default for Config {
         Self {
             ide_command: "code".to_string(),
             alternative_ide_command: "antigravity".to_string(),
+            last_primary_mode: 0,
         }
     }
 }
