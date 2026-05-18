@@ -2,8 +2,8 @@ pub mod components;
 pub mod screens;
 
 use ratatui::{
-    Frame,
     layout::{Constraint, Direction, Layout},
+    Frame,
 };
 
 use crate::app::{App, AppMode, PrimaryMode};
@@ -35,18 +35,16 @@ pub fn draw(f: &mut Frame, app: &mut App) {
     }
 
     // Footer shortcuts
-    let footer_text = if app.shift_pressed {
+    let footer_text = if app.mode == AppMode::Diff {
+        " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
+    } else if app.shift_pressed {
         match app.primary_mode {
-            PrimaryMode::Branches => {
-                " S: Stash Mgr │ D: Delete ALL Selected │ h: Legend │ q: quit "
-            }
+            PrimaryMode::Branches => " S: Stash Mgr │ D: Delete ALL Selected │ h: Legend │ q: quit ",
             PrimaryMode::Files => " S: Stash Mgr │ h: Legend │ q: back ",
         }
     } else if app.alt_pressed {
         match app.primary_mode {
-            PrimaryMode::Branches => {
-                " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ f: filter "
-            }
+            PrimaryMode::Branches => " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ f: filter ",
             PrimaryMode::Files => {
                 " ↑/↓: move │ d: switch mode │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+t: External TTY "
             }
