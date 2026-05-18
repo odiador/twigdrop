@@ -1,4 +1,4 @@
-use crate::app::{App, AppMode, PrimaryMode, PreviewState};
+use crate::app::{App, AppMode, PrimaryMode, PreviewState, FilePanel};
 use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::crossterm::terminal;
 use std::time::Instant;
@@ -10,17 +10,20 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
 
     match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
-            if app.mode != AppMode::Normal
+            if app.mode != AppMode::Normal && !matches!(app.mode, AppMode::CodePreview(_))
                 && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize)
             {
                 return;
             }
 
             if let AppMode::CodePreview(ref mut state) = app.mode {
-                let sidebar_width = (term_cols as f32 * app.file_state.sidebar_width as f32 / 100.0) as usize;
-                if col >= sidebar_width {
-                    handle_preview_click(state, row, col, sidebar_width);
+                let sidebar_width_px = (term_cols as f32 * app.file_state.sidebar_width as f32 / 100.0) as usize;
+                if col >= sidebar_width_px {
+                    app.file_state.active_panel = FilePanel::Preview;
+                    handle_preview_click(state, row, col, sidebar_width_px);
                     return;
+                } else {
+                    app.file_state.active_panel = FilePanel::Directory;
                 }
             }
 
@@ -31,8 +34,8 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
         }
         MouseEventKind::Drag(MouseButton::Left) => {
             if let AppMode::CodePreview(ref mut state) = app.mode {
-                let sidebar_width = (term_cols as f32 * app.file_state.sidebar_width as f32 / 100.0) as usize;
-                if col >= sidebar_width {
+                let sidebar_width_px = (term_cols as f32 * app.file_state.sidebar_width as f32 / 100.0) as usize;
+                if col >= sidebar_width_px {
                     handle_preview_drag(state, row);
                 }
             }
@@ -48,7 +51,10 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
         }
         MouseEventKind::ScrollDown => {
             if let AppMode::CodePreview(ref mut state) = app.mode {
-                state.scroll_y += 1;
+                let line_count = state.content.lines().count();
+                if state.scroll_y < line_count.saturating_sub(1) {
+                    state.scroll_y += 1;
+                }
             } else if app.primary_mode == PrimaryMode::Files {
                 app.file_state.file_scroll += 1;
             }
@@ -58,7 +64,6 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
 }
 
 fn handle_preview_click(state: &mut PreviewState, row: usize, _col: usize, _sidebar_width: usize) {
-    // block starts at y=0, header at y=1, content at y=2
     if row >= 1 {
         let relative_row = row - 1;
         state.cursor_y = state.scroll_y + relative_row;
@@ -180,7 +185,27 @@ fn handle_directory_click(app: &mut App, row: usize, path: &str) {
             && now.duration_since(app.last_click_time).as_millis() < 500
         {
             app.file_state.file_selected = target_idx;
-            app.toggle_file_dir(path);
+            
+            // Task: Implement double click to open preview/toggle dir
+            if app.file_state.file_tree[target_idx].is_dir {
+                app.toggle_file_dir(path);
+            } else {
+                let entry = &app.file_state.file_tree[target_idx];
+                let full_path = std::path::Path::new(path).join(&entry.path);
+                if let Ok(content) = std::fs::read_to_string(&full_path) {
+                    let file_path_str = entry.path.to_string_lossy().to_string();
+                    let line_diffs = crate::git::get_line_diffs(path, &file_path_str);
+                    app.mode = AppMode::CodePreview(PreviewState {
+                        file_path: file_path_str,
+                        content,
+                        cursor_y: 0,
+                        scroll_y: 0,
+                        selection_start: None,
+                        selection_end: None,
+                        line_diffs,
+                    });
+                }
+            }
             app.last_click_row = None;
             return;
         }
