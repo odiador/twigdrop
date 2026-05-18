@@ -1,40 +1,37 @@
-name: CI/CD Pipeline
+name: CI
 
 on:
   pull_request:
     branches:
       - main
-      - 'preview/**'
 
 jobs:
-  build-and-tag:
+  validate:
+    name: Validate PR
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-      - name: Build Binary
+      - name: Check Formatting
+        run: cargo fmt --check
+
+      - name: Linting (Clippy)
+        run: cargo clippy -- -D warnings
+
+      - name: Run Tests
+        run: cargo test
+
+      - name: Build Release Binary
         run: cargo build --release
 
-      - name: Create Tag
-        id: create_tag
-        run: |
-          # Create a tag based on PR number or branch name
-          TAG_NAME="preview-pr${{ github.event.pull_request.number }}-${{ github.run_number }}"
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-          git tag $TAG_NAME
-          git push origin $TAG_NAME
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Artifact
+      - name: Upload Preview Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: twigdrop-${{ steps.create_tag.outputs.tag_name }}
+          name: twigdrop-preview-${{ github.event.pull_request.number }}
           path: target/release/twigdrop
+          retention-days: 5

@@ -176,7 +176,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             .split(area);
         f.render_widget(table, chunks[0]);
 
-        let mut info_text = app.branch_info.clone();
+        let mut info_text = app.branch_state.branch_info.clone();
         if let Some(ai) = &app.ai_state.ai_analysis {
             info_text = format!(
                 "--- AI ANALYSIS ---\n\n{}\n\n------------------\n\n{}",
@@ -190,7 +190,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
                     .title(" Intelligence & Diff ")
                     .borders(Borders::ALL),
             )
-            .scroll((app.info_scroll, 0));
+            .scroll((app.branch_state.info_scroll, 0));
         f.render_widget(diff, chunks[1]);
     } else {
         f.render_widget(table, area);
@@ -537,6 +537,6 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
                 .title(" Diff Preview ")
                 .borders(Borders::ALL),
         )
-        .scroll((app.info_scroll, 0));
+        .scroll((app.branch_state.info_scroll, 0));
     f.render_widget(diff_p, detail_chunks[1]);
 }

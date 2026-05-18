@@ -1,0 +1,46 @@
+name: CD (Release)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Release Binary
+        run: cargo build --release
+
+      - name: Generate Tag
+        id: tag
+        run: |
+          # Simple auto-incrementing tag logic for demo
+          # In a real project, we might use semantic-release or read version from Cargo.toml
+          VERSION=$(grep '^version' Cargo.toml | head -n 1 | cut -d '"' -f 2)
+          TAG_NAME="v$VERSION-${{ github.run_number }}"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag_name }}
+          name: Release ${{ steps.tag.outputs.tag_name }}
+          files: target/release/twigdrop
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

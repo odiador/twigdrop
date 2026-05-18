@@ -8,6 +8,7 @@ mod models;
 mod ui;
 mod utils;
 
+use anyhow::Result;
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -20,14 +21,14 @@ use ratatui::{
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
 };
-use std::{env, error::Error, io};
+use std::{env, io};
 use tokio::sync::mpsc;
 
 use app::{AIUpdate, App, MergeUpdate};
 use handlers::handle_event;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<()> {
     // Set panic hook to ensure terminal is restored
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -88,23 +89,87 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    // Background AI analyzer
-    let ai_path = path.clone();
+    // Background AI analyzer (Simplified, no App struct needed)
     tokio::spawn(async move {
-        let mut bg_app = App::new(
-            vec![],
-            "".to_string(),
-            mpsc::channel(1).1,
-            mpsc::channel(1).0,
-            mpsc::channel(1).1,
-            mpsc::channel(1).0,
-        );
-        bg_app.setup_ai(&ai_path);
+        // Setup AI context for worker
+        dotenv::dotenv().ok();
+        let db_path = crate::utils::config::get_config_path()
+            .unwrap_or_else(|| std::path::PathBuf::from(".git"))
+            .parent()
+            .unwrap_or(&std::path::PathBuf::from("."))
+            .join("twigdrop.db");
 
-        while let Some((p, b)) = ai_trigger_rx.recv().await {
-            bg_app.trigger_ai_analysis(&p, &b).await;
-            if let Some(analysis) = bg_app.ai_state.ai_analysis.take() {
-                let _ = ai_update_tx.send(AIUpdate { analysis }).await;
+        let db = crate::db::Database::new(db_path).ok();
+        let provider_type = std::env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string());
+        let model = std::env::var("AI_MODEL").unwrap_or_else(|_| "llama3".to_string());
+
+        let provider: Option<Box<dyn crate::ai::AIProvider>> = if provider_type == "openai" {
+            std::env::var("OPENAI_API_KEY").ok().map(|key| {
+                Box::new(crate::ai::openai::OpenAIProvider::new(key, model))
+                    as Box<dyn crate::ai::AIProvider>
+            })
+        } else {
+            let url = std::env::var("OLLAMA_URL")
+                .unwrap_or_else(|_| "http://localhost:11434".to_string());
+            Some(Box::new(crate::ai::ollama::OllamaProvider::new(url, model))
+                as Box<dyn crate::ai::AIProvider>)
+        };
+
+        if let Some(p) = provider {
+            while let Some((repo_path, branch_name)) = ai_trigger_rx.recv().await {
+                // Check Cache first
+                let hash =
+                    match crate::git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
+                        Ok(h) => h.trim().to_string(),
+                        Err(_) => continue,
+                    };
+
+                let mut analysis_found = false;
+                if let Some(ref d) = db
+                    && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
+                    && cached_hash == hash
+                {
+                    let _ = ai_update_tx
+                        .send(AIUpdate {
+                            analysis: format!(
+                                "--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}",
+                                summary, cleanup
+                            ),
+                        })
+                        .await;
+                    analysis_found = true;
+                }
+
+                if !analysis_found {
+                    let _ = ai_update_tx
+                        .send(AIUpdate {
+                            analysis: "Analyzing with AI...".to_string(),
+                        })
+                        .await;
+                    let diff = crate::git::get_branch_info(&repo_path, &branch_name);
+                    let summary_res = p.summarize_diff(&diff).await;
+                    let cleanup_res = p.recommend_cleanup(&branch_name).await;
+
+                    match (summary_res, cleanup_res) {
+                        (Ok(s), Ok(c)) => {
+                            if let Some(ref d) = db {
+                                let _ = d.save_analysis(&branch_name, &hash, &s, &c);
+                            }
+                            let _ = ai_update_tx
+                                .send(AIUpdate {
+                                    analysis: format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
+                                })
+                                .await;
+                        }
+                        _ => {
+                            let _ = ai_update_tx
+                                .send(AIUpdate {
+                                    analysis: "AI Analysis failed.".to_string(),
+                                })
+                                .await;
+                        }
+                    }
+                }
             }
         }
     });
@@ -132,7 +197,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        println!("{:?}", err);
+        eprintln!("{:?}", err);
     }
 
     Ok(())
