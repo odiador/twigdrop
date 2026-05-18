@@ -1,24 +1,77 @@
-use crate::app::{App, AppMode, PrimaryMode};
+use crate::app::{App, AppMode, PrimaryMode, PreviewState};
 use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::crossterm::terminal;
 use std::time::Instant;
 
 pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
-    if let MouseEventKind::Down(MouseButton::Left) = event.kind {
-        let (term_cols, term_rows) = terminal::size().unwrap_or((100, 40));
-        let row = event.row as usize;
-        let col = event.column as usize;
+    let (term_cols, term_rows) = terminal::size().unwrap_or((100, 40));
+    let row = event.row as usize;
+    let col = event.column as usize;
 
-        if app.mode != AppMode::Normal
-            && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize)
-        {
-            return;
-        }
+    match event.kind {
+        MouseEventKind::Down(MouseButton::Left) => {
+            if app.mode != AppMode::Normal
+                && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize)
+            {
+                return;
+            }
 
-        match app.primary_mode {
-            PrimaryMode::Branches => handle_list_click(app, row),
-            PrimaryMode::Files => handle_directory_click(app, row, path),
+            if let AppMode::CodePreview(ref mut state) = app.mode {
+                let sidebar_width = (term_cols as f32 * app.file_state.sidebar_width as f32 / 100.0) as usize;
+                if col >= sidebar_width {
+                    handle_preview_click(state, row, col, sidebar_width);
+                    return;
+                }
+            }
+
+            match app.primary_mode {
+                PrimaryMode::Branches => handle_list_click(app, row),
+                PrimaryMode::Files => handle_directory_click(app, row, path),
+            }
         }
+        MouseEventKind::Drag(MouseButton::Left) => {
+            if let AppMode::CodePreview(ref mut state) = app.mode {
+                let sidebar_width = (term_cols as f32 * app.file_state.sidebar_width as f32 / 100.0) as usize;
+                if col >= sidebar_width {
+                    handle_preview_drag(state, row);
+                }
+            }
+        }
+        MouseEventKind::ScrollUp => {
+            if let AppMode::CodePreview(ref mut state) = app.mode {
+                if state.scroll_y > 0 {
+                    state.scroll_y -= 1;
+                }
+            } else if app.primary_mode == PrimaryMode::Files && app.file_state.file_scroll > 0 {
+                app.file_state.file_scroll -= 1;
+            }
+        }
+        MouseEventKind::ScrollDown => {
+            if let AppMode::CodePreview(ref mut state) = app.mode {
+                state.scroll_y += 1;
+            } else if app.primary_mode == PrimaryMode::Files {
+                app.file_state.file_scroll += 1;
+            }
+        }
+        _ => {}
+    }
+}
+
+fn handle_preview_click(state: &mut PreviewState, row: usize, _col: usize, _sidebar_width: usize) {
+    // block starts at y=0, header at y=1, content at y=2
+    if row >= 1 {
+        let relative_row = row - 1;
+        state.cursor_y = state.scroll_y + relative_row;
+        state.selection_start = Some(state.cursor_y);
+        state.selection_end = Some(state.cursor_y);
+    }
+}
+
+fn handle_preview_drag(state: &mut PreviewState, row: usize) {
+    if row >= 1 {
+        let relative_row = row - 1;
+        state.selection_end = Some(state.scroll_y + relative_row);
+        state.cursor_y = state.scroll_y + relative_row;
     }
 }
 

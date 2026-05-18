@@ -28,6 +28,13 @@ pub enum MergeStatus {
     NotAnalyzed,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GutterStatus {
+    Added,
+    Modified,
+    Deleted,
+}
+
 pub struct Branch {
     pub name: String,
     pub status: Vec<BranchStatus>,

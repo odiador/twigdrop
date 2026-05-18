@@ -18,7 +18,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         .constraints([Constraint::Min(3), Constraint::Length(1)].as_ref())
         .split(area);
 
-    // 1. Regular Rendering
+    // 1. Regular Rendering (includes side-by-side preview if active)
     match app.primary_mode {
         PrimaryMode::Branches => {
             screens::render_main_list(f, chunks[0], app);
@@ -112,12 +112,14 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::StashDetail => screens::render_stash_detail(f, chunks[0], app),
         AppMode::Settings => screens::render_settings(f, app),
         AppMode::Search => screens::render_search(f, app),
-        AppMode::CodePreview(path_str, content) => screens::render_code_preview(f, app, path_str, content),
+        // CodePreview is handled inside render_directory_searcher for side-by-side
         _ => {}
     }
 
     // 4. Footer shortcuts
-    let footer_text = if app.mode == AppMode::Diff {
+    let footer_text = if let AppMode::CodePreview(_) = app.mode {
+        " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar "
+    } else if app.mode == AppMode::Diff {
         " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
     } else if app.shift_pressed {
         match app.primary_mode {

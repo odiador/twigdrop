@@ -1,4 +1,4 @@
-use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus};
+use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus, GutterStatus};
 use crate::ui::animations::SnapAnimation;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
@@ -12,6 +12,17 @@ pub enum PrimaryMode {
     Files,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreviewState {
+    pub file_path: String,
+    pub content: String,
+    pub cursor_y: usize,
+    pub scroll_y: usize,
+    pub selection_start: Option<usize>,
+    pub selection_end: Option<usize>,
+    pub line_diffs: HashMap<usize, GutterStatus>,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum AppMode {
     Normal,
@@ -22,7 +33,7 @@ pub enum AppMode {
     StashDetail,
     Settings,
     Search,
-    CodePreview(String, String), // (file_path, content)
+    CodePreview(PreviewState),
     Message(String),
 }
 
@@ -56,12 +67,24 @@ pub struct BranchState {
     pub search_query: String,
 }
 
-#[derive(Default)]
 pub struct FileState {
     pub file_tree: Vec<crate::git::files::FileEntry>,
     pub file_selected: usize,
     pub file_scroll: usize,
     pub git_file_statuses: HashMap<String, crate::git::files::FileStatus>,
+    pub sidebar_width: u16,
+}
+
+impl Default for FileState {
+    fn default() -> Self {
+        Self {
+            file_tree: Vec::new(),
+            file_selected: 0,
+            file_scroll: 0,
+            git_file_statuses: HashMap::new(),
+            sidebar_width: 30, // Default width percentage
+        }
+    }
 }
 
 #[derive(Default)]
@@ -175,6 +198,12 @@ impl App {
             rx,
             trigger_tx,
         };
+        
+        // Task: Fix loading files if starting in Files mode
+        if app.primary_mode == PrimaryMode::Files {
+            app.load_file_tree("."); // Use default path
+        }
+        
         app.refresh_filtered_branches();
         app
     }
@@ -303,17 +332,13 @@ impl App {
     }
 
     pub fn load_file_tree(&mut self, path: &str) {
-        if self.file_state.file_tree.is_empty() {
-            self.file_state.git_file_statuses = crate::git::files::get_git_file_statuses(path);
-            self.file_state.file_tree = crate::git::files::build_file_tree(
-                path,
-                "",
-                0,
-                &self.file_state.git_file_statuses,
-            );
-            self.file_state.file_selected = 0;
-            self.file_state.file_scroll = 0;
-        }
+        self.file_state.git_file_statuses = crate::git::files::get_git_file_statuses(path);
+        self.file_state.file_tree = crate::git::files::build_file_tree(
+            path,
+            "",
+            0,
+            &self.file_state.git_file_statuses,
+        );
     }
 
     pub fn toggle_file_dir(&mut self, path_str: &str) {
