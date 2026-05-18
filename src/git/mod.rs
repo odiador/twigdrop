@@ -83,6 +83,7 @@ pub fn get_branch_info(path: &str, branch: &str) -> String {
         path,
         &["log", "-n", "3", "--stat", "-p", "--color=never", branch],
     )
+    .unwrap_or_else(|e| format!("Error loading branch info: {}", e))
 }
 
 pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &str) -> MergeStatus {
@@ -91,15 +92,17 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
     }
 
     // 1. Get merge base
-    let merge_base = run_git(path, &["merge-base", current_branch, target_branch])
-        .trim()
-        .to_string();
+    let merge_base = match run_git(path, &["merge-base", current_branch, target_branch]) {
+        Ok(mb) => mb.trim().to_string(),
+        Err(e) => return MergeStatus::Conflict(format!("No common ancestor: {}", e)),
+    };
+
     if merge_base.is_empty() {
         return MergeStatus::Conflict("No common ancestor found".to_string());
     }
 
     // 2. Get commits to apply
-    let commits_str = run_git(
+    let commits_str = match run_git(
         path,
         &[
             "log",
@@ -107,43 +110,49 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
             "--format=%H",
             &format!("{}..{}", merge_base, target_branch),
         ],
-    );
+    ) {
+        Ok(c) => c,
+        Err(e) => return MergeStatus::Conflict(format!("Error listing commits: {}", e)),
+    };
+
     let commits: Vec<&str> = commits_str.lines().collect();
 
     if commits.is_empty() {
         return MergeStatus::Clean;
     }
 
-    let mut current_tree = run_git(
+    let mut current_tree = match run_git(
         path,
         &["rev-parse", &format!("{}^{{tree}}", current_branch)],
-    )
-    .trim()
-    .to_string();
+    ) {
+        Ok(t) => t.trim().to_string(),
+        Err(e) => return MergeStatus::Conflict(format!("Error parsing tree: {}", e)),
+    };
+
     let total_commits = commits.len();
     let mut safe_commits = 0;
 
     for commit in commits {
-        // Try to merge the commit into the current_tree
-        // Since we are doing it commit by commit, the base for this specific merge is the parent of the commit
-        // BUT wait, if we want to see if it can be applied onto our current state,
-        // the "base" for the merge-tree should be the merge-base if we were doing a full merge.
-        // However, the user suggested "Cálculo Lineal Silencioso".
+        let parent = match run_git(path, &["rev-parse", &format!("{}^1", commit)]) {
+            Ok(p) => p.trim().to_string(),
+            Err(_) => {
+                // If it's a root commit, we can't easily merge-tree it this way
+                // For simplicity, let's treat it as a conflict or stop
+                return MergeStatus::SafeLimit(safe_commits, total_commits);
+            }
+        };
 
-        let parent = run_git(path, &["rev-parse", &format!("{}^1", commit)])
-            .trim()
-            .to_string();
-
-        let (output, code) = run_git_with_status(
+        match run_git_with_status(
             path,
             &["merge-tree", "--write-tree", &parent, &current_tree, commit],
-        );
-
-        if code == 0 {
-            current_tree = output.trim().to_string();
-            safe_commits += 1;
-        } else {
-            return MergeStatus::SafeLimit(safe_commits, total_commits);
+        ) {
+            Ok((output, 0)) => {
+                current_tree = output.trim().to_string();
+                safe_commits += 1;
+            }
+            _ => {
+                return MergeStatus::SafeLimit(safe_commits, total_commits);
+            }
         }
     }
 

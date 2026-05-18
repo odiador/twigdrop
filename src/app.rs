@@ -293,18 +293,16 @@ impl App {
     }
 
     pub async fn trigger_ai_analysis(&mut self, path: &str, branch_name: &str) {
-        let hash = crate::git::commands::run_git(path, &["rev-parse", branch_name])
-            .trim()
-            .to_string();
+        let hash = match crate::git::commands::run_git(path, &["rev-parse", branch_name]) {
+            Ok(h) => h.trim().to_string(),
+            Err(_) => return,
+        };
 
         // 1. Check Cache
-        let cached = self
-            .db
-            .as_ref()
-            .and_then(|db| db.get_analysis(branch_name).ok().flatten())
-            .filter(|(h, _, _)| h == &hash);
-
-        if let Some((_, summary, cleanup)) = cached {
+        if let Some(db) = &self.db
+            && let Ok(Some((cached_hash, summary, cleanup))) = db.get_analysis(branch_name)
+            && cached_hash == hash
+        {
             self.ai_analysis = Some(format!(
                 "--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}",
                 summary, cleanup

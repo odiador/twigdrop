@@ -1,6 +1,6 @@
+use crate::git::commands::run_git;
 use ignore::WalkBuilder;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FileStatus {
@@ -22,18 +22,11 @@ pub struct FileEntry {
 }
 
 pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, FileStatus> {
-    let output = Command::new("git")
-        .current_dir(path)
-        .args(["status", "--porcelain", "--ignored"])
-        .output();
-
     let mut map = std::collections::HashMap::new();
-    let ok_output = match output {
-        Ok(o) => o,
+    let stdout = match run_git(path, &["status", "--porcelain", "--ignored"]) {
+        Ok(out) => out,
         Err(_) => return map,
     };
-
-    let stdout = String::from_utf8_lossy(&ok_output.stdout);
 
     for line in stdout.lines() {
         if line.len() < 4 {
