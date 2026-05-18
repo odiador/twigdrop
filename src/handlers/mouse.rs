@@ -65,9 +65,9 @@ fn handle_modal_click(
         if row > min_row {
             let option_idx = row - min_row - 1;
             if app.mode == AppMode::Manage && option_idx < 5 {
-                app.manage_selected = option_idx;
+                app.branch_state.manage_selected = option_idx;
             } else if app.mode == AppMode::Filter && option_idx < 10 {
-                app.filter_selected = option_idx;
+                app.branch_state.filter_selected = option_idx;
             }
         }
     } else if let AppMode::Message(_) = app.mode {
@@ -78,14 +78,13 @@ fn handle_modal_click(
 }
 
 fn handle_list_click(app: &mut App, row: usize) {
-    // Table starts at y=0 of chunks[0]
     let list_top = 0;
     if row < list_top + 3 {
         return;
     }
 
     let relative_row = row - list_top - 3;
-    let start = app.list_start_index;
+    let start = app.branch_state.list_start_index;
     let filtered_branches = app.get_filtered_branches();
     let branches_len = filtered_branches.len();
 
@@ -97,7 +96,6 @@ fn handle_list_click(app: &mut App, row: usize) {
 }
 
 fn handle_directory_click(app: &mut App, row: usize, path: &str) {
-    // List inside Block starts at y+1
     let list_top = 0;
     if row < list_top + 1 {
         return;
@@ -105,18 +103,18 @@ fn handle_directory_click(app: &mut App, row: usize, path: &str) {
 
     let target_idx = row - list_top - 1;
 
-    if target_idx < app.file_tree.len() {
+    if target_idx < app.file_state.file_tree.len() {
         let now = Instant::now();
         if let Some(last_row) = app.last_click_row
             && last_row == target_idx
             && now.duration_since(app.last_click_time).as_millis() < 500
         {
-            app.file_selected = target_idx;
+            app.file_state.file_selected = target_idx;
             app.toggle_file_dir(path);
             app.last_click_row = None;
             return;
         }
-        app.file_selected = target_idx;
+        app.file_state.file_selected = target_idx;
         app.last_click_row = Some(target_idx);
         app.last_click_time = now;
     }
@@ -128,16 +126,16 @@ fn process_double_click(app: &mut App, target_idx: usize, double_click_mode: App
         && last_row == target_idx
         && now.duration_since(app.last_click_time).as_millis() < 500
     {
-        app.selected = target_idx;
+        app.branch_state.selected = target_idx;
         app.mode = double_click_mode;
         if let AppMode::Manage = app.mode {
-            app.manage_selected = 0;
+            app.branch_state.manage_selected = 0;
         }
         app.last_click_row = None;
         return;
     }
 
-    app.selected = target_idx;
+    app.branch_state.selected = target_idx;
     app.last_click_row = Some(target_idx);
     app.last_click_time = now;
 }

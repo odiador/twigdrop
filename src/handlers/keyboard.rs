@@ -7,12 +7,8 @@ use crate::models::BranchStatus;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
-    app.alt_pressed = key
-        .modifiers
-        .contains(ratatui::crossterm::event::KeyModifiers::ALT);
-    app.shift_pressed = key
-        .modifiers
-        .contains(ratatui::crossterm::event::KeyModifiers::SHIFT);
+    app.alt_pressed = key.modifiers.contains(KeyModifiers::ALT);
+    app.shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
 
     if let AppMode::Message(_) = app.mode {
         app.mode = AppMode::Normal;
@@ -28,10 +24,10 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.mode = AppMode::Normal;
                 app.needs_clear = true;
                 false
-            } else if app.current_filter.is_some() {
-                app.current_filter = None;
+            } else if app.branch_state.current_filter.is_some() {
+                app.branch_state.current_filter = None;
                 app.refresh_filtered_branches();
-                app.selected = 0;
+                app.branch_state.selected = 0;
                 false
             } else {
                 true // Signal to quit
@@ -56,7 +52,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             let target_path = if app.alt_pressed
                 && app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
             {
                 std::path::PathBuf::from(path).join(&entry.path)
             } else {
@@ -75,7 +71,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('p') => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
-                let msg = prune_branches(path, &app.branches, &app.current_branch);
+                let msg = prune_branches(path, &app.branch_state.branches, &app.current_branch);
                 app.refresh_branches(path);
                 app.mode = AppMode::Message(msg);
             }
@@ -84,14 +80,15 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('i') => {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Branches
-                && let Some(branch) = app.get_filtered_branches().get(app.selected)
+                && let Some(branch) = app.get_filtered_branches().get(app.branch_state.selected)
             {
                 let branch_name = branch.name.clone();
                 let path_clone = path.to_string();
                 let _ = app
+                    .ai_state
                     .ai_trigger_tx
                     .try_send((path_clone, branch_name.clone()));
-                app.ai_analysis = Some("Initializing AI analysis...".to_string());
+                app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
 
                 // Switch to Diff mode to show the analysis panel
                 let info = git::get_branch_info(path, &branch_name);
@@ -110,11 +107,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('D') if app.shift_pressed => {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Branches
-                && !app.bulk_selected.is_empty()
+                && !app.branch_state.bulk_selected.is_empty()
             {
-                let names: Vec<String> = app.bulk_selected.iter().cloned().collect();
+                let names: Vec<String> = app.branch_state.bulk_selected.iter().cloned().collect();
                 let msg = bulk_delete_branches(path, &names);
-                app.bulk_selected.clear();
+                app.branch_state.bulk_selected.clear();
                 app.refresh_branches(path);
                 app.current_branch = git::get_current_branch(path);
                 app.mode = AppMode::Message(msg);
@@ -124,15 +121,15 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Right => {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
                 && entry.is_dir
             {
                 if !entry.is_open {
                     app.toggle_file_dir(path);
-                } else if app.file_selected + 1 < app.file_tree.len() {
-                    let next_entry = &app.file_tree[app.file_selected + 1];
+                } else if app.file_state.file_selected + 1 < app.file_state.file_tree.len() {
+                    let next_entry = &app.file_state.file_tree[app.file_state.file_selected + 1];
                     if next_entry.depth > entry.depth {
-                        app.file_selected += 1;
+                        app.file_state.file_selected += 1;
                     }
                 }
             }
@@ -141,15 +138,15 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Left => {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
             {
                 if entry.is_dir && entry.is_open {
                     app.toggle_file_dir(path);
                 } else if entry.depth > 0 {
                     let current_depth = entry.depth;
-                    for i in (0..app.file_selected).rev() {
-                        if app.file_tree[i].depth < current_depth {
-                            app.file_selected = i;
+                    for i in (0..app.file_state.file_selected).rev() {
+                        if app.file_state.file_tree[i].depth < current_depth {
+                            app.file_state.file_selected = i;
                             break;
                         }
                     }
@@ -160,7 +157,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('f') => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
                 app.mode = AppMode::Filter;
-                app.filter_selected = 0;
+                app.branch_state.filter_selected = 0;
             }
             false
         }
@@ -178,7 +175,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('v') => {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
             {
                 let target_path = if app.alt_pressed {
                     std::path::PathBuf::from(path).join(&entry.path)
@@ -192,7 +189,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('t') => {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
             {
                 let full_path = std::path::PathBuf::from(path).join(&entry.path);
                 let dir = if entry.is_dir {
@@ -217,7 +214,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('a') => {
             if app.mode == AppMode::Normal
                 && app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_tree.get(app.file_selected)
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
             {
                 let target_path = if app.alt_pressed {
                     std::path::PathBuf::from(path).join(&entry.path)
@@ -226,7 +223,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 };
                 crate::utils::terminal::open_ide(&target_path, &app.config.alternative_ide_command);
             } else if app.mode == AppMode::StashDetail
-                && let Some(stash) = app.stashes.get(app.stash_selected)
+                && let Some(stash) = app.stash_state.stashes.get(app.stash_state.stash_selected)
             {
                 let msg = apply_stash(path, &stash.id);
                 app.refresh_branches(path);
@@ -238,19 +235,21 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             match app.mode {
                 AppMode::Diff => app.info_scroll += 1,
                 AppMode::StashDetail => {
-                    if app.stash_selected < app.stashes.len().saturating_sub(1) {
-                        app.stash_selected += 1;
+                    if app.stash_state.stash_selected
+                        < app.stash_state.stashes.len().saturating_sub(1)
+                    {
+                        app.stash_state.stash_selected += 1;
                         app.load_stash_detail(path);
                     }
                 }
                 AppMode::Manage => {
-                    if app.manage_selected < 4 {
-                        app.manage_selected += 1;
+                    if app.branch_state.manage_selected < 4 {
+                        app.branch_state.manage_selected += 1;
                     }
                 }
                 AppMode::Filter => {
-                    if app.filter_selected < 9 {
-                        app.filter_selected += 1;
+                    if app.branch_state.filter_selected < 9 {
+                        app.branch_state.filter_selected += 1;
                     }
                 }
                 _ => app.next(),
@@ -261,19 +260,19 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             match app.mode {
                 AppMode::Diff => app.info_scroll = app.info_scroll.saturating_sub(1),
                 AppMode::StashDetail => {
-                    if app.stash_selected > 0 {
-                        app.stash_selected -= 1;
+                    if app.stash_state.stash_selected > 0 {
+                        app.stash_state.stash_selected -= 1;
                         app.load_stash_detail(path);
                     }
                 }
                 AppMode::Manage => {
-                    if app.manage_selected > 0 {
-                        app.manage_selected -= 1;
+                    if app.branch_state.manage_selected > 0 {
+                        app.branch_state.manage_selected -= 1;
                     }
                 }
                 AppMode::Filter => {
-                    if app.filter_selected > 0 {
-                        app.filter_selected -= 1;
+                    if app.branch_state.filter_selected > 0 {
+                        app.branch_state.filter_selected -= 1;
                     }
                 }
                 _ => app.previous(),
@@ -284,11 +283,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             let digit = c.to_digit(10).unwrap() as usize;
             match app.mode {
                 AppMode::Filter if digit < 10 => {
-                    app.filter_selected = digit;
+                    app.branch_state.filter_selected = digit;
                     handle_enter_or_selection(app, path);
                 }
                 AppMode::Manage if (1..=5).contains(&digit) => {
-                    app.manage_selected = digit - 1;
+                    app.branch_state.manage_selected = digit - 1;
                     handle_enter_or_selection(app, path);
                 }
                 _ => {}
@@ -306,16 +305,18 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                 && !app.get_filtered_branches().is_empty() =>
         {
             app.mode = AppMode::Manage;
-            app.manage_selected = 0;
+            app.branch_state.manage_selected = 0;
         }
         AppMode::Manage => {
             let branch_name = {
                 let filtered = app.get_filtered_branches();
-                filtered.get(app.selected).map(|b| b.name.clone())
+                filtered
+                    .get(app.branch_state.selected)
+                    .map(|b| b.name.clone())
             };
 
             if let Some(name) = branch_name {
-                match app.manage_selected {
+                match app.branch_state.manage_selected {
                     0 => {
                         let msg = checkout_branch(path, &name);
                         app.refresh_branches(path);
@@ -324,7 +325,10 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                     }
                     1 => {
                         let mut info = git::get_branch_info(path, &name);
-                        let branch = app.get_filtered_branches().get(app.selected).copied();
+                        let branch = app
+                            .get_filtered_branches()
+                            .get(app.branch_state.selected)
+                            .copied();
                         if let Some(crate::models::MergeStatus::SafeLimit(safe, total)) =
                             branch.map(|b| &b.merge_status)
                         {
@@ -351,7 +355,7 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
             }
         }
         AppMode::Filter => {
-            app.current_filter = match app.filter_selected {
+            app.branch_state.current_filter = match app.branch_state.filter_selected {
                 0 => None,
                 1 => Some(BranchStatus::Merged),
                 2 => Some(BranchStatus::Local),
@@ -365,7 +369,7 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                 _ => None,
             };
             app.refresh_filtered_branches();
-            app.selected = 0;
+            app.branch_state.selected = 0;
             app.mode = AppMode::Normal;
         }
         _ => {}
