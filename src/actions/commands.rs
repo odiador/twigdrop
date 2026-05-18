@@ -1,4 +1,5 @@
 use crate::git::commands::run_git;
+use std::fs;
 
 pub fn delete_branch(path: &str, name: &str) -> String {
     match run_git(path, &["branch", "-D", name]) {
@@ -62,5 +63,23 @@ pub fn apply_stash(path: &str, id: &str) -> String {
     match run_git(path, &["stash", "apply", id]) {
         Ok(output) => format!("> git stash apply {}\n{}", id, output.trim()),
         Err(e) => format!("Error applying stash {}: {}", id, e),
+    }
+}
+
+pub fn apply_resolution_to_file(repo_path: &str, file_path: &str, original_block: &str, resolved_content: &str) -> Result<(), String> {
+    let full_path = std::path::Path::new(repo_path).join(file_path);
+    let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;
+    
+    if let Some(start) = content.find(original_block) {
+        let mut new_content = content.clone();
+        new_content.replace_range(start..start + original_block.len(), resolved_content);
+        fs::write(&full_path, new_content).map_err(|e| e.to_string())?;
+        
+        // Stage the file if we fixed a conflict
+        let _ = run_git(repo_path, &["add", file_path]);
+        
+        Ok(())
+    } else {
+        Err("Could not find conflict block in file. Maybe it was already resolved?".to_string())
     }
 }

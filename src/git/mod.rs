@@ -10,7 +10,7 @@ use crate::git::status::{
     get_branch_metadata, get_branches, get_merged_branches, get_stashed_branches,
     get_upstream_tracks, has_unique_commits,
 };
-use crate::models::{Branch, BranchStatus, MergeStatus};
+use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus};
 
 pub fn build_branches(path: &str) -> Vec<Branch> {
     let names = get_branches(path);
@@ -94,11 +94,11 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
     // 1. Get merge base
     let merge_base = match run_git(path, &["merge-base", current_branch, target_branch]) {
         Ok(mb) => mb.trim().to_string(),
-        Err(e) => return MergeStatus::Conflict(format!("No common ancestor: {}", e)),
+        Err(_) => return MergeStatus::SafeLimit(0, 0),
     };
 
     if merge_base.is_empty() {
-        return MergeStatus::Conflict("No common ancestor found".to_string());
+        return MergeStatus::SafeLimit(0, 0);
     }
 
     // 2. Get commits to apply
@@ -112,7 +112,7 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
         ],
     ) {
         Ok(c) => c,
-        Err(e) => return MergeStatus::Conflict(format!("Error listing commits: {}", e)),
+        Err(_) => return MergeStatus::SafeLimit(0, 0),
     };
 
     let commits: Vec<&str> = commits_str.lines().collect();
@@ -126,7 +126,7 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
         &["rev-parse", &format!("{}^{{tree}}", current_branch)],
     ) {
         Ok(t) => t.trim().to_string(),
-        Err(e) => return MergeStatus::Conflict(format!("Error parsing tree: {}", e)),
+        Err(_) => return MergeStatus::SafeLimit(0, 0),
     };
 
     let total_commits = commits.len();
@@ -136,8 +136,6 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
         let parent = match run_git(path, &["rev-parse", &format!("{}^1", commit)]) {
             Ok(p) => p.trim().to_string(),
             Err(_) => {
-                // If it's a root commit, we can't easily merge-tree it this way
-                // For simplicity, let's treat it as a conflict or stop
                 return MergeStatus::SafeLimit(safe_commits, total_commits);
             }
         };
@@ -151,6 +149,11 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
                 safe_commits += 1;
             }
             _ => {
+                // Conflict detected at this commit
+                let conflicts = get_conflicts_from_merge(path, &parent, &current_tree, commit);
+                if !conflicts.is_empty() {
+                    return MergeStatus::Conflict(conflicts);
+                }
                 return MergeStatus::SafeLimit(safe_commits, total_commits);
             }
         }
@@ -161,4 +164,45 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
     } else {
         MergeStatus::SafeLimit(safe_commits, total_commits)
     }
+}
+
+fn get_conflicts_from_merge(path: &str, base: &str, our: &str, their: &str) -> Vec<ConflictBlock> {
+    let mut conflicts = vec![];
+
+    // Use merge-tree without --write-tree to get the diff with conflict markers
+    let out = match run_git(path, &["merge-tree", base, our, their]) {
+        Ok(o) => o,
+        Err(_) => return vec![],
+    };
+
+    let mut current_file = String::new();
+    let mut current_block = String::new();
+    let mut in_conflict = false;
+
+    for line in out.lines() {
+        // This is a naive parser for merge-tree output
+        if line.starts_with("<<<<<<<") {
+            in_conflict = true;
+            current_block.push_str(line);
+            current_block.push('\n');
+        } else if line.starts_with(">>>>>>>") {
+            current_block.push_str(line);
+            current_block.push('\n');
+            if !current_file.is_empty() {
+                conflicts.push(ConflictBlock {
+                    file_path: current_file.clone(),
+                    content: current_block.clone(),
+                });
+            }
+            current_block.clear();
+            in_conflict = false;
+        } else if in_conflict {
+            current_block.push_str(line);
+            current_block.push('\n');
+        } else if let Some(stripped) = line.strip_prefix("+++ b/") {
+            current_file = stripped.to_string();
+        }
+    }
+
+    conflicts
 }

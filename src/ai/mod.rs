@@ -1,14 +1,13 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use rig::client::CompletionClient;
 use rig::completion::Prompt;
 use rig::providers::openai;
+use rig::client::CompletionClient;
 
 #[async_trait]
 pub trait TwigdropAI: Send + Sync {
     async fn summarize_diff(&self, diff: &str) -> Result<String>;
     async fn recommend_cleanup(&self, branch_info: &str) -> Result<String>;
-    #[allow(dead_code)]
     async fn resolve_conflict(&self, conflict_block: &str) -> Result<String>;
 }
 
@@ -17,9 +16,7 @@ pub struct RigAgentWrapper<M: rig::completion::CompletionModel + Send + Sync + '
 }
 
 #[async_trait]
-impl<M: rig::completion::CompletionModel + Send + Sync + 'static> TwigdropAI
-    for RigAgentWrapper<M>
-{
+impl<M: rig::completion::CompletionModel + Send + Sync + 'static> TwigdropAI for RigAgentWrapper<M> {
     async fn summarize_diff(&self, diff: &str) -> Result<String> {
         let prompt = format!(
             "Summarize this git diff in 3 concise bullet points. Focus on intent and impact:\n\n{}",
@@ -38,7 +35,17 @@ impl<M: rig::completion::CompletionModel + Send + Sync + 'static> TwigdropAI
 
     async fn resolve_conflict(&self, conflict_block: &str) -> Result<String> {
         let prompt = format!(
-            "Resolve the following git conflict. Return ONLY the resolved code block, no prose:\n\n{}",
+            "You are a merge conflict resolution expert. 
+            Resolve the following conflict block. 
+            Analyze both versions (HEAD/ours and the incoming change) and combine them logically if needed, 
+            or pick the most appropriate one based on modern coding standards.
+            
+            Return ONLY the resolved code block. DO NOT include conflict markers (<<<<, ====, >>>>).
+            DO NOT include any explanation or prose.
+            
+            Conflict block:
+            {}
+            ",
             conflict_block
         );
         Ok(self.agent.prompt(&prompt).await?)
@@ -50,27 +57,17 @@ pub struct AIWorker {
 }
 
 impl AIWorker {
-    pub fn new(
-        provider_type: &str,
-        model: &str,
-        api_key: Option<String>,
-        url: Option<String>,
-    ) -> Result<Self> {
+    pub fn new(provider_type: &str, model: &str, api_key: Option<String>, url: Option<String>) -> Result<Self> {
         let preamble = "You are Twigdrop AI, a specialized git assistant. 
             Your goal is to analyze branches, summarize diffs, and resolve conflicts.
             Keep your responses concise and focused on the technical changes.";
 
         let key = api_key.unwrap_or_else(|| "unused".to_string());
-
+        
         if provider_type == "openai" {
-            let client = openai::Client::builder()
-                .api_key(&key)
-                .build()
-                .map_err(|e| anyhow::anyhow!(e))?;
+            let client = openai::Client::builder().api_key(&key).build().map_err(|e| anyhow::anyhow!(e))?;
             let agent = client.agent(model).preamble(preamble).build();
-            Ok(Self {
-                inner: Box::new(RigAgentWrapper { agent }),
-            })
+            Ok(Self { inner: Box::new(RigAgentWrapper { agent }) })
         } else {
             let base_url = url.unwrap_or_else(|| "http://localhost:11434/v1".to_string());
             let client = openai::Client::builder()
@@ -79,9 +76,7 @@ impl AIWorker {
                 .build()
                 .map_err(|e| anyhow::anyhow!(e))?;
             let agent = client.agent(model).preamble(preamble).build();
-            Ok(Self {
-                inner: Box::new(RigAgentWrapper { agent }),
-            })
+            Ok(Self { inner: Box::new(RigAgentWrapper { agent }) })
         }
     }
 }

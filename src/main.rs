@@ -10,7 +10,6 @@ mod utils;
 
 use anyhow::Result;
 use ratatui::{
-    Terminal,
     backend::CrosstermBackend,
     crossterm::{
         event::{
@@ -18,14 +17,16 @@ use ratatui::{
             PushKeyboardEnhancementFlags,
         },
         execute,
-        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
+    Terminal,
 };
 use std::{env, io};
 use tokio::sync::mpsc;
 
-use app::{AIUpdate, App, MergeUpdate};
+use app::{AIUpdate, App, ConflictResolutionUpdate, MergeUpdate};
 use handlers::handle_event;
+use models::ConflictBlock;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -46,8 +47,12 @@ async fn main() -> Result<()> {
 
     let (tx, rx) = mpsc::channel(100);
     let (trigger_tx, mut trigger_rx) = mpsc::channel::<()>(1);
+    
     let (ai_update_tx, ai_rx) = mpsc::channel::<AIUpdate>(10);
     let (ai_trigger_tx, mut ai_trigger_rx) = mpsc::channel::<(String, String)>(10);
+    
+    let (conflict_resolution_tx, conflict_resolution_rx) = mpsc::channel::<ConflictResolutionUpdate>(10);
+    let (conflict_trigger_tx, mut conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
 
     let mut app = App::new(
         branches,
@@ -56,6 +61,8 @@ async fn main() -> Result<()> {
         trigger_tx.clone(),
         ai_rx,
         ai_trigger_tx.clone(),
+        conflict_resolution_rx,
+        conflict_trigger_tx.clone(),
     );
     app.setup_ai(&path);
 
@@ -108,55 +115,67 @@ async fn main() -> Result<()> {
         let worker = crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
 
         if let Some(w) = worker {
-            while let Some((repo_path, branch_name)) = ai_trigger_rx.recv().await {
-                let hash =
-                    match crate::git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
-                        Ok(h) => h.trim().to_string(),
-                        Err(_) => continue,
-                    };
+            loop {
+                tokio::select! {
+                    Some((repo_path, branch_name)) = ai_trigger_rx.recv() => {
+                        let hash =
+                            match crate::git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
+                                Ok(h) => h.trim().to_string(),
+                                Err(_) => continue,
+                            };
 
-                let mut cached_result = None;
-                if let Some(ref d) = db
-                    && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
-                    && cached_hash == hash
-                {
-                    cached_result = Some(format!(
-                        "--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}",
-                        summary, cleanup
-                    ));
-                }
-
-                if let Some(analysis) = cached_result {
-                    let _ = ai_update_tx.send(AIUpdate { analysis }).await;
-                } else {
-                    let _ = ai_update_tx
-                        .send(AIUpdate {
-                            analysis: "Analyzing with AI...".to_string(),
-                        })
-                        .await;
-                    let diff = crate::git::get_branch_info(&repo_path, &branch_name);
-                    let summary_res = w.inner.summarize_diff(&diff).await;
-                    let cleanup_res = w.inner.recommend_cleanup(&branch_name).await;
-
-                    match (summary_res, cleanup_res) {
-                        (Ok(s), Ok(c)) => {
-                            if let Some(ref d) = db {
-                                let _ = d.save_analysis(&branch_name, &hash, &s, &c);
-                            }
-                            let _ = ai_update_tx
-                                .send(AIUpdate {
-                                    analysis: format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
-                                })
-                                .await;
+                        let mut cached_result = None;
+                        if let Some(ref d) = db
+                            && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
+                            && cached_hash == hash
+                        {
+                            cached_result = Some(format!("--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}", summary, cleanup));
                         }
-                        _ => {
+
+                        if let Some(analysis) = cached_result {
+                            let _ = ai_update_tx.send(AIUpdate { analysis }).await;
+                        } else {
                             let _ = ai_update_tx
                                 .send(AIUpdate {
-                                    analysis: "AI Analysis failed.".to_string(),
+                                    analysis: "Analyzing with AI...".to_string(),
                                 })
                                 .await;
+                            let diff = crate::git::get_branch_info(&repo_path, &branch_name);
+                            let summary_res = w.inner.summarize_diff(&diff).await;
+                            let cleanup_res = w.inner.recommend_cleanup(&branch_name).await;
+
+                            match (summary_res, cleanup_res) {
+                                (Ok(s), Ok(c)) => {
+                                    if let Some(ref d) = db {
+                                        let _ = d.save_analysis(&branch_name, &hash, &s, &c);
+                                    }
+                                    let _ = ai_update_tx
+                                        .send(AIUpdate {
+                                            analysis: format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
+                                        })
+                                        .await;
+                                }
+                                _ => {
+                                    let _ = ai_update_tx
+                                        .send(AIUpdate {
+                                            analysis: "AI Analysis failed.".to_string(),
+                                        })
+                                        .await;
+                                }
+                            }
                         }
                     }
+                    Some((_repo_path, conflict)) = conflict_trigger_rx.recv() => {
+                        let resolution = w.inner.resolve_conflict(&conflict.content).await;
+                        if let Ok(resolved_content) = resolution {
+                            let _ = conflict_resolution_tx.send(ConflictResolutionUpdate {
+                                file_path: conflict.file_path,
+                                resolved_content,
+                                original_block: conflict.content,
+                            }).await;
+                        }
+                    }
+                    else => break,
                 }
             }
         }
@@ -197,7 +216,7 @@ async fn run_app(
     path: &str,
 ) -> io::Result<()> {
     loop {
-        app.update_from_channel();
+        app.update_from_channel(path);
 
         if app.needs_clear {
             terminal.clear()?;
