@@ -9,10 +9,11 @@ use ratatui::{
 use crate::app::{App, AppMode, PrimaryMode};
 use crate::git::files::FileStatus;
 use crate::models::BranchStatus;
-use crate::ui::components::get_status_icons;
+use crate::ui::components::{get_status_icons, highlight_code};
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
-    let branches_len = app.branch_state.filtered_indices.len();
+    let filtered_indices = app.branch_state.filtered_indices.clone();
+    let branches_len = filtered_indices.len();
     let inner_height = area.height.saturating_sub(4) as usize; // Extra space for header/table
 
     if inner_height == 0 {
@@ -32,9 +33,9 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         }
     }
     app.branch_state.list_start_index = start;
-    let filtered_branches = app.get_filtered_branches();
-
+    
     let mut rows: Vec<Row> = vec![];
+    app.branch_screen_positions.clear();
 
     let branch_items_to_show = inner_height.min(branches_len.saturating_sub(start));
 
@@ -44,9 +45,13 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             break;
         }
 
-        let b = filtered_branches[branch_idx];
+        let actual_idx = filtered_indices[branch_idx];
+        let b = &app.branch_state.branches[actual_idx];
         let selected = branch_idx == app.branch_state.selected;
         let is_current = b.name == app.current_branch;
+
+        // Record screen position for animation
+        app.branch_screen_positions.push((actual_idx, area.y + 3 + i as u16));
 
         let (icons, color) = get_status_icons(&b.status);
         let (merge_text, merge_color) =
@@ -279,6 +284,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             "",
             "Shortcuts (Branches):",
             "  ↑/k, ↓/j    : Navigate list",
+            "  /           : Fuzzy search branches",
             "  Space       : Toggle branch selection (for bulk delete)",
             "  D (Shift+D) : Bulk delete selected branches",
             "  p           : Prune 'Gone' branches (Safe only)",
@@ -299,6 +305,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             "  ↑/k, ↓/j    : Navigate tree",
             "  → / Enter   : Open folder / Move into children",
             "  ←           : Close folder / Move to parent",
+            "  Enter       : Preview file content",
             "  v           : Open in IDE (Root by default, Path with Alt)",
             "  t           : Internal TTY (Alt+t for External)",
             "  a           : Alt IDE (Root by default, Path with Alt)",
@@ -610,4 +617,41 @@ pub fn render_settings(f: &mut Frame, app: &App) {
 
     let help_area = Rect::new(inner.x, inner.y + inner.height - 2, inner.width, 1);
     f.render_widget(help, help_area);
+}
+
+pub fn render_search(f: &mut Frame, app: &App) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .split(f.area())[0];
+
+    let block = Block::default()
+        .title(" Search Branches ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+
+    let p = Paragraph::new(format!("> {}", app.branch_state.search_query))
+        .block(block)
+        .alignment(Alignment::Left);
+
+    f.render_widget(Clear, area);
+    f.render_widget(p, area);
+}
+
+pub fn render_code_preview(f: &mut Frame, app: &App, file_path: &str, content: &str) {
+    let area = f.area();
+    let block = Block::default()
+        .title(format!(" Preview: {} (Esc to close) ", file_path))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let theme = &app.ts.themes["base16-ocean.dark"];
+    let text = highlight_code(&app.ps, theme, file_path, content);
+
+    let p = Paragraph::new(text)
+        .block(block)
+        .wrap(ratatui::widgets::Wrap { trim: false });
+
+    f.render_widget(Clear, area);
+    f.render_widget(p, area);
 }

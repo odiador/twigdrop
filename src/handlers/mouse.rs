@@ -33,12 +33,14 @@ fn handle_modal_click(
     let (v_start_pct, v_size_pct) = match app.mode {
         AppMode::Filter => (0.20, 0.60),
         AppMode::Manage | AppMode::Message(_) => (0.30, 0.40),
+        AppMode::Settings => (0.25, 0.50),
         AppMode::Help => (0.0, 1.0), // Help is full screen
         _ => (0.30, 0.40),
     };
 
     let h_start_pct = match app.mode {
         AppMode::Filter | AppMode::Manage => 0.30,
+        AppMode::Settings => 0.20,
         AppMode::Message(_) | AppMode::Help => 0.15,
         _ => 0.30,
     };
@@ -61,13 +63,27 @@ fn handle_modal_click(
     }
 
     // Click inside handling
-    if app.mode == AppMode::Manage || app.mode == AppMode::Filter {
+    if app.mode == AppMode::Manage || app.mode == AppMode::Filter || app.mode == AppMode::Settings {
         if row > min_row {
             let option_idx = row - min_row - 1;
             if app.mode == AppMode::Manage && option_idx < 5 {
                 app.branch_state.manage_selected = option_idx;
             } else if app.mode == AppMode::Filter && option_idx < 10 {
                 app.branch_state.filter_selected = option_idx;
+            } else if app.mode == AppMode::Settings && option_idx < 3 {
+                app.settings_state.selected = option_idx;
+                if option_idx == 2 {
+                    // Click on Save and Exit
+                    crate::utils::config::save_config(&app.config);
+                    app.mode = AppMode::Normal;
+                } else {
+                    app.settings_state.editing = true;
+                    app.settings_state.input = match option_idx {
+                        0 => app.config.ide_command.clone(),
+                        1 => app.config.alternative_ide_command.clone(),
+                        _ => String::new(),
+                    };
+                }
             }
         }
     } else if let AppMode::Message(_) = app.mode {

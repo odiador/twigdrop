@@ -223,7 +223,7 @@ async fn run_app(
             app.needs_clear = false;
         }
 
-        terminal.draw(|f| ui::draw(f, app))?;
+        terminal.draw(|f| ui::draw(f, app, path))?;
 
         if event::poll(std::time::Duration::from_millis(50))? && handle_event(app, path)? {
             return Ok(());
