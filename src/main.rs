@@ -55,6 +55,7 @@ async fn main() -> Result<()> {
     let (conflict_trigger_tx, mut conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
 
     let mut app = App::new(
+        &path,
         branches,
         current_branch,
         rx,

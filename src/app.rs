@@ -155,6 +155,7 @@ pub struct App {
 impl App {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        repo_path: &str,
         branches: Vec<Branch>,
         current_branch: String,
         rx: mpsc::Receiver<MergeUpdate>,
@@ -206,7 +207,7 @@ impl App {
         };
         
         if app.primary_mode == PrimaryMode::Files {
-            app.load_file_tree("."); 
+            app.load_file_tree(repo_path); 
         }
         
         app.refresh_filtered_branches();
