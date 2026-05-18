@@ -89,9 +89,8 @@ async fn main() -> Result<()> {
         }
     });
 
-    // Background AI analyzer (Simplified, no App struct needed)
+    // Background AI analyzer using 'rig'
     tokio::spawn(async move {
-        // Setup AI context for worker
         dotenv::dotenv().ok();
         let db_path = crate::utils::config::get_config_path()
             .unwrap_or_else(|| std::path::PathBuf::from(".git"))
@@ -100,55 +99,44 @@ async fn main() -> Result<()> {
             .join("twigdrop.db");
 
         let db = crate::db::Database::new(db_path).ok();
+
         let provider_type = std::env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string());
         let model = std::env::var("AI_MODEL").unwrap_or_else(|_| "llama3".to_string());
+        let api_key = std::env::var("OPENAI_API_KEY").ok();
+        let url = std::env::var("OLLAMA_URL").ok();
 
-        let provider: Option<Box<dyn crate::ai::AIProvider>> = if provider_type == "openai" {
-            std::env::var("OPENAI_API_KEY").ok().map(|key| {
-                Box::new(crate::ai::openai::OpenAIProvider::new(key, model))
-                    as Box<dyn crate::ai::AIProvider>
-            })
-        } else {
-            let url = std::env::var("OLLAMA_URL")
-                .unwrap_or_else(|_| "http://localhost:11434".to_string());
-            Some(Box::new(crate::ai::ollama::OllamaProvider::new(url, model))
-                as Box<dyn crate::ai::AIProvider>)
-        };
+        let worker = crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
 
-        if let Some(p) = provider {
+        if let Some(w) = worker {
             while let Some((repo_path, branch_name)) = ai_trigger_rx.recv().await {
-                // Check Cache first
                 let hash =
                     match crate::git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
                         Ok(h) => h.trim().to_string(),
                         Err(_) => continue,
                     };
 
-                let mut analysis_found = false;
+                let mut cached_result = None;
                 if let Some(ref d) = db
                     && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
                     && cached_hash == hash
                 {
-                    let _ = ai_update_tx
-                        .send(AIUpdate {
-                            analysis: format!(
-                                "--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}",
-                                summary, cleanup
-                            ),
-                        })
-                        .await;
-                    analysis_found = true;
+                    cached_result = Some(format!(
+                        "--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}",
+                        summary, cleanup
+                    ));
                 }
 
-                if !analysis_found {
+                if let Some(analysis) = cached_result {
+                    let _ = ai_update_tx.send(AIUpdate { analysis }).await;
+                } else {
                     let _ = ai_update_tx
                         .send(AIUpdate {
                             analysis: "Analyzing with AI...".to_string(),
                         })
                         .await;
                     let diff = crate::git::get_branch_info(&repo_path, &branch_name);
-                    let summary_res = p.summarize_diff(&diff).await;
-                    let cleanup_res = p.recommend_cleanup(&branch_name).await;
+                    let summary_res = w.inner.summarize_diff(&diff).await;
+                    let cleanup_res = w.inner.recommend_cleanup(&branch_name).await;
 
                     match (summary_res, cleanup_res) {
                         (Ok(s), Ok(c)) => {

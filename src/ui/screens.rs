@@ -309,6 +309,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         "",
         "Global Shortcuts:",
         "  d           : Switch between Branches and Files mode",
+        "  Shift+Tab   : Open Settings Panel",
         "  S (Shift+S) : Open Stash Manager",
         "  Ctrl+o      : Open IDE (Root by default, Path with Alt)",
         "  q / Esc     : Quit / Back",
@@ -539,4 +540,73 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
         )
         .scroll((app.branch_state.info_scroll, 0));
     f.render_widget(diff_p, detail_chunks[1]);
+}
+
+pub fn render_settings(f: &mut Frame, app: &App) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(25),
+                Constraint::Percentage(50),
+                Constraint::Percentage(25),
+            ]
+            .as_ref(),
+        )
+        .split(f.area())[1];
+
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ]
+            .as_ref(),
+        )
+        .split(area)[1];
+
+    f.render_widget(Clear, inner);
+
+    let block = Block::default()
+        .title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let options = [
+        format!("Primary IDE: {}", app.config.ide_command),
+        format!("Alternative IDE: {}", app.config.alternative_ide_command),
+        "Save and Exit".to_string(),
+    ];
+
+    let mut items = vec![];
+    for (i, opt) in options.iter().enumerate() {
+        let mut style = Style::default().fg(Color::Gray);
+        if i == app.settings_state.selected {
+            style = style
+                .bg(Color::White)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD);
+        }
+
+        let text = if i == app.settings_state.selected && app.settings_state.editing {
+            format!("> {}", app.settings_state.input)
+        } else {
+            opt.clone()
+        };
+
+        items.push(ListItem::new(text).style(style));
+    }
+
+    let list = List::new(items).block(block);
+    f.render_widget(list, inner);
+
+    // Help text at bottom of settings
+    let help = Paragraph::new("↑/↓: navigate │ Enter: edit/select │ Esc: cancel")
+        .alignment(Alignment::Center)
+        .style(Style::default().fg(Color::DarkGray));
+
+    let help_area = Rect::new(inner.x, inner.y + inner.height - 2, inner.width, 1);
+    f.render_widget(help, help_area);
 }

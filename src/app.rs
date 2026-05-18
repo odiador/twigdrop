@@ -17,6 +17,7 @@ pub enum AppMode {
     Filter,
     Diff,
     StashDetail,
+    Settings,
     Message(String),
 }
 
@@ -60,11 +61,18 @@ pub struct StashState {
 }
 
 pub struct AIState {
-    pub ai_provider: Option<Box<dyn crate::ai::AIProvider>>,
+    pub ai_worker: Option<crate::ai::AIWorker>,
     pub db: Option<crate::db::Database>,
     pub ai_analysis: Option<String>,
     pub ai_rx: mpsc::Receiver<AIUpdate>,
     pub ai_trigger_tx: mpsc::Sender<(String, String)>,
+}
+
+#[derive(Default)]
+pub struct SettingsState {
+    pub selected: usize,
+    pub editing: bool,
+    pub input: String,
 }
 
 pub struct App {
@@ -72,6 +80,7 @@ pub struct App {
     pub file_state: FileState,
     pub stash_state: StashState,
     pub ai_state: AIState,
+    pub settings_state: SettingsState,
 
     pub current_branch: String,
     pub primary_mode: PrimaryMode,
@@ -108,12 +117,13 @@ impl App {
             file_state: FileState::default(),
             stash_state: StashState::default(),
             ai_state: AIState {
-                ai_provider: None,
+                ai_worker: None,
                 db: None,
                 ai_analysis: None,
                 ai_rx,
                 ai_trigger_tx,
             },
+            settings_state: SettingsState::default(),
             current_branch,
             primary_mode: PrimaryMode::Branches,
             mode: AppMode::Normal,
@@ -300,18 +310,11 @@ impl App {
 
         let provider_type = std::env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string());
         let model = std::env::var("AI_MODEL").unwrap_or_else(|_| "llama3".to_string());
+        let api_key = std::env::var("OPENAI_API_KEY").ok();
+        let url = std::env::var("OLLAMA_URL").ok();
 
-        if provider_type == "openai" {
-            if let Ok(key) = std::env::var("OPENAI_API_KEY") {
-                self.ai_state.ai_provider =
-                    Some(Box::new(crate::ai::openai::OpenAIProvider::new(key, model)));
-            }
-        } else {
-            let url = std::env::var("OLLAMA_URL")
-                .unwrap_or_else(|_| "http://localhost:11434".to_string());
-            self.ai_state.ai_provider =
-                Some(Box::new(crate::ai::ollama::OllamaProvider::new(url, model)));
-        }
+        self.ai_state.ai_worker =
+            crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
     }
 
     pub fn toggle_selection(&mut self) {

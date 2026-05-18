@@ -15,6 +15,10 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         return false;
     }
 
+    if let AppMode::Settings = app.mode {
+        return handle_settings_keyboard(app, key);
+    }
+
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => {
             if app.mode != AppMode::Normal {
@@ -33,6 +37,13 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 true // Signal to quit
             }
         }
+        KeyCode::BackTab => {
+            // Shift+Tab toggles settings
+            app.mode = AppMode::Settings;
+            app.settings_state.selected = 0;
+            app.settings_state.editing = false;
+            false
+        }
         KeyCode::Char('h') => {
             app.toggle_help();
             false
@@ -50,12 +61,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let target_path = if app.alt_pressed && app.primary_mode == PrimaryMode::Files {
-                if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
-                    std::path::PathBuf::from(path).join(&entry.path)
-                } else {
-                    std::path::PathBuf::from(path)
-                }
+            let target_path = if app.alt_pressed
+                && app.primary_mode == PrimaryMode::Files
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
+            {
+                std::path::PathBuf::from(path).join(&entry.path)
             } else {
                 std::path::PathBuf::from(path)
             };
@@ -303,6 +313,55 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         _ => false,
     }
+}
+
+fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
+    if app.settings_state.editing {
+        match key.code {
+            KeyCode::Enter => {
+                match app.settings_state.selected {
+                    0 => app.config.ide_command = app.settings_state.input.clone(),
+                    1 => app.config.alternative_ide_command = app.settings_state.input.clone(),
+                    _ => {}
+                }
+                app.settings_state.editing = false;
+                crate::utils::config::save_config(&app.config);
+            }
+            KeyCode::Esc => {
+                app.settings_state.editing = false;
+            }
+            KeyCode::Char(c) => {
+                app.settings_state.input.push(c);
+            }
+            KeyCode::Backspace => {
+                app.settings_state.input.pop();
+            }
+            _ => {}
+        }
+        return false;
+    }
+
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') if app.settings_state.selected > 0 => {
+            app.settings_state.selected -= 1;
+        }
+        KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 2 => {
+            app.settings_state.selected += 1;
+        }
+        KeyCode::Enter => {
+            app.settings_state.editing = true;
+            app.settings_state.input = match app.settings_state.selected {
+                0 => app.config.ide_command.clone(),
+                1 => app.config.alternative_ide_command.clone(),
+                _ => String::new(),
+            };
+        }
+        KeyCode::Char('q') | KeyCode::Esc | KeyCode::BackTab => {
+            app.mode = AppMode::Normal;
+        }
+        _ => {}
+    }
+    false
 }
 
 fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {

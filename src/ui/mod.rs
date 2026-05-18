@@ -30,6 +30,7 @@ pub fn draw(f: &mut Frame, app: &mut App) {
         AppMode::Message(msg) => screens::render_message(f, msg),
         AppMode::Help => screens::render_help_content(f, chunks[0], app),
         AppMode::StashDetail => screens::render_stash_detail(f, chunks[0], app),
+        AppMode::Settings => screens::render_settings(f, app),
         _ => {}
     }
 
