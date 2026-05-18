@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, AppMode, PrimaryMode, PreviewState};
+use crate::app::{App, AppMode, PrimaryMode, PreviewState, FilePanel};
 use crate::git::files::FileStatus;
 use crate::models::{BranchStatus, GutterStatus};
 use crate::ui::components::{get_status_icons, highlight_code};
@@ -14,7 +14,7 @@ use crate::ui::components::{get_status_icons, highlight_code};
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     let filtered_indices = app.branch_state.filtered_indices.clone();
     let branches_len = filtered_indices.len();
-    let inner_height = area.height.saturating_sub(4) as usize; // Extra space for header/table
+    let inner_height = area.height.saturating_sub(4) as usize;
 
     if inner_height == 0 {
         return;
@@ -50,7 +50,6 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         let selected = branch_idx == app.branch_state.selected;
         let is_current = b.name == app.current_branch;
 
-        // Record screen position for animation
         app.branch_screen_positions.push((actual_idx, area.y + 3 + i as u16));
 
         let (icons, color) = get_status_icons(&b.status);
@@ -58,24 +57,15 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             crate::ui::components::get_merge_status_display(&b.merge_status);
 
         let current_tag = if is_current { " (current)" } else { "" };
-
         let is_bulk_selected = app.branch_state.bulk_selected.contains(&b.name);
         let checkbox = if is_bulk_selected { "[x]" } else { "[ ]" };
 
         let branch_name = format!("{}{}", b.name, current_tag);
-        let status_str = if b.status.contains(&BranchStatus::Merged) {
-            "merged"
-        } else {
-            "unmerged"
-        };
-        let type_str = if b.status.contains(&BranchStatus::RemoteTracked) {
-            "remote"
-        } else {
-            "local"
-        };
+        let status_str = if b.status.contains(&BranchStatus::Merged) { "merged" } else { "unmerged" };
+        let type_str = if b.status.contains(&BranchStatus::RemoteTracked) { "remote" } else { "local" };
         let author_str = format!("{} {}", b.commit_date, b.author);
 
-        let mut row_style = Style::default().fg(Color::Rgb(205, 214, 244)); // Cool Grays
+        let mut row_style = Style::default().fg(Color::Rgb(205, 214, 244));
         let mut branch_style = Style::default().fg(color);
         if is_current {
             branch_style = branch_style.add_modifier(Modifier::BOLD).fg(Color::White);
@@ -87,29 +77,14 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         }
 
         let cells = vec![
-            Cell::from(checkbox).style(if selected {
-                Style::default().fg(Color::Black)
-            } else {
-                Style::default().fg(Color::Rgb(124, 128, 156))
-            }),
+            Cell::from(checkbox).style(if selected { Style::default().fg(Color::Black) } else { Style::default().fg(Color::Rgb(124, 128, 156)) }),
             Cell::from(Line::from(vec![
-                Span::styled(
-                    format!("{:<4} ", icons),
-                    if selected {
-                        Style::default().fg(Color::Black)
-                    } else {
-                        Style::default().fg(color)
-                    },
-                ),
+                Span::styled(format!("{:<4} ", icons), if selected { Style::default().fg(Color::Black) } else { Style::default().fg(color) }),
                 Span::styled(branch_name, branch_style),
             ])),
             Cell::from(b.age.clone()),
             Cell::from(status_str),
-            Cell::from(merge_text).style(if selected {
-                Style::default().fg(Color::Black)
-            } else {
-                Style::default().fg(merge_color)
-            }),
+            Cell::from(merge_text).style(if selected { Style::default().fg(Color::Black) } else { Style::default().fg(merge_color) }),
             Cell::from(type_str),
             Cell::from(author_str),
         ];
@@ -117,26 +92,11 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         rows.push(Row::new(cells).style(row_style));
     }
 
-    let filter_text = if let Some(f) = &app.branch_state.current_filter {
-        format!("sort: {:?}", f)
-    } else {
-        "sort: None".to_string()
-    };
+    let filter_text = if let Some(f) = &app.branch_state.current_filter { format!("sort: {:?}", f) } else { "sort: None".to_string() };
 
     let title_line = Line::from(vec![
-        Span::styled(
-            " 🧹 twigdrop ".to_string(),
-            Style::default()
-                .fg(Color::Rgb(180, 190, 254))
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            format!(
-                "│ {} · {} branches · {} ",
-                app.current_branch, branches_len, filter_text
-            ),
-            Style::default().fg(Color::Rgb(124, 128, 156)),
-        ),
+        Span::styled(" 🧹 twigdrop ".to_string(), Style::default().fg(Color::Rgb(180, 190, 254)).add_modifier(Modifier::BOLD)),
+        Span::styled(format!("│ {} · {} branches · {} ", app.current_branch, branches_len, filter_text), Style::default().fg(Color::Rgb(124, 128, 156))),
     ]);
 
     let widths = [
@@ -150,52 +110,19 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     ];
 
     let table = Table::new(rows, widths)
-        .header(
-            Row::new(vec![
-                "",
-                "Branch",
-                "Age",
-                "Status",
-                "Merge",
-                "Type",
-                "Last Commit Author",
-            ])
-            .style(
-                Style::default()
-                    .fg(Color::Rgb(124, 128, 156))
-                    .add_modifier(Modifier::BOLD),
-            )
-            .bottom_margin(1),
-        )
-        .block(
-            Block::default()
-                .title(title_line)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Rgb(74, 79, 106))),
-        );
+        .header(Row::new(vec!["", "Branch", "Age", "Status", "Merge", "Type", "Last Commit Author"]).style(Style::default().fg(Color::Rgb(124, 128, 156)).add_modifier(Modifier::BOLD)).bottom_margin(1))
+        .block(Block::default().title(title_line).borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(74, 79, 106))));
 
     if app.mode == AppMode::Diff {
-        let chunks = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            .split(area);
+        let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref()).split(area);
         f.render_widget(table, chunks[0]);
 
         let mut info_text = app.branch_state.branch_info.clone();
         if let Some(ai) = &app.ai_state.ai_analysis {
-            info_text = format!(
-                "--- AI ANALYSIS ---\n\n{}\n\n------------------\n\n{}",
-                ai, info_text
-            );
+            info_text = format!("--- AI ANALYSIS ---\n\n{}\n\n------------------\n\n{}", ai, info_text);
         }
 
-        let diff = Paragraph::new(info_text)
-            .block(
-                Block::default()
-                    .title(" Intelligence & Diff ")
-                    .borders(Borders::ALL),
-            )
-            .scroll((app.branch_state.info_scroll, 0));
+        let diff = Paragraph::new(info_text).block(Block::default().title(" Intelligence & Diff ").borders(Borders::ALL)).scroll((app.branch_state.info_scroll, 0));
         f.render_widget(diff, chunks[1]);
     } else {
         f.render_widget(table, area);
@@ -203,45 +130,11 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 }
 
 pub fn render_filter(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(30),
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
-
+    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)].as_ref()).split(f.area())[1];
+    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)].as_ref()).split(area)[1];
     f.render_widget(Clear, inner);
 
-    let options = [
-        "0. All",
-        "1. Merged (✓)",
-        "2. Local Only (L)",
-        "3. Stashed (S)",
-        "4. Gone (⨯)",
-        "5. Ahead (↑)",
-        "6. Behind (↓)",
-        "7. Unique Commits (▲)",
-        "8. Remote Tracked (R)",
-        "9. Remote Untracked (U)",
-    ];
-
+    let options = ["0. All", "1. Merged (✓)", "2. Local Only (L)", "3. Stashed (S)", "4. Gone (⨯)", "5. Ahead (↑)", "6. Behind (↓)", "7. Unique Commits (▲)", "8. Remote Tracked (R)", "9. Remote Untracked (U)"];
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
@@ -310,6 +203,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             "  t           : Internal TTY (Alt+t for External)",
             "  a           : Alt IDE (Root by default, Path with Alt)",
             "  [ / ]       : Expand / Contract sidebar width",
+            "  Tab         : Switch focus between sidebar and preview",
         ]);
     }
 
@@ -384,7 +278,6 @@ pub fn render_manage(f: &mut Frame, app: &App) {
             style = style.fg(Color::Cyan).bg(Color::Rgb(40, 40, 40));
         }
         if i == 2 {
-            // Delete option
             style = style.fg(Color::Red);
             if i == app.branch_state.manage_selected {
                 style = style.bg(Color::Rgb(40, 40, 40));
@@ -463,49 +356,39 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         (area, None)
     };
 
+    let sidebar_border_color = if app.file_state.active_panel == FilePanel::Directory && matches!(app.mode, AppMode::CodePreview(_)) {
+        Color::Rgb(180, 190, 254)
+    } else {
+        Color::Rgb(74, 79, 106)
+    };
+
     let block = Block::default()
-        .title(
-            Line::from(" 📂 Files (d: branches, v: IDE, t: TTY, h: help) ")
-                .alignment(Alignment::Left),
-        )
+        .title(Line::from(" 📂 Files (Tab: switch focus) ").alignment(Alignment::Left))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(74, 79, 106)));
+        .border_style(Style::default().fg(sidebar_border_color));
 
     let mut items = vec![];
     for (i, entry) in app.file_state.file_tree.iter().enumerate() {
         let indent = "  ".repeat(entry.depth);
-        let icon = if entry.is_dir {
-            if entry.is_open {
-                "▼ 📂 "
-            } else {
-                "▶ 📁 "
-            }
-        } else {
-            "  📄 "
-        };
-
+        let icon = if entry.is_dir { if entry.is_open { "▼ 📂 " } else { "▶ 📁 " } } else { "  📄 " };
         let name = entry.path.file_name().unwrap_or_default().to_string_lossy();
         let status_color = match entry.status {
-            FileStatus::Modified => Color::Rgb(249, 226, 175), // Yellow
-            FileStatus::Added => Color::Rgb(161, 229, 193),    // Green
-            FileStatus::Staged => Color::Rgb(137, 180, 250),   // Blue
-            FileStatus::Untracked => Color::Rgb(245, 194, 231), // Pink/Red
-            FileStatus::Ignored => Color::Rgb(140, 143, 161),  // Gray
-            FileStatus::Deleted => Color::Rgb(243, 139, 168),  // Red
-            FileStatus::Normal => Color::Rgb(205, 214, 244),   // Gray/White
+            FileStatus::Modified => Color::Rgb(249, 226, 175),
+            FileStatus::Added => Color::Rgb(161, 229, 193),
+            FileStatus::Staged => Color::Rgb(137, 180, 250),
+            FileStatus::Untracked => Color::Rgb(245, 194, 231),
+            FileStatus::Ignored => Color::Rgb(140, 143, 161),
+            FileStatus::Deleted => Color::Rgb(243, 139, 168),
+            FileStatus::Normal => Color::Rgb(205, 214, 244),
         };
 
         let mut style = Style::default().fg(status_color);
         if i == app.file_state.file_selected {
-            style = style.bg(Color::White).fg(Color::Black);
+            let bg = if app.file_state.active_panel == FilePanel::Directory { Color::White } else { Color::Rgb(40, 40, 60) };
+            let fg = if app.file_state.active_panel == FilePanel::Directory { Color::Black } else { status_color };
+            style = style.bg(bg).fg(fg);
         }
-
-        let line = Line::from(vec![
-            Span::raw(indent),
-            Span::raw(icon),
-            Span::styled(name.to_string(), style),
-        ]);
-        items.push(ListItem::new(line));
+        items.push(ListItem::new(Line::from(vec![Span::raw(indent), Span::raw(icon), Span::styled(name.to_string(), style)])));
     }
 
     let list = List::new(items).block(block);
@@ -517,209 +400,74 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
 }
 
 pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-        .split(area);
-
-    // Left: Stash list
+    let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(area);
     let mut stash_items = vec![];
     for (i, stash) in app.stash_state.stashes.iter().enumerate() {
         let mut style = Style::default().fg(Color::Rgb(205, 214, 244));
-        if i == app.stash_state.stash_selected {
-            style = style
-                .bg(Color::White)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD);
-        }
-        stash_items.push(
-            ListItem::new(format!(
-                "{} [{}] - {}",
-                stash.id, stash.branch, stash.message
-            ))
-            .style(style),
-        );
+        if i == app.stash_state.stash_selected { style = style.bg(Color::White).fg(Color::Black).add_modifier(Modifier::BOLD); }
+        stash_items.push(ListItem::new(format!("{} [{}] - {}", stash.id, stash.branch, stash.message)).style(style));
     }
-    let stash_list =
-        List::new(stash_items).block(Block::default().title(" Stashes ").borders(Borders::ALL));
+    let stash_list = List::new(stash_items).block(Block::default().title(" Stashes ").borders(Borders::ALL));
     f.render_widget(stash_list, chunks[0]);
 
-    // Right: Detail
-    let detail_chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
-        .split(chunks[1]);
-
-    let files_text = app.stash_state.stash_files.join("\n");
-    let files_p = Paragraph::new(files_text).block(
-        Block::default()
-            .title(" Files in Stash ")
-            .borders(Borders::ALL),
-    );
+    let detail_chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(chunks[1]);
+    let files_p = Paragraph::new(app.stash_state.stash_files.join("\n")).block(Block::default().title(" Files in Stash ").borders(Borders::ALL));
     f.render_widget(files_p, detail_chunks[0]);
-
-    let diff_p = Paragraph::new(app.stash_state.stash_diff.as_str())
-        .block(
-            Block::default()
-                .title(" Diff Preview ")
-                .borders(Borders::ALL),
-        )
-        .scroll((app.branch_state.info_scroll, 0));
+    let diff_p = Paragraph::new(app.stash_state.stash_diff.as_str()).block(Block::default().title(" Diff Preview ").borders(Borders::ALL)).scroll((app.branch_state.info_scroll, 0));
     f.render_widget(diff_p, detail_chunks[1]);
 }
 
 pub fn render_settings(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(25),
-                Constraint::Percentage(50),
-                Constraint::Percentage(25),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
-
+    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)].as_ref()).split(f.area())[1];
+    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)].as_ref()).split(area)[1];
     f.render_widget(Clear, inner);
 
-    let block = Block::default()
-        .title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
-
-    let options = [
-        format!("Primary IDE: {}", app.config.ide_command),
-        format!("Alternative IDE: {}", app.config.alternative_ide_command),
-        "Save and Exit".to_string(),
-    ];
-
+    let options = [format!("Primary IDE: {}", app.config.ide_command), format!("Alternative IDE: {}", app.config.alternative_ide_command), "Save and Exit".to_string()];
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.settings_state.selected {
-            style = style
-                .bg(Color::White)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD);
-        }
-
-        let text = if i == app.settings_state.selected && app.settings_state.editing {
-            format!("> {}", app.settings_state.input)
-        } else {
-            opt.clone()
-        };
-
+        if i == app.settings_state.selected { style = style.bg(Color::White).fg(Color::Black).add_modifier(Modifier::BOLD); }
+        let text = if i == app.settings_state.selected && app.settings_state.editing { format!("> {}", app.settings_state.input) } else { opt.clone() };
         items.push(ListItem::new(text).style(style));
     }
 
-    let list = List::new(items).block(block);
-    f.render_widget(list, inner);
-
-    // Help text at bottom of settings
-    let help = Paragraph::new("↑/↓: navigate │ Enter: edit/select │ Esc: cancel")
-        .alignment(Alignment::Center)
-        .style(Style::default().fg(Color::DarkGray));
-
+    f.render_widget(List::new(items).block(Block::default().title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center)).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan))), inner);
     let help_area = Rect::new(inner.x, inner.y + inner.height - 2, inner.width, 1);
-    f.render_widget(help, help_area);
+    f.render_widget(Paragraph::new("↑/↓: navigate │ Enter: edit/select │ Esc: cancel").alignment(Alignment::Center).style(Style::default().fg(Color::DarkGray)), help_area);
 }
 
 pub fn render_search(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
-        .split(f.area())[0];
-
-    let block = Block::default()
-        .title(" Search Branches ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
-
-    let p = Paragraph::new(format!("> {}", app.branch_state.search_query))
-        .block(block)
-        .alignment(Alignment::Left);
-
+    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Length(3), Constraint::Min(0)].as_ref()).split(f.area())[0];
     f.render_widget(Clear, area);
-    f.render_widget(p, area);
+    f.render_widget(Paragraph::new(format!("> {}", app.branch_state.search_query)).block(Block::default().title(" Search Branches ").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))), area);
 }
 
 pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &PreviewState) {
-    let block = Block::default()
-        .title(format!(" Preview: {} (Esc: close, hjkl: nav) ", state.file_path))
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Cyan));
+    let border_color = if app.file_state.active_panel == FilePanel::Preview { Color::Rgb(180, 190, 254) } else { Color::Rgb(74, 79, 106) };
+    let block = Block::default().title(format!(" Preview: {} (Tab: switch) ", state.file_path)).borders(Borders::ALL).border_style(Style::default().fg(border_color));
+    let text = highlight_code(&app.ps, &app.ts.themes["base16-ocean.dark"], &state.file_path, &state.content);
 
-    let theme = &app.ts.themes["base16-ocean.dark"];
-    let mut text = highlight_code(&app.ps, theme, &state.file_path, &state.content);
-
-    // Gutter and Selection Post-processing
     let mut final_lines = Vec::new();
+    for (i, line) in text.lines.into_iter().enumerate() {
+        let mut spans = vec![Span::styled(format!("{:>3} ", i + 1), Style::default().fg(Color::DarkGray))];
+        spans.push(match state.line_diffs.get(&i) { Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(Color::Green)), Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Blue)), Some(GutterStatus::Deleted) => Span::styled("~ ", Style::default().fg(Color::Red)), None => Span::raw("  ") });
 
-    for (i, line) in text.lines.iter_mut().enumerate() {
-        let mut spans = Vec::new();
-        
-        // 1. Line Number
-        let line_num = format!("{:>3} ", i + 1);
-        spans.push(Span::styled(line_num, Style::default().fg(Color::DarkGray)));
-
-        // 2. Gutter
-        let gutter_symbol = match state.line_diffs.get(&i) {
-            Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(Color::Green)),
-            Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Blue)),
-            Some(GutterStatus::Deleted) => Span::styled("~ ", Style::default().fg(Color::Red)),
-            None => Span::raw("  "),
-        };
-        spans.push(gutter_symbol);
-
-        // 3. Selection & Cursor Background
-        let is_selected = if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) {
-            let (s, e) = if start <= end { (start, end) } else { (end, start) };
-            i >= s && i <= e
-        } else {
-            false
-        };
-
+        let is_selected = if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) { let (s, e) = if start <= end { (start, end) } else { (end, start) }; i >= s && i <= e } else { false };
         let is_cursor = i == state.cursor_y;
-        
         let mut line_style = Style::default();
-        if is_cursor {
-            line_style = line_style.bg(Color::Rgb(40, 40, 40));
-        } else if is_selected {
-            line_style = line_style.bg(Color::Rgb(30, 50, 80));
-        }
+        if is_cursor && app.file_state.active_panel == FilePanel::Preview { line_style = line_style.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
+        else if is_cursor { line_style = line_style.bg(Color::Rgb(40, 40, 60)); }
+        else if is_selected { line_style = line_style.bg(Color::Rgb(30, 50, 80)); }
 
-        // Apply style to existing spans of the highlighted line
-        for span in &line.spans {
+        for span in line.spans {
             let mut s = span.style;
-            if is_cursor {
-                s = s.bg(Color::Rgb(40, 40, 40));
-            } else if is_selected {
-                s = s.bg(Color::Rgb(30, 50, 80));
-            }
-            spans.push(Span::styled(span.content.clone(), s));
+            if is_cursor && app.file_state.active_panel == FilePanel::Preview { s = s.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
+            else if is_cursor { s = s.bg(Color::Rgb(40, 40, 60)); }
+            else if is_selected { s = s.bg(Color::Rgb(30, 50, 80)); }
+            spans.push(Span::styled(span.content, s));
         }
-
         final_lines.push(Line::from(spans).style(line_style));
     }
-
-    let p = Paragraph::new(Text::from(final_lines))
-        .block(block)
-        .scroll((state.scroll_y as u16, 0))
-        .wrap(ratatui::widgets::Wrap { trim: false });
-
     f.render_widget(Clear, area);
-    f.render_widget(p, area);
+    f.render_widget(Paragraph::new(Text::from(final_lines)).block(block).scroll((state.scroll_y as u16, 0)), area);
 }

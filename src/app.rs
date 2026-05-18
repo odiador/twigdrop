@@ -12,6 +12,12 @@ pub enum PrimaryMode {
     Files,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum FilePanel {
+    Directory,
+    Preview,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PreviewState {
     pub file_path: String,
@@ -73,6 +79,7 @@ pub struct FileState {
     pub file_scroll: usize,
     pub git_file_statuses: HashMap<String, crate::git::files::FileStatus>,
     pub sidebar_width: u16,
+    pub active_panel: FilePanel,
 }
 
 impl Default for FileState {
@@ -82,7 +89,8 @@ impl Default for FileState {
             file_selected: 0,
             file_scroll: 0,
             git_file_statuses: HashMap::new(),
-            sidebar_width: 30, // Default width percentage
+            sidebar_width: 30,
+            active_panel: FilePanel::Directory,
         }
     }
 }
@@ -129,7 +137,6 @@ pub struct App {
     pub needs_clear: bool,
     pub alt_pressed: bool,
     pub shift_pressed: bool,
-    pub show_terminal: bool,
     pub config: crate::utils::config::Config,
 
     // Animations
@@ -189,7 +196,6 @@ impl App {
             needs_clear: false,
             alt_pressed: false,
             shift_pressed: false,
-            show_terminal: false,
             config,
             snap_animation: None,
             branch_screen_positions: Vec::new(),
@@ -199,9 +205,8 @@ impl App {
             trigger_tx,
         };
         
-        // Task: Fix loading files if starting in Files mode
         if app.primary_mode == PrimaryMode::Files {
-            app.load_file_tree("."); // Use default path
+            app.load_file_tree("."); 
         }
         
         app.refresh_filtered_branches();
@@ -257,14 +262,12 @@ impl App {
             .iter()
             .enumerate()
             .filter(|(_, b)| {
-                // Filter by status
                 let status_match = if let Some(filter) = &self.branch_state.current_filter {
                     b.status.contains(filter)
                 } else {
                     true
                 };
                 
-                // Filter by search query
                 let search_match = if !self.branch_state.search_query.is_empty() {
                     b.name.to_lowercase().contains(&self.branch_state.search_query.to_lowercase())
                 } else {
@@ -276,7 +279,6 @@ impl App {
             .map(|(i, _)| i)
             .collect();
 
-        // Clamp selected index
         let max = self.branch_state.filtered_indices.len().saturating_sub(1);
         if self.branch_state.selected > max {
             self.branch_state.selected = max;
@@ -356,14 +358,12 @@ impl App {
 
         if is_dir {
             if is_open {
-                // Close: remove all children
                 self.file_state.file_tree[self.file_state.file_selected].is_open = false;
                 let i = self.file_state.file_selected + 1;
                 while i < self.file_state.file_tree.len() && self.file_state.file_tree[i].depth > depth {
                     self.file_state.file_tree.remove(i);
                 }
             } else {
-                // Open: insert children
                 self.file_state.file_tree[self.file_state.file_selected].is_open = true;
                 let children = crate::git::files::build_file_tree(
                     path_str,
