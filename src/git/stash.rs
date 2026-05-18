@@ -7,7 +7,7 @@ pub struct StashEntry {
 }
 
 pub fn get_stashes(path: &str) -> Vec<StashEntry> {
-    let out = run_git(path, &["stash", "list", "--format=%gd|%s"]);
+    let out = run_git(path, &["stash", "list", "--format=%gd|%s"]).unwrap_or_default();
     let mut stashes = vec![];
     for line in out.lines() {
         let parts: Vec<&str> = line.split('|').collect();
@@ -38,7 +38,7 @@ pub fn get_stashes(path: &str) -> Vec<StashEntry> {
 }
 
 pub fn get_stash_files(path: &str, id: &str) -> Vec<String> {
-    let out = run_git(path, &["stash", "show", "--name-only", id]);
+    let out = run_git(path, &["stash", "show", "--name-only", id]).unwrap_or_default();
     out.lines()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
@@ -47,4 +47,5 @@ pub fn get_stash_files(path: &str, id: &str) -> Vec<String> {
 
 pub fn get_stash_diff(path: &str, id: &str) -> String {
     run_git(path, &["stash", "show", "-p", "--color=never", id])
+        .unwrap_or_else(|e| format!("Error loading stash diff: {}", e))
 }

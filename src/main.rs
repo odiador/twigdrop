@@ -28,6 +28,15 @@ use handlers::handle_event;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // Set panic hook to ensure terminal is restored
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = disable_raw_mode();
+        let mut stdout = std::io::stdout();
+        let _ = execute!(stdout, LeaveAlternateScreen, DisableMouseCapture);
+        default_panic(info);
+    }));
+
     let args: Vec<String> = env::args().collect();
     let path = args.get(1).cloned().unwrap_or_else(|| ".".to_string());
 
