@@ -50,11 +50,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            let target_path = if app.alt_pressed
-                && app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
-            {
-                std::path::PathBuf::from(path).join(&entry.path)
+            let target_path = if app.alt_pressed && app.primary_mode == PrimaryMode::Files {
+                if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
+                    std::path::PathBuf::from(path).join(&entry.path)
+                } else {
+                    std::path::PathBuf::from(path)
+                }
             } else {
                 std::path::PathBuf::from(path)
             };
@@ -92,8 +93,8 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 
                 // Switch to Diff mode to show the analysis panel
                 let info = git::get_branch_info(path, &branch_name);
-                app.branch_info = info;
-                app.info_scroll = 0;
+                app.branch_state.branch_info = info;
+                app.branch_state.info_scroll = 0;
                 app.mode = AppMode::Diff;
             }
             false
@@ -165,8 +166,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Files {
                 app.toggle_file_dir(path);
                 false
-            } else if app.mode == AppMode::StashDetail {
-                app.load_stash_detail(path);
+            } else if app.mode == AppMode::StashDetail
+                && let Some(stash) = app.stash_state.stashes.get(app.stash_state.stash_selected)
+            {
+                let msg = apply_stash(path, &stash.id);
+                app.refresh_branches(path);
+                app.mode = AppMode::Message(msg);
                 false
             } else {
                 handle_enter_or_selection(app, path)
@@ -233,7 +238,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Down | KeyCode::Char('j') => {
             match app.mode {
-                AppMode::Diff => app.info_scroll += 1,
+                AppMode::Diff => app.branch_state.info_scroll += 1,
                 AppMode::StashDetail => {
                     if app.stash_state.stash_selected
                         < app.stash_state.stashes.len().saturating_sub(1)
@@ -258,7 +263,9 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Up | KeyCode::Char('k') => {
             match app.mode {
-                AppMode::Diff => app.info_scroll = app.info_scroll.saturating_sub(1),
+                AppMode::Diff => {
+                    app.branch_state.info_scroll = app.branch_state.info_scroll.saturating_sub(1)
+                }
                 AppMode::StashDetail => {
                     if app.stash_state.stash_selected > 0 {
                         app.stash_state.stash_selected -= 1;
@@ -337,8 +344,8 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                                 safe, total, info
                             );
                         }
-                        app.branch_info = info;
-                        app.info_scroll = 0;
+                        app.branch_state.branch_info = info;
+                        app.branch_state.info_scroll = 0;
                         app.mode = AppMode::Diff;
                     }
                     2 => {

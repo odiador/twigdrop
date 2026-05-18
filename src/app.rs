@@ -39,6 +39,8 @@ pub struct BranchState {
     pub list_start_index: usize,
     pub filtered_indices: Vec<usize>,
     pub bulk_selected: HashSet<String>,
+    pub branch_info: String,
+    pub info_scroll: u16,
 }
 
 #[derive(Default)]
@@ -74,8 +76,6 @@ pub struct App {
     pub current_branch: String,
     pub primary_mode: PrimaryMode,
     pub mode: AppMode,
-    pub branch_info: String,
-    pub info_scroll: u16,
 
     // UI & System State
     pub last_click_time: Instant,
@@ -117,8 +117,6 @@ impl App {
             current_branch,
             primary_mode: PrimaryMode::Branches,
             mode: AppMode::Normal,
-            branch_info: String::new(),
-            info_scroll: 0,
             last_click_time: Instant::now(),
             last_click_row: None,
             needs_clear: false,
@@ -290,11 +288,14 @@ impl App {
         }
     }
 
-    pub fn setup_ai(&mut self, path: &str) {
+    pub fn setup_ai(&mut self, _path: &str) {
         dotenv::dotenv().ok();
-        let db_path = std::path::PathBuf::from(path)
-            .join(".git")
+        let db_path = crate::utils::config::get_config_path()
+            .unwrap_or_else(|| std::path::PathBuf::from(".git"))
+            .parent()
+            .unwrap_or(&std::path::PathBuf::from("."))
             .join("twigdrop.db");
+
         self.ai_state.db = crate::db::Database::new(db_path).ok();
 
         let provider_type = std::env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string());
@@ -310,49 +311,6 @@ impl App {
                 .unwrap_or_else(|_| "http://localhost:11434".to_string());
             self.ai_state.ai_provider =
                 Some(Box::new(crate::ai::ollama::OllamaProvider::new(url, model)));
-        }
-    }
-
-    pub async fn trigger_ai_analysis(&mut self, path: &str, branch_name: &str) {
-        let hash = match crate::git::commands::run_git(path, &["rev-parse", branch_name]) {
-            Ok(h) => h.trim().to_string(),
-            Err(_) => return,
-        };
-
-        // 1. Check Cache
-        if let Some(db) = &self.ai_state.db
-            && let Ok(Some((cached_hash, summary, cleanup))) = db.get_analysis(branch_name)
-            && cached_hash == hash
-        {
-            self.ai_state.ai_analysis = Some(format!(
-                "--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}",
-                summary, cleanup
-            ));
-            return;
-        }
-
-        // 2. Run AI Analysis
-        if let Some(provider) = &self.ai_state.ai_provider {
-            self.ai_state.ai_analysis = Some("Analyzing with AI...".to_string());
-
-            let diff = crate::git::get_branch_info(path, branch_name);
-            let summary_res = provider.summarize_diff(&diff).await;
-            let cleanup_res = provider.recommend_cleanup(branch_name).await;
-
-            match (summary_res, cleanup_res) {
-                (Ok(s), Ok(c)) => {
-                    if let Some(db) = &self.ai_state.db {
-                        let _ = db.save_analysis(branch_name, &hash, &s, &c);
-                    }
-                    self.ai_state.ai_analysis =
-                        Some(format!("Summary:\n{}\n\nRecommendation:\n{}", s, c));
-                }
-                _ => {
-                    self.ai_state.ai_analysis = Some("AI Analysis failed.".to_string());
-                }
-            }
-        } else {
-            self.ai_state.ai_analysis = Some("No AI Provider configured.".to_string());
         }
     }
 

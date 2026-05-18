@@ -96,6 +96,7 @@ fn handle_list_click(app: &mut App, row: usize) {
 }
 
 fn handle_directory_click(app: &mut App, row: usize, path: &str) {
+    // List inside Block starts at y+1
     let list_top = 0;
     if row < list_top + 1 {
         return;
