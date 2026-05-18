@@ -12,7 +12,7 @@ use crate::models::BranchStatus;
 use crate::ui::components::get_status_icons;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
-    let branches_len = app.filtered_indices.len();
+    let branches_len = app.branch_state.filtered_indices.len();
     let inner_height = area.height.saturating_sub(4) as usize; // Extra space for header/table
 
     if inner_height == 0 {
@@ -22,8 +22,8 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     let mut start = 0;
     if branches_len > inner_height {
         let half_height = inner_height / 2;
-        if app.selected > half_height {
-            start = app.selected - half_height;
+        if app.branch_state.selected > half_height {
+            start = app.branch_state.selected - half_height;
         }
         let mut end = start + inner_height;
         if end > branches_len {
@@ -31,7 +31,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             start = end.saturating_sub(inner_height);
         }
     }
-    app.list_start_index = start;
+    app.branch_state.list_start_index = start;
     let filtered_branches = app.get_filtered_branches();
 
     let mut rows: Vec<Row> = vec![];
@@ -45,7 +45,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         }
 
         let b = filtered_branches[branch_idx];
-        let selected = branch_idx == app.selected;
+        let selected = branch_idx == app.branch_state.selected;
         let is_current = b.name == app.current_branch;
 
         let (icons, color) = get_status_icons(&b.status);
@@ -54,7 +54,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
         let current_tag = if is_current { " (current)" } else { "" };
 
-        let is_bulk_selected = app.bulk_selected.contains(&b.name);
+        let is_bulk_selected = app.branch_state.bulk_selected.contains(&b.name);
         let checkbox = if is_bulk_selected { "[x]" } else { "[ ]" };
 
         let branch_name = format!("{}{}", b.name, current_tag);
@@ -112,7 +112,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         rows.push(Row::new(cells).style(row_style));
     }
 
-    let filter_text = if let Some(f) = &app.current_filter {
+    let filter_text = if let Some(f) = &app.branch_state.current_filter {
         format!("sort: {:?}", f)
     } else {
         "sort: None".to_string()
@@ -177,7 +177,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         f.render_widget(table, chunks[0]);
 
         let mut info_text = app.branch_info.clone();
-        if let Some(ai) = &app.ai_analysis {
+        if let Some(ai) = &app.ai_state.ai_analysis {
             info_text = format!(
                 "--- AI ANALYSIS ---\n\n{}\n\n------------------\n\n{}",
                 ai, info_text
@@ -240,7 +240,7 @@ pub fn render_filter(f: &mut Frame, app: &App) {
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.filter_selected {
+        if i == app.branch_state.filter_selected {
             style = style.fg(Color::Magenta).bg(Color::Rgb(40, 40, 40));
         }
         items.push(ListItem::new(*opt).style(style));
@@ -370,13 +370,13 @@ pub fn render_manage(f: &mut Frame, app: &App) {
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.manage_selected {
+        if i == app.branch_state.manage_selected {
             style = style.fg(Color::Cyan).bg(Color::Rgb(40, 40, 40));
         }
         if i == 2 {
             // Delete option
             style = style.fg(Color::Red);
-            if i == app.manage_selected {
+            if i == app.branch_state.manage_selected {
                 style = style.bg(Color::Rgb(40, 40, 40));
             }
         }
@@ -385,7 +385,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
 
     let b_name = app
         .get_filtered_branches()
-        .get(app.selected)
+        .get(app.branch_state.selected)
         .map(|b| b.name.as_str())
         .unwrap_or("none");
     let block = Block::default()
@@ -449,7 +449,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         .border_style(Style::default().fg(Color::Rgb(74, 79, 106)));
 
     let mut items = vec![];
-    for (i, entry) in app.file_tree.iter().enumerate() {
+    for (i, entry) in app.file_state.file_tree.iter().enumerate() {
         let indent = "  ".repeat(entry.depth);
         let icon = if entry.is_dir {
             if entry.is_open {
@@ -473,7 +473,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         };
 
         let mut style = Style::default().fg(status_color);
-        if i == app.file_selected {
+        if i == app.file_state.file_selected {
             style = style.bg(Color::White).fg(Color::Black);
         }
 
@@ -497,9 +497,9 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
 
     // Left: Stash list
     let mut stash_items = vec![];
-    for (i, stash) in app.stashes.iter().enumerate() {
+    for (i, stash) in app.stash_state.stashes.iter().enumerate() {
         let mut style = Style::default().fg(Color::Rgb(205, 214, 244));
-        if i == app.stash_selected {
+        if i == app.stash_state.stash_selected {
             style = style
                 .bg(Color::White)
                 .fg(Color::Black)
@@ -523,7 +523,7 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
         .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
         .split(chunks[1]);
 
-    let files_text = app.stash_files.join("\n");
+    let files_text = app.stash_state.stash_files.join("\n");
     let files_p = Paragraph::new(files_text).block(
         Block::default()
             .title(" Files in Stash ")
@@ -531,7 +531,7 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
     );
     f.render_widget(files_p, detail_chunks[0]);
 
-    let diff_p = Paragraph::new(app.stash_diff.as_str())
+    let diff_p = Paragraph::new(app.stash_state.stash_diff.as_str())
         .block(
             Block::default()
                 .title(" Diff Preview ")

@@ -103,7 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         while let Some((p, b)) = ai_trigger_rx.recv().await {
             bg_app.trigger_ai_analysis(&p, &b).await;
-            if let Some(analysis) = bg_app.ai_analysis.take() {
+            if let Some(analysis) = bg_app.ai_state.ai_analysis.take() {
                 let _ = ai_update_tx.send(AIUpdate { analysis }).await;
             }
         }

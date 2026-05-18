@@ -1,3 +1,4 @@
+use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -17,18 +18,25 @@ impl Default for Config {
     }
 }
 
-pub fn get_config_path() -> PathBuf {
-    PathBuf::from(".twigdrop")
+pub fn get_config_path() -> Option<PathBuf> {
+    ProjectDirs::from("com", "twigdrop", "twigdrop").map(|dirs| {
+        let config_dir = dirs.config_dir();
+        if !config_dir.exists() {
+            let _ = fs::create_dir_all(config_dir);
+        }
+        config_dir.join("config.toml")
+    })
 }
 
 pub fn load_config() -> Config {
-    let path = get_config_path();
-    if path.exists()
+    if let Some(path) = get_config_path()
+        && path.exists()
         && let Ok(content) = fs::read_to_string(path)
         && let Ok(config) = toml::from_str(&content)
     {
         return config;
     }
+
     // If not found or error, create default
     let config = Config::default();
     save_config(&config);
@@ -36,7 +44,9 @@ pub fn load_config() -> Config {
 }
 
 pub fn save_config(config: &Config) {
-    if let Ok(content) = toml::to_string_pretty(config) {
-        let _ = fs::write(get_config_path(), content);
+    if let Some(path) = get_config_path()
+        && let Ok(content) = toml::to_string_pretty(config)
+    {
+        let _ = fs::write(path, content);
     }
 }
