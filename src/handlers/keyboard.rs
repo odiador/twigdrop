@@ -168,24 +168,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 _ => { app.previous(); false }
             }
         }
-        KeyCode::Char('g') => {
-            if let AppMode::CodePreview(ref mut state) = app.mode {
-                if app.file_state.active_panel == FilePanel::Preview {
-                    state.cursor_y = 0;
-                    state.scroll_y = 0;
-                }
-            }
-            false
+        KeyCode::Char('g') if let AppMode::CodePreview(ref mut state) = app.mode
+            && app.file_state.active_panel == FilePanel::Preview => {
+                state.cursor_y = 0;
+                state.scroll_y = 0;
+                false
         }
-        KeyCode::Char('G') => {
-            if let AppMode::CodePreview(ref mut state) = app.mode {
-                if app.file_state.active_panel == FilePanel::Preview {
-                    let line_count = state.content.lines().count();
-                    state.cursor_y = line_count.saturating_sub(1);
-                    state.scroll_y = state.cursor_y.saturating_sub(10);
-                }
-            }
-            false
+        KeyCode::Char('G') if let AppMode::CodePreview(ref mut state) = app.mode
+            && app.file_state.active_panel == FilePanel::Preview => {
+                let line_count = state.content.lines().count();
+                state.cursor_y = line_count.saturating_sub(1);
+                state.scroll_y = state.cursor_y.saturating_sub(10);
+                false
         }
         _ => handle_generic_actions(app, key, path)
     }
