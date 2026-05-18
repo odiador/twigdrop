@@ -48,6 +48,22 @@ pub fn get_current_branch(path: &str) -> String {
         .to_string()
 }
 
+#[allow(dead_code)]
+pub fn is_merging(path: &str) -> bool {
+    let git_dir = std::path::Path::new(path).join(".git");
+    git_dir.join("MERGE_HEAD").exists()
+}
+
+#[allow(dead_code)]
+pub fn get_conflicting_files(path: &str) -> Vec<String> {
+    run_git(path, &["diff", "--name-only", "--diff-filter=U"])
+        .unwrap_or_default()
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 pub fn has_unique_commits(path: &str, branch: &str) -> bool {
     // Task 1.3: Verify if remotes exist to avoid false positives
     let remotes = run_git(path, &["remote"]).unwrap_or_default();

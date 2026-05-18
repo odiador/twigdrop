@@ -13,11 +13,17 @@ pub enum BranchStatus {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub struct ConflictBlock {
+    pub file_path: String,
+    pub content: String,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum MergeStatus {
     #[allow(dead_code)]
     Checking,
     Clean,
-    Conflict(String),
+    Conflict(Vec<ConflictBlock>),
     SafeLimit(usize, usize), // (Safe commits, Total commits)
     NotAnalyzed,
 }

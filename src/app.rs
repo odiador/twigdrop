@@ -1,4 +1,4 @@
-use crate::models::{Branch, BranchStatus, MergeStatus};
+use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus};
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -28,6 +28,12 @@ pub struct MergeUpdate {
 
 pub struct AIUpdate {
     pub analysis: String,
+}
+
+pub struct ConflictResolutionUpdate {
+    pub file_path: String,
+    pub resolved_content: String,
+    pub original_block: String,
 }
 
 #[derive(Default)]
@@ -66,6 +72,8 @@ pub struct AIState {
     pub ai_analysis: Option<String>,
     pub ai_rx: mpsc::Receiver<AIUpdate>,
     pub ai_trigger_tx: mpsc::Sender<(String, String)>,
+    pub conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
+    pub conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
 }
 
 #[derive(Default)]
@@ -108,6 +116,8 @@ impl App {
         trigger_tx: mpsc::Sender<()>,
         ai_rx: mpsc::Receiver<AIUpdate>,
         ai_trigger_tx: mpsc::Sender<(String, String)>,
+        conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
+        conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
     ) -> Self {
         let mut app = Self {
             branch_state: BranchState {
@@ -122,6 +132,8 @@ impl App {
                 ai_analysis: None,
                 ai_rx,
                 ai_trigger_tx,
+                conflict_resolution_rx,
+                conflict_trigger_tx,
             },
             settings_state: SettingsState::default(),
             current_branch,
@@ -146,7 +158,7 @@ impl App {
         let _ = self.trigger_tx.try_send(());
     }
 
-    pub fn update_from_channel(&mut self) {
+    pub fn update_from_channel(&mut self, path: &str) {
         while let Ok(update) = self.rx.try_recv() {
             if let Some(branch) = self
                 .branch_state
@@ -159,6 +171,16 @@ impl App {
         }
         while let Ok(update) = self.ai_state.ai_rx.try_recv() {
             self.ai_state.ai_analysis = Some(update.analysis);
+        }
+        while let Ok(update) = self.ai_state.conflict_resolution_rx.try_recv() {
+            match crate::actions::commands::apply_resolution_to_file(path, &update.file_path, &update.original_block, &update.resolved_content) {
+                Ok(_) => {
+                    self.mode = AppMode::Message(format!("Fixed conflict in {}", update.file_path));
+                }
+                Err(e) => {
+                    self.mode = AppMode::Message(format!("Error fixing conflict: {}", e));
+                }
+            }
         }
     }
 
@@ -234,8 +256,12 @@ impl App {
     pub fn load_file_tree(&mut self, path: &str) {
         if self.file_state.file_tree.is_empty() {
             self.file_state.git_file_statuses = crate::git::files::get_git_file_statuses(path);
-            self.file_state.file_tree =
-                crate::git::files::build_file_tree(path, "", 0, &self.file_state.git_file_statuses);
+            self.file_state.file_tree = crate::git::files::build_file_tree(
+                path,
+                "",
+                0,
+                &self.file_state.git_file_statuses,
+            );
             self.file_state.file_selected = 0;
             self.file_state.file_scroll = 0;
         }
@@ -259,9 +285,7 @@ impl App {
                 // Close: remove all children
                 self.file_state.file_tree[self.file_state.file_selected].is_open = false;
                 let i = self.file_state.file_selected + 1;
-                while i < self.file_state.file_tree.len()
-                    && self.file_state.file_tree[i].depth > depth
-                {
+                while i < self.file_state.file_tree.len() && self.file_state.file_tree[i].depth > depth {
                     self.file_state.file_tree.remove(i);
                 }
             } else {
@@ -288,11 +312,7 @@ impl App {
     }
 
     pub fn load_stash_detail(&mut self, path: &str) {
-        if let Some(stash) = self
-            .stash_state
-            .stashes
-            .get(self.stash_state.stash_selected)
-        {
+        if let Some(stash) = self.stash_state.stashes.get(self.stash_state.stash_selected) {
             self.stash_state.stash_files = crate::git::stash::get_stash_files(path, &stash.id);
             self.stash_state.stash_diff = crate::git::stash::get_stash_diff(path, &stash.id);
         }
@@ -313,8 +333,7 @@ impl App {
         let api_key = std::env::var("OPENAI_API_KEY").ok();
         let url = std::env::var("OLLAMA_URL").ok();
 
-        self.ai_state.ai_worker =
-            crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
+        self.ai_state.ai_worker = crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
     }
 
     pub fn toggle_selection(&mut self) {

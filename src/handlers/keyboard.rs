@@ -80,9 +80,23 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
+        KeyCode::Char('F') if app.shift_pressed => {
+            if app.mode == AppMode::Diff {
+                // Trigger AI conflict resolution if conflicts exist
+                let branch = app.get_filtered_branches().get(app.branch_state.selected).copied();
+                if let Some(crate::models::MergeStatus::Conflict(conflicts)) = branch.map(|b| &b.merge_status) {
+                    for conflict in conflicts {
+                        let _ = app.ai_state.conflict_trigger_tx.try_send((path.to_string(), conflict.clone()));
+                    }
+                    app.mode = AppMode::Message("AI Resolving conflicts...".to_string());
+                }
+            }
+            false
+        }
         KeyCode::Char('p') => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
-                let msg = prune_branches(path, &app.branch_state.branches, &app.current_branch);
+                let msg =
+                    prune_branches(path, &app.branch_state.branches, &app.current_branch);
                 app.refresh_branches(path);
                 app.mode = AppMode::Message(msg);
             }
@@ -236,7 +250,10 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 } else {
                     std::path::PathBuf::from(path)
                 };
-                crate::utils::terminal::open_ide(&target_path, &app.config.alternative_ide_command);
+                crate::utils::terminal::open_ide(
+                    &target_path,
+                    &app.config.alternative_ide_command,
+                );
             } else if app.mode == AppMode::StashDetail
                 && let Some(stash) = app.stash_state.stashes.get(app.stash_state.stash_selected)
             {
@@ -401,6 +418,16 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                             info = format!(
                                 "--- CONFLICT DETECTED ---\nSafe commits: {}/{}\n\n{}",
                                 safe, total, info
+                            );
+                        } else if let Some(crate::models::MergeStatus::Conflict(conflicts)) = 
+                            branch.map(|b| &b.merge_status) 
+                        {
+                            let files: Vec<String> = conflicts.iter().map(|c| c.file_path.clone()).collect();
+                            info = format!(
+                                "--- CONFLICTS FOUND IN {} FILES ---\n[Shift+F] to resolve with AI\n\nFiles:\n{}\n\n{}",
+                                conflicts.len(),
+                                files.join("\n"),
+                                info
                             );
                         }
                         app.branch_state.branch_info = info;

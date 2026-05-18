@@ -1,9 +1,9 @@
 use ratatui::{
-    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table},
+    Frame,
 };
 
 use crate::app::{App, AppMode, PrimaryMode};
@@ -311,6 +311,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         "  d           : Switch between Branches and Files mode",
         "  Shift+Tab   : Open Settings Panel",
         "  S (Shift+S) : Open Stash Manager",
+        "  F (Shift+F) : AI Auto-Fix (in Diff mode with conflicts)",
         "  Ctrl+o      : Open IDE (Root by default, Path with Alt)",
         "  q / Esc     : Quit / Back",
     ]);
