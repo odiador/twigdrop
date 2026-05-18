@@ -1,5 +1,5 @@
 use crate::actions::{apply_stash, checkout_branch, prune_branches};
-use crate::app::{App, AppMode, PrimaryMode};
+use crate::app::{App, AppMode, PrimaryMode, PreviewState};
 use crate::git;
 use crate::models::BranchStatus;
 use crate::ui::animations::SnapAnimation;
@@ -22,12 +22,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         return handle_search_keyboard(app, key);
     }
 
-    if let AppMode::CodePreview(_, _) = app.mode {
+    if let AppMode::CodePreview(ref mut state) = app.mode {
         if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
-            app.mode = AppMode::Normal;
             app.needs_clear = true;
+        } else {
+            return handle_preview_keyboard(state, key);
         }
-        return false;
+    }
+    
+    if let AppMode::CodePreview(_) = app.mode
+         && (key.code == KeyCode::Esc || key.code == KeyCode::Char('q')) {
+            app.mode = AppMode::Normal;
+            return false;
     }
 
     match key.code {
@@ -53,6 +59,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.mode = AppMode::Search;
                 app.branch_state.search_query.clear();
                 app.refresh_filtered_branches();
+            }
+            false
+        }
+        KeyCode::Char('[') => {
+            if app.primary_mode == PrimaryMode::Files && app.file_state.sidebar_width > 10 {
+                app.file_state.sidebar_width -= 2;
+            }
+            false
+        }
+        KeyCode::Char(']') => {
+            if app.primary_mode == PrimaryMode::Files && app.file_state.sidebar_width < 90 {
+                app.file_state.sidebar_width += 2;
             }
             false
         }
@@ -232,10 +250,17 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         // Open code preview
                         let full_path = std::path::Path::new(path).join(&entry.path);
                         if let Ok(content) = std::fs::read_to_string(&full_path) {
-                            app.mode = AppMode::CodePreview(
-                                entry.path.to_string_lossy().to_string(),
+                            let file_path_str = entry.path.to_string_lossy().to_string();
+                            let line_diffs = crate::git::get_line_diffs(path, &file_path_str);
+                            app.mode = AppMode::CodePreview(PreviewState {
+                                file_path: file_path_str,
                                 content,
-                            );
+                                cursor_y: 0,
+                                scroll_y: 0,
+                                selection_start: None,
+                                selection_end: None,
+                                line_diffs,
+                            });
                         }
                     }
                 }
@@ -380,6 +405,36 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         _ => false,
     }
+}
+
+fn handle_preview_keyboard(state: &mut PreviewState, key: KeyEvent) -> bool {
+    let line_count = state.content.lines().count();
+    match key.code {
+        KeyCode::Char('j') | KeyCode::Down
+            if state.cursor_y < line_count.saturating_sub(1) => {
+                state.cursor_y += 1;
+                if state.cursor_y >= state.scroll_y + 10 {
+                    state.scroll_y += 1;
+                }
+        }
+        KeyCode::Char('k') | KeyCode::Up
+            if state.cursor_y > 0 => {
+                state.cursor_y -= 1;
+                if state.cursor_y < state.scroll_y && state.scroll_y > 0 {
+                    state.scroll_y -= 1;
+                }
+        }
+        KeyCode::Char('g') => {
+            state.cursor_y = 0;
+            state.scroll_y = 0;
+        }
+        KeyCode::Char('G') => {
+            state.cursor_y = line_count.saturating_sub(1);
+            state.scroll_y = state.cursor_y.saturating_sub(10);
+        }
+        _ => {}
+    }
+    false
 }
 
 fn handle_search_keyboard(app: &mut App, key: KeyEvent) -> bool {

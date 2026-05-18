@@ -1,14 +1,14 @@
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table},
     Frame,
 };
 
-use crate::app::{App, AppMode, PrimaryMode};
+use crate::app::{App, AppMode, PrimaryMode, PreviewState};
 use crate::git::files::FileStatus;
-use crate::models::BranchStatus;
+use crate::models::{BranchStatus, GutterStatus};
 use crate::ui::components::{get_status_icons, highlight_code};
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
@@ -309,6 +309,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             "  v           : Open in IDE (Root by default, Path with Alt)",
             "  t           : Internal TTY (Alt+t for External)",
             "  a           : Alt IDE (Root by default, Path with Alt)",
+            "  [ / ]       : Expand / Contract sidebar width",
         ]);
     }
 
@@ -449,6 +450,19 @@ pub fn render_message(f: &mut Frame, msg: &str) {
 }
 
 pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
+    let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = &app.mode {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(app.file_state.sidebar_width),
+                Constraint::Min(0),
+            ].as_ref())
+            .split(area);
+        (chunks[0], Some((chunks[1], state)))
+    } else {
+        (area, None)
+    };
+
     let block = Block::default()
         .title(
             Line::from(" 📂 Files (d: branches, v: IDE, t: TTY, h: help) ")
@@ -495,7 +509,11 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
     }
 
     let list = List::new(items).block(block);
-    f.render_widget(list, area);
+    f.render_widget(list, sidebar_area);
+
+    if let Some((pa, state)) = preview_area {
+        render_code_preview(f, app, pa, state);
+    }
 }
 
 pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
@@ -638,18 +656,68 @@ pub fn render_search(f: &mut Frame, app: &App) {
     f.render_widget(p, area);
 }
 
-pub fn render_code_preview(f: &mut Frame, app: &App, file_path: &str, content: &str) {
-    let area = f.area();
+pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &PreviewState) {
     let block = Block::default()
-        .title(format!(" Preview: {} (Esc to close) ", file_path))
+        .title(format!(" Preview: {} (Esc: close, hjkl: nav) ", state.file_path))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 
     let theme = &app.ts.themes["base16-ocean.dark"];
-    let text = highlight_code(&app.ps, theme, file_path, content);
+    let mut text = highlight_code(&app.ps, theme, &state.file_path, &state.content);
 
-    let p = Paragraph::new(text)
+    // Gutter and Selection Post-processing
+    let mut final_lines = Vec::new();
+
+    for (i, line) in text.lines.iter_mut().enumerate() {
+        let mut spans = Vec::new();
+        
+        // 1. Line Number
+        let line_num = format!("{:>3} ", i + 1);
+        spans.push(Span::styled(line_num, Style::default().fg(Color::DarkGray)));
+
+        // 2. Gutter
+        let gutter_symbol = match state.line_diffs.get(&i) {
+            Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(Color::Green)),
+            Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Blue)),
+            Some(GutterStatus::Deleted) => Span::styled("~ ", Style::default().fg(Color::Red)),
+            None => Span::raw("  "),
+        };
+        spans.push(gutter_symbol);
+
+        // 3. Selection & Cursor Background
+        let is_selected = if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) {
+            let (s, e) = if start <= end { (start, end) } else { (end, start) };
+            i >= s && i <= e
+        } else {
+            false
+        };
+
+        let is_cursor = i == state.cursor_y;
+        
+        let mut line_style = Style::default();
+        if is_cursor {
+            line_style = line_style.bg(Color::Rgb(40, 40, 40));
+        } else if is_selected {
+            line_style = line_style.bg(Color::Rgb(30, 50, 80));
+        }
+
+        // Apply style to existing spans of the highlighted line
+        for span in &line.spans {
+            let mut s = span.style;
+            if is_cursor {
+                s = s.bg(Color::Rgb(40, 40, 40));
+            } else if is_selected {
+                s = s.bg(Color::Rgb(30, 50, 80));
+            }
+            spans.push(Span::styled(span.content.clone(), s));
+        }
+
+        final_lines.push(Line::from(spans).style(line_style));
+    }
+
+    let p = Paragraph::new(Text::from(final_lines))
         .block(block)
+        .scroll((state.scroll_y as u16, 0))
         .wrap(ratatui::widgets::Wrap { trim: false });
 
     f.render_widget(Clear, area);

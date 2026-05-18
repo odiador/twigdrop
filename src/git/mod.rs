@@ -10,7 +10,8 @@ use crate::git::status::{
     get_branch_metadata, get_branches, get_merged_branches, get_stashed_branches,
     get_upstream_tracks, has_unique_commits,
 };
-use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus};
+use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus, GutterStatus};
+use std::collections::HashMap;
 
 pub fn build_branches(path: &str) -> Vec<Branch> {
     let names = get_branches(path);
@@ -205,4 +206,44 @@ fn get_conflicts_from_merge(path: &str, base: &str, our: &str, their: &str) -> V
     }
 
     conflicts
+}
+
+pub fn get_line_diffs(path: &str, file_path: &str) -> HashMap<usize, GutterStatus> {
+    let mut diffs = HashMap::new();
+    let out = match run_git(path, &["diff", "--unified=0", "HEAD", "--", file_path]) {
+        Ok(o) => o,
+        Err(_) => return diffs,
+    };
+    
+    for line in out.lines() {
+        if line.starts_with("@@") {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let old_part = parts[1]; // -10,1
+                let new_part = parts[2]; // +11,2
+                
+                let old_info: Vec<usize> = old_part.trim_start_matches('-').split(',').map(|s| s.parse().unwrap_or(0)).collect();
+                let new_info: Vec<usize> = new_part.trim_start_matches('+').split(',').map(|s| s.parse().unwrap_or(0)).collect();
+                
+                let old_count = if old_info.len() > 1 { old_info[1] } else if !old_info.is_empty() { 1 } else { 0 };
+                let new_count = if new_info.len() > 1 { new_info[1] } else if !new_info.is_empty() { 1 } else { 0 };
+                let new_start = if !new_info.is_empty() { new_info[0] } else { 0 };
+
+                if new_start > 0 {
+                    if old_count > 0 && new_count > 0 {
+                        for i in 0..new_count {
+                            diffs.insert(new_start + i - 1, GutterStatus::Modified);
+                        }
+                    } else if old_count == 0 && new_count > 0 {
+                        for i in 0..new_count {
+                            diffs.insert(new_start + i - 1, GutterStatus::Added);
+                        }
+                    } else if old_count > 0 && new_count == 0 {
+                        diffs.insert(new_start.saturating_sub(1), GutterStatus::Deleted);
+                    }
+                }
+            }
+        }
+    }
+    diffs
 }
