@@ -9,7 +9,7 @@ use ratatui::{
 use crate::app::{App, AppMode, PrimaryMode, PreviewState, FilePanel};
 use crate::git::files::FileStatus;
 use crate::models::{BranchStatus, GutterStatus};
-use crate::ui::components::{get_status_icons, highlight_code};
+use crate::ui::components::get_status_icons;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     let filtered_indices = app.branch_state.filtered_indices.clone();
@@ -445,10 +445,14 @@ pub fn render_search(f: &mut Frame, app: &App) {
 pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &PreviewState) {
     let border_color = if app.file_state.active_panel == FilePanel::Preview { Color::Rgb(180, 190, 254) } else { Color::Rgb(74, 79, 106) };
     let block = Block::default().title(format!(" Preview: {} (Tab: switch) ", state.file_path)).borders(Borders::ALL).border_style(Style::default().fg(border_color));
-    let text = highlight_code(&app.ps, &app.ts.themes["base16-ocean.dark"], &state.file_path, &state.content);
 
     let mut final_lines = Vec::new();
-    for (i, line) in text.lines.into_iter().enumerate() {
+    let visible_rows = area.height.saturating_sub(2) as usize;
+    let start_idx = state.scroll_y;
+    let end_idx = (start_idx + visible_rows + 5).min(state.highlighted_lines.len());
+
+    for i in start_idx..end_idx {
+        let h_line = &state.highlighted_lines[i];
         let mut spans = vec![Span::styled(format!("{:>3} ", i + 1), Style::default().fg(Color::DarkGray))];
         spans.push(match state.line_diffs.get(&i) { Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(Color::Green)), Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Blue)), Some(GutterStatus::Deleted) => Span::styled("~ ", Style::default().fg(Color::Red)), None => Span::raw("  ") });
 
@@ -459,15 +463,15 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
         else if is_cursor { line_style = line_style.bg(Color::Rgb(40, 40, 60)); }
         else if is_selected { line_style = line_style.bg(Color::Rgb(30, 50, 80)); }
 
-        for span in line.spans {
+        for span in &h_line.spans {
             let mut s = span.style;
             if is_cursor && app.file_state.active_panel == FilePanel::Preview { s = s.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
             else if is_cursor { s = s.bg(Color::Rgb(40, 40, 60)); }
             else if is_selected { s = s.bg(Color::Rgb(30, 50, 80)); }
-            spans.push(Span::styled(span.content, s));
+            spans.push(Span::styled(span.content.clone(), s));
         }
         final_lines.push(Line::from(spans).style(line_style));
     }
     f.render_widget(Clear, area);
-    f.render_widget(Paragraph::new(Text::from(final_lines)).block(block).scroll((state.scroll_y as u16, 0)), area);
+    f.render_widget(Paragraph::new(Text::from(final_lines)).block(block), area);
 }

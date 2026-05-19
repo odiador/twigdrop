@@ -113,19 +113,9 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     if entry.is_dir {
                         app.toggle_file_dir(path);
                     } else {
-                        let full_path = std::path::Path::new(path).join(&entry.path);
-                        if let Ok(content) = std::fs::read_to_string(&full_path) {
-                            let file_path_str = entry.path.to_string_lossy().to_string();
-                            let line_diffs = crate::git::get_line_diffs(path, &file_path_str);
-                            app.mode = AppMode::CodePreview(PreviewState {
-                                file_path: file_path_str,
-                                content,
-                                cursor_y: 0,
-                                scroll_y: 0,
-                                selection_start: None,
-                                selection_end: None,
-                                line_diffs,
-                            });
+                        let rel_path = entry.path.to_string_lossy().to_string();
+                        if let Some(preview) = app.create_preview_state(path, &rel_path) {
+                            app.mode = AppMode::CodePreview(preview);
                         }
                     }
                 }
@@ -176,7 +166,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('G') if let AppMode::CodePreview(ref mut state) = app.mode
             && app.file_state.active_panel == FilePanel::Preview => {
-                let line_count = state.content.lines().count();
+                let line_count = state.lines.len();
                 state.cursor_y = line_count.saturating_sub(1);
                 state.scroll_y = state.cursor_y.saturating_sub(10);
                 false
@@ -264,7 +254,7 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
 }
 
 fn handle_preview_keyboard(state: &mut PreviewState, code: KeyCode) -> bool {
-    let line_count = state.content.lines().count();
+    let line_count = state.lines.len();
     match code {
         KeyCode::Down if state.cursor_y < line_count.saturating_sub(1) => {
             state.cursor_y += 1;

@@ -1,10 +1,5 @@
 use crate::models::{BranchStatus, MergeStatus};
-use ratatui::style::{Color, Style};
-use ratatui::text::{Line, Span, Text};
-use syntect::easy::HighlightLines;
-use syntect::highlighting::Theme;
-use syntect::parsing::SyntaxSet;
-use syntect::util::LinesWithEndings;
+use ratatui::style::Color;
 
 pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
     let mut icons = String::new();
@@ -51,35 +46,4 @@ pub fn get_merge_status_display(status: &MergeStatus) -> (String, Color) {
             (format!("{} {}/{}", bar, safe, total), Color::Rgb(249, 226, 175))
         }
     }
-}
-
-pub fn highlight_code<'a>(
-    ps: &SyntaxSet,
-    theme: &Theme,
-    file_path: &str,
-    content: &'a str,
-) -> Text<'a> {
-    let extension = std::path::Path::new(file_path).extension().and_then(|s| s.to_str()).unwrap_or("");
-    let syntax = ps.find_syntax_by_extension(extension)
-        .or_else(|| ps.find_syntax_for_file(file_path).unwrap_or(None))
-        .unwrap_or_else(|| ps.find_syntax_plain_text());
-
-    let mut h = HighlightLines::new(syntax, theme);
-    let mut lines = Vec::new();
-
-    for line in LinesWithEndings::from(content) {
-        let ranges: Vec<(syntect::highlighting::Style, &str)> = h.highlight_line(line, ps).unwrap_or_default();
-        let mut spans = Vec::new();
-
-        for (style, text) in ranges {
-            let color = Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
-            let content = text.trim_end_matches(['\n', '\r']);
-            if !content.is_empty() || text.is_empty() {
-                spans.push(Span::styled(content.to_string(), Style::default().fg(color)));
-            }
-        }
-        lines.push(Line::from(spans));
-    }
-
-    Text::from(lines)
 }
