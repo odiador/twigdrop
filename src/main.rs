@@ -54,6 +54,8 @@ async fn main() -> Result<()> {
     let (conflict_resolution_tx, conflict_resolution_rx) = mpsc::channel::<ConflictResolutionUpdate>(10);
     let (conflict_trigger_tx, mut conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
 
+    let (file_status_tx, file_status_rx) = mpsc::channel::<app::FileStatusUpdate>(10);
+
     let mut app = App::new(
         &path,
         branches,
@@ -64,8 +66,20 @@ async fn main() -> Result<()> {
         ai_trigger_tx.clone(),
         conflict_resolution_rx,
         conflict_trigger_tx.clone(),
+        file_status_rx,
     );
     app.setup_ai(&path);
+
+    // Background file status poller
+    let path_clone_files = path.clone();
+    let file_status_tx_clone = file_status_tx.clone();
+    tokio::spawn(async move {
+        loop {
+            let statuses = crate::git::files::get_git_file_statuses(&path_clone_files);
+            let _ = file_status_tx_clone.send(app::FileStatusUpdate { statuses }).await;
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    });
 
     // Background merge analyzer
     let path_clone = path.clone();
