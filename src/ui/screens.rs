@@ -384,12 +384,26 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         };
 
         let mut style = Style::default().fg(status_color);
+        
+        // Subtle background for status (desaturated colors)
+        let status_bg = match entry.status {
+            FileStatus::Modified => Some(Color::Rgb(35, 48, 65)), // Subtle Blue
+            FileStatus::Added => Some(Color::Rgb(35, 60, 48)),    // Subtle Green
+            FileStatus::Conflict => Some(Color::Rgb(65, 35, 35)), // Subtle Red
+            FileStatus::Staged => Some(Color::Rgb(45, 60, 75)),   // Subtle Cyan
+            _ => None,
+        };
+
+        if let Some(bg) = status_bg {
+            style = style.bg(bg);
+        }
+
         if i == app.file_state.file_selected {
             let bg = if app.file_state.active_panel == FilePanel::Directory { Color::White } else { Color::Rgb(54, 58, 79) };
             let fg = if app.file_state.active_panel == FilePanel::Directory { Color::Black } else { status_color };
             style = style.bg(bg).fg(fg);
         }
-        items.push(ListItem::new(Line::from(vec![Span::raw(indent), Span::raw(icon), Span::styled(name.to_string(), style)])));
+        items.push(ListItem::new(Line::from(vec![Span::raw(indent), Span::raw(icon), Span::styled(name.to_string(), style)])).style(style));
     }
 
     let list = List::new(items).block(block);

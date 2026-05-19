@@ -29,7 +29,7 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
 
             match app.primary_mode {
                 PrimaryMode::Branches => handle_list_click(app, row),
-                PrimaryMode::Files => handle_directory_click(app, row, path),
+                PrimaryMode::Files => handle_directory_click(app, row, path, col),
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {
@@ -169,16 +169,31 @@ fn handle_list_click(app: &mut App, row: usize) {
     }
 }
 
-fn handle_directory_click(app: &mut App, row: usize, path: &str) {
-    // List inside Block starts at y+1
+fn handle_directory_click(app: &mut App, row: usize, path: &str, col: usize) {
+    // List inside Block starts at y+1. Also x+1 due to borders.
     let list_top = 0;
-    if row < list_top + 1 {
+    if row < list_top + 1 || col == 0 {
         return;
     }
 
     let target_idx = row - list_top - 1;
 
     if target_idx < app.file_state.file_tree.len() {
+        let entry = &app.file_state.file_tree[target_idx];
+        
+        // Chevron/Icon detection:
+        // Content starts at col 1.
+        // Indent is 2 * depth.
+        // Toggle zone: [1 + 2*depth, 1 + 2*depth + 2]
+        let chevron_start = 1 + entry.depth * 2;
+        let chevron_end = chevron_start + 2;
+        
+        if entry.is_dir && col >= chevron_start && col <= chevron_end {
+            app.file_state.file_selected = target_idx;
+            app.toggle_file_dir(path);
+            return;
+        }
+
         let now = Instant::now();
         if let Some(last_row) = app.last_click_row
             && last_row == target_idx
@@ -186,7 +201,6 @@ fn handle_directory_click(app: &mut App, row: usize, path: &str) {
         {
             app.file_state.file_selected = target_idx;
             
-            // Task: Implement double click to open preview/toggle dir
             if app.file_state.file_tree[target_idx].is_dir {
                 app.toggle_file_dir(path);
             } else {
