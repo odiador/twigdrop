@@ -5,6 +5,8 @@ use std::time::Instant;
 use tokio::sync::mpsc;
 use syntect::parsing::SyntaxSet;
 use syntect::highlighting::ThemeSet;
+use ratatui::text::{Line, Span};
+use ratatui::style::{Color, Style};
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
@@ -18,15 +20,26 @@ pub enum FilePanel {
     Preview,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct PreviewState {
     pub file_path: String,
-    pub content: String,
+    pub lines: Vec<String>,
+    pub highlighted_lines: Vec<Line<'static>>,
     pub cursor_y: usize,
     pub scroll_y: usize,
     pub selection_start: Option<usize>,
     pub selection_end: Option<usize>,
     pub line_diffs: HashMap<usize, GutterStatus>,
+}
+
+impl PartialEq for PreviewState {
+    fn eq(&self, other: &Self) -> bool {
+        self.file_path == other.file_path && 
+        self.cursor_y == other.cursor_y && 
+        self.scroll_y == other.scroll_y &&
+        self.selection_start == other.selection_start &&
+        self.selection_end == other.selection_end
+    }
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -276,6 +289,18 @@ impl App {
         }
     }
 
+    pub fn apply_snap_deletion(&mut self, path: &str) -> String {
+        if let Some(ref anim) = self.snap_animation {
+            let names: Vec<String> = anim.rows.iter().map(|r| r.branch_name.clone()).collect();
+            let msg = crate::actions::bulk_delete_branches(path, &names);
+            self.refresh_branches(path);
+            self.branch_state.bulk_selected.clear();
+            msg
+        } else {
+            String::new()
+        }
+    }
+
     pub fn refresh_filtered_branches(&mut self) {
         self.branch_state.filtered_indices = self.branch_state.branches
             .iter()
@@ -444,15 +469,69 @@ impl App {
         }
     }
 
-    pub fn apply_snap_deletion(&mut self, path: &str) -> String {
-        if let Some(ref anim) = self.snap_animation {
-            let names: Vec<String> = anim.rows.iter().map(|r| r.branch_name.clone()).collect();
-            let msg = crate::actions::bulk_delete_branches(path, &names);
-            self.refresh_branches(path);
-            self.branch_state.bulk_selected.clear();
-            msg
-        } else {
-            String::new()
+    pub fn create_preview_state(&self, repo_path: &str, rel_path: &str) -> Option<PreviewState> {
+        let full_path = std::path::Path::new(repo_path).join(rel_path);
+        
+        // Use a limit for large files to prevent lag
+        let file = std::fs::File::open(&full_path).ok()?;
+        let reader = std::io::BufReader::new(file);
+        use std::io::BufRead;
+        
+        let mut lines = Vec::new();
+        let max_lines = 5000; // Limit initial read for safety
+        for (i, line) in reader.lines().enumerate() {
+            if i >= max_lines { break; }
+            if let Ok(l) = line {
+                lines.push(l);
+            }
+        }
+
+        let line_diffs = crate::git::get_line_diffs(repo_path, rel_path);
+        
+        let mut state = PreviewState {
+            file_path: rel_path.to_string(),
+            lines,
+            highlighted_lines: Vec::new(),
+            cursor_y: 0,
+            scroll_y: 0,
+            selection_start: None,
+            selection_end: None,
+            line_diffs,
+        };
+
+        // Pre-highlight the first visible window
+        self.update_preview_highlighting(&mut state);
+        
+        Some(state)
+    }
+
+    pub fn update_preview_highlighting(&self, state: &mut PreviewState) {
+        if state.lines.is_empty() { return; }
+        
+        // We highlight the whole (limited) file once and cache it.
+        // For 5000 lines, syntect is fast enough to do once.
+        let extension = std::path::Path::new(&state.file_path).extension().and_then(|s| s.to_str()).unwrap_or("");
+        let syntax = self.ps.find_syntax_by_extension(extension)
+            .or_else(|| self.ps.find_syntax_for_file(&state.file_path).unwrap_or(None))
+            .unwrap_or_else(|| self.ps.find_syntax_plain_text());
+
+        let theme = &self.ts.themes["base16-ocean.dark"];
+        let mut h = syntect::easy::HighlightLines::new(syntax, theme);
+        
+        state.highlighted_lines.clear();
+        for line in &state.lines {
+            let line_with_ending = format!("{}\n", line);
+            let ranges = h.highlight_line(&line_with_ending, &self.ps).unwrap_or_default();
+            let mut spans = Vec::new();
+
+            for (style, text) in ranges {
+                let color = Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
+                let content = text.trim_end_matches(['\n', '\r']);
+                if !content.is_empty() || text.is_empty() {
+                    spans.push(Span::styled(content.to_string(), Style::default().fg(color)));
+                }
+            }
+            state.highlighted_lines.push(Line::from(spans));
         }
     }
 }
