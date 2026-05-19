@@ -9,7 +9,6 @@ use ratatui::text::{Line, Span};
 use ratatui::style::{Color, Style};
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
@@ -160,7 +159,7 @@ pub struct App {
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
     pub trigger_tx: mpsc::Sender<()>,
-    pub shared_primary_mode: Arc<RwLock<PrimaryMode>>,
+    pub shared_primary_mode: Arc<std::sync::RwLock<PrimaryMode>>,
 }
 
 #[derive(Default)]
@@ -199,7 +198,7 @@ impl App {
             PrimaryMode::Branches
         };
 
-        let shared_primary_mode = Arc::new(RwLock::new(primary_mode));
+        let shared_primary_mode = Arc::new(std::sync::RwLock::new(primary_mode));
 
         let mut app = Self {
             branch_state: BranchState {
@@ -254,13 +253,10 @@ impl App {
             PrimaryMode::Files => 1,
         };
         
-        // Sync shared mode
-        let mode = self.primary_mode;
-        let shared = self.shared_primary_mode.clone();
-        tokio::spawn(async move {
-            let mut w = shared.write().await;
-            *w = mode;
-        });
+        // Sync shared mode synchronously
+        if let Ok(mut w) = self.shared_primary_mode.write() {
+            *w = self.primary_mode;
+        }
 
         crate::utils::config::save_config(&self.config);
     }
@@ -303,9 +299,11 @@ impl App {
     pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>, repo_path: &str) {
         let mut tree_needs_refresh = false;
         
+        // Detect additions, deletions OR renames
         if statuses.len() != self.file_state.git_file_statuses.len() {
             tree_needs_refresh = true;
         } else {
+            // Check if any key in the new statuses is missing from our current knowledge
             for path in statuses.keys() {
                 if !self.file_state.git_file_statuses.contains_key(path) {
                     tree_needs_refresh = true;

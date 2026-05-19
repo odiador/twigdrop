@@ -1,4 +1,5 @@
 use crate::app::{App, AppMode, PrimaryMode, PreviewState, FilePanel};
+use crate::ui::animations::SnapAnimation;
 use ratatui::crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
 use ratatui::crossterm::terminal;
 use std::time::Instant;
@@ -11,7 +12,7 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
     match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
             if app.mode != AppMode::Normal && !matches!(app.mode, AppMode::CodePreview(_))
-                && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize)
+                && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize, path)
             {
                 return;
             }
@@ -86,11 +87,12 @@ fn handle_modal_click(
     col: usize,
     term_rows: usize,
     term_cols: usize,
+    path: &str,
 ) -> bool {
     // Modal areas based on percentages in screens.rs
     let (v_start_pct, v_size_pct) = match app.mode {
         AppMode::Filter => (0.20, 0.60),
-        AppMode::Manage | AppMode::Message(_) => (0.30, 0.40),
+        AppMode::Manage | AppMode::Message(_) | AppMode::ConfirmDelete(_) => (0.30, 0.40),
         AppMode::Settings => (0.25, 0.50),
         AppMode::Help => (0.0, 1.0), // Help is full screen
         _ => (0.30, 0.40),
@@ -99,7 +101,7 @@ fn handle_modal_click(
     let h_start_pct = match app.mode {
         AppMode::Filter | AppMode::Manage => 0.30,
         AppMode::Settings => 0.20,
-        AppMode::Message(_) | AppMode::Help => 0.15,
+        AppMode::Message(_) | AppMode::Help | AppMode::ConfirmDelete(_) => 0.15,
         _ => 0.30,
     };
 
@@ -121,27 +123,76 @@ fn handle_modal_click(
     }
 
     // Click inside handling
+    let now = Instant::now();
     if app.mode == AppMode::Manage || app.mode == AppMode::Filter || app.mode == AppMode::Settings {
         if row > min_row {
             let option_idx = row - min_row - 1;
-            if app.mode == AppMode::Manage && option_idx < 5 {
-                app.branch_state.manage_selected = option_idx;
-            } else if app.mode == AppMode::Filter && option_idx < 10 {
-                app.branch_state.filter_selected = option_idx;
-            } else if app.mode == AppMode::Settings && option_idx < 3 {
-                app.settings_state.selected = option_idx;
-                if option_idx == 2 {
-                    // Click on Save and Exit
+            
+            let (is_double, target_option) = if let Some(last_opt) = app.last_click_row 
+                && last_opt == option_idx
+                && now.duration_since(app.last_click_time).as_millis() < 500 {
+                    (true, option_idx)
+                } else {
+                    (false, option_idx)
+                };
+
+            if app.mode == AppMode::Manage && target_option < 7 {
+                app.branch_state.manage_selected = target_option;
+                if is_double {
+                    use ratatui::crossterm::event::{KeyEvent, KeyCode, KeyEventKind, KeyEventState, KeyModifiers};
+                    let enter_event = KeyEvent {
+                        code: KeyCode::Enter,
+                        modifiers: KeyModifiers::empty(),
+                        kind: KeyEventKind::Press,
+                        state: KeyEventState::empty(),
+                    };
+                    crate::handlers::keyboard::handle_keyboard(app, enter_event, path);
+                }
+            } else if app.mode == AppMode::Filter && target_option < 10 {
+                app.branch_state.filter_selected = target_option;
+                if is_double {
+                    app.branch_state.current_filter = match target_option {
+                        1 => Some(crate::models::BranchStatus::Merged),
+                        2 => Some(crate::models::BranchStatus::Local),
+                        3 => Some(crate::models::BranchStatus::Stashed),
+                        4 => Some(crate::models::BranchStatus::Gone),
+                        5 => Some(crate::models::BranchStatus::Ahead),
+                        6 => Some(crate::models::BranchStatus::Behind),
+                        7 => Some(crate::models::BranchStatus::HasUniqueCommits),
+                        8 => Some(crate::models::BranchStatus::RemoteTracked),
+                        9 => Some(crate::models::BranchStatus::RemoteUntracked),
+                        _ => None,
+                    };
+                    app.refresh_filtered_branches();
+                    app.mode = AppMode::Normal;
+                }
+            } else if app.mode == AppMode::Settings && target_option < 3 {
+                app.settings_state.selected = target_option;
+                if target_option == 2 {
                     crate::utils::config::save_config(&app.config);
                     app.mode = AppMode::Normal;
-                } else {
+                } else if is_double || !app.settings_state.editing {
                     app.settings_state.editing = true;
-                    app.settings_state.input = match option_idx {
+                    app.settings_state.input = match target_option {
                         0 => app.config.ide_command.clone(),
                         1 => app.config.alternative_ide_command.clone(),
                         _ => String::new(),
                     };
                 }
+            }
+            
+            app.last_click_row = Some(option_idx);
+            app.last_click_time = now;
+        }
+    } else if let AppMode::ConfirmDelete(names) = &app.mode {
+        let names = names.clone();
+        if row >= max_row.saturating_sub(3) {
+            let mid_col = min_col + (max_col - min_col) / 2;
+            if col < mid_col {
+                app.snap_animation = Some(SnapAnimation::new(names));
+                app.mode = AppMode::Normal;
+            } else {
+                app.mode = AppMode::Normal;
             }
         }
     } else if let AppMode::Message(_) = app.mode {
@@ -170,7 +221,6 @@ fn handle_list_click(app: &mut App, row: usize) {
 }
 
 fn handle_directory_click(app: &mut App, row: usize, path: &str, col: usize) {
-    // List inside Block starts at y+1. Also x+1 due to borders.
     let list_top = 0;
     if row < list_top + 1 || col == 0 {
         return;
@@ -180,11 +230,6 @@ fn handle_directory_click(app: &mut App, row: usize, path: &str, col: usize) {
 
     if target_idx < app.file_state.file_tree.len() {
         let entry = &app.file_state.file_tree[target_idx];
-        
-        // Chevron/Icon detection:
-        // Content starts at col 1.
-        // Indent is 2 * depth.
-        // Toggle zone: [1 + 2*depth, 1 + 2*depth + 2]
         let chevron_start = 1 + entry.depth * 2;
         let chevron_end = chevron_start + 2;
         

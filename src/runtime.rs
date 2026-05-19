@@ -3,7 +3,6 @@ use crate::app::{AIUpdate, ConflictResolutionUpdate, MergeUpdate, FileStatusUpda
 use crate::git;
 use crate::models::ConflictBlock;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 pub struct Runtime {
     pub repo_path: String,
@@ -39,13 +38,13 @@ impl Runtime {
             }
         });
     }
-
-    pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUpdate>, app_mode_rx: Arc<RwLock<PrimaryMode>>) {
+pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUpdate>, app_mode_rx: Arc<std::sync::RwLock<PrimaryMode>>) {
         let path = self.repo_path.clone();
         tokio::spawn(async move {
             loop {
+                // Read current primary mode
                 let mode = {
-                    let r = app_mode_rx.read().await;
+                    let r = app_mode_rx.read().unwrap_or_else(|e| e.into_inner());
                     *r
                 };
 
@@ -53,11 +52,12 @@ impl Runtime {
                     let statuses = git::files::get_git_file_statuses(&path);
                     let _ = file_status_tx.send(FileStatusUpdate { statuses }).await;
                 }
-                
+
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             }
         });
     }
+
 
     pub fn spawn_ai_worker(
         &self, 
