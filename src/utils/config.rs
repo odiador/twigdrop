@@ -55,7 +55,7 @@ pub fn deobfuscate(data: &str) -> String {
 }
 
 pub fn get_config_path() -> Option<PathBuf> {
-    ProjectDirs::from("com", "twigdrop", "twigdrop").map(|dirs| {
+    ProjectDirs::from("dev", "odiador", "twigdrop").map(|dirs| {
         let config_dir = dirs.config_dir();
         if !config_dir.exists() {
             let _ = fs::create_dir_all(config_dir);
