@@ -10,6 +10,7 @@ pub enum FileStatus {
     Untracked,
     Ignored,
     Deleted,
+    Conflict,
     Normal,
 }
 
@@ -33,42 +34,57 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
             continue;
         }
         let status_code = &line[0..2];
-        let file_path = line[3..].trim_matches('"');
+        let mut file_path = line[3..].to_string();
+        
+        // Handle renames "R  old -> new" or copies "C  old -> new"
+        if status_code.starts_with('R') || status_code.starts_with('C') {
+            if let Some(pos) = file_path.find(" -> ") {
+                file_path = file_path[pos + 4..].trim_matches('"').to_string();
+            }
+        } else {
+            file_path = file_path.trim_matches('"').to_string();
+        }
 
         let status = match status_code {
-            " M" | "M " | "MM" => FileStatus::Modified,
-            " A" | "A " => FileStatus::Added,
-            "??" => FileStatus::Untracked,
-            "!!" => FileStatus::Ignored,
-            " D" | "D " => FileStatus::Deleted,
+            "DD" | "AU" | "UD" | "UA" | "DU" | "AA" | "UU" => FileStatus::Conflict,
             _ => {
-                if status_code.starts_with('M') || status_code.ends_with('M') {
+                if status_code.contains('U') {
+                    FileStatus::Conflict
+                } else if status_code.contains('M') || status_code.contains('R') || status_code.contains('C') || status_code.contains('T') {
                     FileStatus::Modified
-                } else if status_code.starts_with('A') || status_code.ends_with('A') {
+                } else if status_code.contains('A') {
                     FileStatus::Added
+                } else if status_code.contains('D') {
+                    FileStatus::Deleted
+                } else if status_code == "??" {
+                    FileStatus::Untracked
+                } else if status_code == "!!" {
+                    FileStatus::Ignored
                 } else {
                     FileStatus::Normal
                 }
             }
         };
 
-        let refined_status = if status_code.starts_with('M')
-            || status_code.starts_with('A')
-            || status_code.starts_with('D')
-        {
-            if status_code.ends_with(' ') {
-                FileStatus::Staged
-            } else {
-                status
-            }
-        } else {
+        // Determine if it's staged vs worktree change
+        // In porcelain v1: XY where X is index, Y is worktree
+        let refined_status = if status == FileStatus::Untracked || status == FileStatus::Ignored || status == FileStatus::Conflict {
             status
+        } else {
+            let worktree_char = status_code.chars().nth(1).unwrap_or(' ');
+            if worktree_char != ' ' {
+                // There is a change in the worktree (unstaged)
+                status
+            } else {
+                // Change is only in the index (staged)
+                FileStatus::Staged
+            }
         };
 
-        map.insert(file_path.to_string(), refined_status.clone());
+        map.insert(file_path.clone(), refined_status.clone());
 
         // Propagate status to parent directories
-        let path_obj = Path::new(file_path);
+        let path_obj = Path::new(&file_path);
         for ancestor in path_obj.ancestors().skip(1) {
             let ancestor_str = ancestor.to_string_lossy().to_string();
             if ancestor_str.is_empty() || ancestor_str == "." {
@@ -77,18 +93,21 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
 
             let entry = map.entry(ancestor_str).or_insert(FileStatus::Normal);
 
-            // Priority: Staged > Modified > Added > Untracked > Deleted > Ignored > Normal
+            // Priority: Conflict > Modified > Added > Staged > Untracked > Deleted > Ignored > Normal
             match (&refined_status, &entry) {
-                (FileStatus::Staged, _) => *entry = FileStatus::Staged,
-                (FileStatus::Modified, FileStatus::Staged) => {}
+                (FileStatus::Conflict, _) => *entry = FileStatus::Conflict,
+                (_, FileStatus::Conflict) => {}
                 (FileStatus::Modified, _) => *entry = FileStatus::Modified,
-                (FileStatus::Added, FileStatus::Staged | FileStatus::Modified) => {}
+                (_, FileStatus::Modified) => {}
                 (FileStatus::Added, _) => *entry = FileStatus::Added,
-                (
-                    FileStatus::Untracked,
-                    FileStatus::Staged | FileStatus::Modified | FileStatus::Added,
-                ) => {}
+                (_, FileStatus::Added) => {}
+                (FileStatus::Staged, _) => *entry = FileStatus::Staged,
+                (_, FileStatus::Staged) => {}
                 (FileStatus::Untracked, _) => *entry = FileStatus::Untracked,
+                (_, FileStatus::Untracked) => {}
+                (FileStatus::Deleted, _) => *entry = FileStatus::Deleted,
+                (_, FileStatus::Deleted) => {}
+                (FileStatus::Ignored, _) => *entry = FileStatus::Ignored,
                 _ => {}
             }
         }

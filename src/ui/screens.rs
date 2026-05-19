@@ -379,6 +379,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
             FileStatus::Untracked => Color::Rgb(245, 194, 231),
             FileStatus::Ignored => Color::Rgb(140, 143, 161),
             FileStatus::Deleted => Color::Rgb(243, 139, 168),
+            FileStatus::Conflict => Color::Rgb(210, 15, 57), // Bright Red for conflicts
             FileStatus::Normal => Color::Rgb(205, 214, 244),
         };
 
