@@ -384,7 +384,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
 
         let mut style = Style::default().fg(status_color);
         if i == app.file_state.file_selected {
-            let bg = if app.file_state.active_panel == FilePanel::Directory { Color::White } else { Color::Rgb(40, 40, 60) };
+            let bg = if app.file_state.active_panel == FilePanel::Directory { Color::White } else { Color::Rgb(54, 58, 79) };
             let fg = if app.file_state.active_panel == FilePanel::Directory { Color::Black } else { status_color };
             style = style.bg(bg).fg(fg);
         }

@@ -73,6 +73,10 @@ pub struct BranchState {
     pub search_query: String,
 }
 
+pub struct FileStatusUpdate {
+    pub statuses: HashMap<String, crate::git::files::FileStatus>,
+}
+
 pub struct FileState {
     pub file_tree: Vec<crate::git::files::FileEntry>,
     pub file_selected: usize,
@@ -80,10 +84,11 @@ pub struct FileState {
     pub git_file_statuses: HashMap<String, crate::git::files::FileStatus>,
     pub sidebar_width: u16,
     pub active_panel: FilePanel,
+    pub status_rx: mpsc::Receiver<FileStatusUpdate>,
 }
 
-impl Default for FileState {
-    fn default() -> Self {
+impl FileState {
+    pub fn new(status_rx: mpsc::Receiver<FileStatusUpdate>) -> Self {
         Self {
             file_tree: Vec::new(),
             file_selected: 0,
@@ -91,6 +96,7 @@ impl Default for FileState {
             git_file_statuses: HashMap::new(),
             sidebar_width: 30,
             active_panel: FilePanel::Directory,
+            status_rx,
         }
     }
 }
@@ -164,6 +170,7 @@ impl App {
         ai_trigger_tx: mpsc::Sender<(String, String)>,
         conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
         conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
+        file_status_rx: mpsc::Receiver<FileStatusUpdate>,
     ) -> Self {
         let config = crate::utils::config::load_config();
         let primary_mode = if config.last_primary_mode == 1 {
@@ -177,7 +184,7 @@ impl App {
                 branches,
                 ..Default::default()
             },
-            file_state: FileState::default(),
+            file_state: FileState::new(file_status_rx),
             stash_state: StashState::default(),
             ai_state: AIState {
                 ai_worker: None,
@@ -255,6 +262,17 @@ impl App {
                     self.mode = AppMode::Message(format!("Error fixing conflict: {}", e));
                 }
             }
+        }
+        while let Ok(update) = self.file_state.status_rx.try_recv() {
+            self.update_file_statuses(update.statuses);
+        }
+    }
+
+    pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>) {
+        self.file_state.git_file_statuses = statuses;
+        for entry in self.file_state.file_tree.iter_mut() {
+            let rel_path = entry.path.to_string_lossy().to_string();
+            entry.status = self.file_state.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
         }
     }
 
