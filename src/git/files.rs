@@ -32,9 +32,15 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
         Err(_) => path.to_string(),
     };
     
-    // We want the status relative to the provided 'path'
-    let abs_path = std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path));
-    let abs_root = std::fs::canonicalize(&repo_root).unwrap_or_else(|_| PathBuf::from(&repo_root));
+    // Normalize both paths to absolute canonical forms
+    let abs_path = match std::fs::canonicalize(path) {
+        Ok(p) => p,
+        Err(_) => PathBuf::from(path),
+    };
+    let abs_root = match std::fs::canonicalize(&repo_root) {
+        Ok(p) => p,
+        Err(_) => PathBuf::from(&repo_root),
+    };
     
     let stdout = match run_git(path, &["status", "--porcelain", "--ignored"]) {
         Ok(out) => out,
@@ -56,18 +62,19 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
             raw_path = raw_path.trim_matches('"').to_string();
         }
 
-        // raw_path is relative to repo_root. We need it relative to abs_path.
-        let full_file_path = abs_root.join(raw_path);
+        // Combine root + relative path to get absolute file path
+        let full_file_path = abs_root.join(&raw_path);
+        
+        // Strip the current view's path to get the relative path we use in the tree
         let final_rel_path = match full_file_path.strip_prefix(&abs_path) {
             Ok(p) => p.to_string_lossy().to_string(),
-            Err(_) => {
-                // If the file is outside our current view, we still track it 
-                // but it might not match anything in the tree.
-                continue; 
-            }
+            Err(_) => continue, // Outside our view
         };
 
         if final_rel_path.is_empty() { continue; }
+        
+        // Normalize backslashes for Windows if any (unlikely here but good practice)
+        let final_rel_path = final_rel_path.replace('\\', "/");
 
         let status = match status_code {
             "DD" | "AU" | "UD" | "UA" | "DU" | "AA" | "UU" => FileStatus::Conflict,
@@ -197,17 +204,21 @@ pub fn build_file_tree(
 
     for entry in dir_entries {
         let path = entry.path();
-        let abs_item = std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path));
+        let abs_item = match std::fs::canonicalize(path) {
+            Ok(p) => p,
+            Err(_) => PathBuf::from(path),
+        };
         
         let rel_path = match abs_item.strip_prefix(&abs_base) {
             Ok(p) => p.to_string_lossy().to_string(),
             Err(_) => {
-                // Fallback for safety
                 path.strip_prefix(base_path).unwrap_or(path).to_string_lossy().to_string()
             }
         };
 
         if rel_path.is_empty() { continue; }
+        
+        let rel_path = rel_path.replace('\\', "/");
 
         let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
         let status = statuses

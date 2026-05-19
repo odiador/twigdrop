@@ -8,6 +8,8 @@ use syntect::highlighting::ThemeSet;
 use ratatui::text::{Line, Span};
 use ratatui::style::{Color, Style};
 
+use std::sync::Arc;
+
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
     Branches,
@@ -53,6 +55,7 @@ pub enum AppMode {
     Settings,
     Search,
     CodePreview(PreviewState),
+    ConfirmDelete(Vec<String>),
     Message(String),
 }
 
@@ -156,6 +159,7 @@ pub struct App {
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
     pub trigger_tx: mpsc::Sender<()>,
+    pub shared_primary_mode: Arc<std::sync::RwLock<PrimaryMode>>,
 }
 
 #[derive(Default)]
@@ -194,6 +198,8 @@ impl App {
             PrimaryMode::Branches
         };
 
+        let shared_primary_mode = Arc::new(std::sync::RwLock::new(primary_mode));
+
         let mut app = Self {
             branch_state: BranchState {
                 branches,
@@ -226,6 +232,7 @@ impl App {
             ts: ThemeSet::load_defaults(),
             rx,
             trigger_tx,
+            shared_primary_mode,
         };
         
         if app.primary_mode == PrimaryMode::Files {
@@ -245,6 +252,12 @@ impl App {
             PrimaryMode::Branches => 0,
             PrimaryMode::Files => 1,
         };
+        
+        // Sync shared mode synchronously
+        if let Ok(mut w) = self.shared_primary_mode.write() {
+            *w = self.primary_mode;
+        }
+
         crate::utils::config::save_config(&self.config);
     }
 
@@ -286,10 +299,16 @@ impl App {
     pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>, repo_path: &str) {
         let mut tree_needs_refresh = false;
         
-        for path in statuses.keys() {
-            if !self.file_state.git_file_statuses.contains_key(path) {
-                tree_needs_refresh = true;
-                break;
+        // Detect additions, deletions OR renames
+        if statuses.len() != self.file_state.git_file_statuses.len() {
+            tree_needs_refresh = true;
+        } else {
+            // Check if any key in the new statuses is missing from our current knowledge
+            for path in statuses.keys() {
+                if !self.file_state.git_file_statuses.contains_key(path) {
+                    tree_needs_refresh = true;
+                    break;
+                }
             }
         }
 
@@ -299,7 +318,7 @@ impl App {
 
         self.file_state.git_file_statuses = statuses;
         for entry in self.file_state.file_tree.iter_mut() {
-            let rel_path = entry.path.to_string_lossy().to_string();
+            let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
             entry.status = self.file_state.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
         }
 

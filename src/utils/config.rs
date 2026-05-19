@@ -8,6 +8,10 @@ pub struct Config {
     pub ide_command: String,
     pub alternative_ide_command: String, // e.g., antigravity
     pub last_primary_mode: usize,        // 0: Branches, 1: Files
+    pub ai_provider: String,
+    pub ai_model: String,
+    pub openai_api_key: String, // Obfuscated
+    pub ollama_url: String,
 }
 
 impl Default for Config {
@@ -16,8 +20,38 @@ impl Default for Config {
             ide_command: "code".to_string(),
             alternative_ide_command: "antigravity".to_string(),
             last_primary_mode: 0,
+            ai_provider: "ollama".to_string(),
+            ai_model: "llama3".to_string(),
+            openai_api_key: String::new(),
+            ollama_url: "http://localhost:11434".to_string(),
         }
     }
+}
+
+pub fn obfuscate(data: &str) -> String {
+    let key = b"twigdrop_secret_key";
+    let bytes = data.as_bytes();
+    let mut result = Vec::with_capacity(bytes.len());
+    for (i, &byte) in bytes.iter().enumerate() {
+        result.push(byte ^ key[i % key.len()]);
+    }
+    // Encode as hex for readability in toml
+    result.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+pub fn deobfuscate(data: &str) -> String {
+    let key = b"twigdrop_secret_key";
+    let mut bytes = Vec::new();
+    for i in (0..data.len()).step_by(2) {
+        if let Ok(byte) = u8::from_str_radix(&data[i..i + 2], 16) {
+            bytes.push(byte);
+        }
+    }
+    let mut result = Vec::with_capacity(bytes.len());
+    for (i, &byte) in bytes.iter().enumerate() {
+        result.push(byte ^ key[i % key.len()]);
+    }
+    String::from_utf8(result).unwrap_or_default()
 }
 
 pub fn get_config_path() -> Option<PathBuf> {
