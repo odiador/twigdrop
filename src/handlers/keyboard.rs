@@ -1,4 +1,4 @@
-use crate::actions::{apply_stash, checkout_branch, prune_branches};
+use crate::actions::{apply_stash, prune_branches};
 use crate::app::{App, AppMode, PrimaryMode, PreviewState, FilePanel};
 use crate::git;
 use crate::ui::animations::SnapAnimation;
@@ -104,6 +104,22 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     app.mode = AppMode::Normal;
                     app.file_state.active_panel = FilePanel::Directory;
                 }
+            }
+            false
+        }
+        KeyCode::Left => {
+            if app.primary_mode == PrimaryMode::Files
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
+                && entry.is_dir && entry.is_open {
+                    app.toggle_file_dir(path);
+            }
+            false
+        }
+        KeyCode::Right => {
+            if app.primary_mode == PrimaryMode::Files
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
+                && entry.is_dir && !entry.is_open {
+                    app.toggle_file_dir(path);
             }
             false
         }
@@ -337,7 +353,7 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
         if let Some(name) = branch_name {
             match app.branch_state.manage_selected {
                 0 => {
-                    let msg = checkout_branch(path, &name);
+                    let msg = crate::git::commands::run_git(path, &["checkout", &name]).unwrap_or_else(|e| e.to_string());
                     app.refresh_branches(path);
                     app.current_branch = git::get_current_branch(path);
                     app.mode = AppMode::Message(msg);
