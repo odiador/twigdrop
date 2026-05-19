@@ -464,7 +464,9 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
     let mut final_lines = Vec::new();
     let visible_rows = area.height.saturating_sub(2) as usize;
     let start_idx = state.scroll_y;
-    let end_idx = (start_idx + visible_rows + 5).min(state.highlighted_lines.len());
+    // Overscan by 5 lines to ensure smooth scrolling and prevent bottom-edge artifacts
+    const OVERSCAN_LINES: usize = 5;
+    let end_idx = (start_idx + visible_rows + OVERSCAN_LINES).min(state.highlighted_lines.len());
 
     for i in start_idx..end_idx {
         let h_line = &state.highlighted_lines[i];

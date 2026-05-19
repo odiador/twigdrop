@@ -7,6 +7,7 @@ mod handlers;
 mod models;
 mod ui;
 mod utils;
+mod runtime;
 
 use anyhow::Result;
 use ratatui::{
@@ -24,9 +25,10 @@ use ratatui::{
 use std::{env, io};
 use tokio::sync::mpsc;
 
-use app::{AIUpdate, App, ConflictResolutionUpdate, MergeUpdate};
+use app::{AIUpdate, App, ConflictResolutionUpdate};
 use handlers::handle_event;
 use models::ConflictBlock;
+use runtime::Runtime;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -46,13 +48,13 @@ async fn main() -> Result<()> {
     let current_branch = git::get_current_branch(&path);
 
     let (tx, rx) = mpsc::channel(100);
-    let (trigger_tx, mut trigger_rx) = mpsc::channel::<()>(1);
+    let (trigger_tx, trigger_rx) = mpsc::channel::<()>(1);
     
     let (ai_update_tx, ai_rx) = mpsc::channel::<AIUpdate>(10);
-    let (ai_trigger_tx, mut ai_trigger_rx) = mpsc::channel::<(String, String)>(10);
+    let (ai_trigger_tx, ai_trigger_rx) = mpsc::channel::<(String, String)>(10);
     
     let (conflict_resolution_tx, conflict_resolution_rx) = mpsc::channel::<ConflictResolutionUpdate>(10);
-    let (conflict_trigger_tx, mut conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
+    let (conflict_trigger_tx, conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
 
     let (file_status_tx, file_status_rx) = mpsc::channel::<app::FileStatusUpdate>(10);
 
@@ -70,131 +72,15 @@ async fn main() -> Result<()> {
     );
     app.setup_ai(&path);
 
-    // Background file status poller
-    let path_clone_files = path.clone();
-    let file_status_tx_clone = file_status_tx.clone();
-    tokio::spawn(async move {
-        loop {
-            let statuses = crate::git::files::get_git_file_statuses(&path_clone_files);
-            let _ = file_status_tx_clone.send(app::FileStatusUpdate { statuses }).await;
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        }
-    });
+    let runtime = Runtime::new(&path);
+    
+    // Spawn specialized background workers
+    runtime.spawn_file_status_poller(file_status_tx, app.shared_primary_mode.clone());
+    runtime.spawn_merge_analyzer(trigger_rx, tx);
+    runtime.spawn_ai_worker(ai_trigger_rx, ai_update_tx, conflict_trigger_rx, conflict_resolution_tx);
 
-    // Background merge analyzer
-    let path_clone = path.clone();
-    let tx_clone = tx.clone();
-
-    // Initial trigger
+    // Initial trigger for merge analysis
     let _ = trigger_tx.try_send(());
-
-    tokio::spawn(async move {
-        while trigger_rx.recv().await.is_some() {
-            let branches = git::build_branches(&path_clone);
-            let current_branch = git::get_current_branch(&path_clone);
-
-            for branch in branches {
-                let tx = tx_clone.clone();
-                let p = path_clone.clone();
-                let b = branch.name.clone();
-                let cb = current_branch.clone();
-                tokio::spawn(async move {
-                    let status = git::analyze_merge_status(&p, &b, &cb);
-                    let _ = tx
-                        .send(MergeUpdate {
-                            branch_name: b,
-                            status,
-                        })
-                        .await;
-                });
-            }
-        }
-    });
-
-    // Background AI analyzer using 'rig'
-    tokio::spawn(async move {
-        dotenv::dotenv().ok();
-        let db_path = crate::utils::config::get_config_path()
-            .unwrap_or_else(|| std::path::PathBuf::from(".git"))
-            .parent()
-            .unwrap_or(&std::path::PathBuf::from("."))
-            .join("twigdrop.db");
-
-        let db = crate::db::Database::new(db_path).ok();
-
-        let provider_type = std::env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string());
-        let model = std::env::var("AI_MODEL").unwrap_or_else(|_| "llama3".to_string());
-        let api_key = std::env::var("OPENAI_API_KEY").ok();
-        let url = std::env::var("OLLAMA_URL").ok();
-
-        let worker = crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
-
-        if let Some(w) = worker {
-            loop {
-                tokio::select! {
-                    Some((repo_path, branch_name)) = ai_trigger_rx.recv() => {
-                        let hash =
-                            match crate::git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
-                                Ok(h) => h.trim().to_string(),
-                                Err(_) => continue,
-                            };
-
-                        let mut cached_result = None;
-                        if let Some(ref d) = db
-                            && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
-                            && cached_hash == hash
-                        {
-                            cached_result = Some(format!("--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}", summary, cleanup));
-                        }
-
-                        if let Some(analysis) = cached_result {
-                            let _ = ai_update_tx.send(AIUpdate { analysis }).await;
-                        } else {
-                            let _ = ai_update_tx
-                                .send(AIUpdate {
-                                    analysis: "Analyzing with AI...".to_string(),
-                                })
-                                .await;
-                            let diff = crate::git::get_branch_info(&repo_path, &branch_name);
-                            let summary_res = w.inner.summarize_diff(&diff).await;
-                            let cleanup_res = w.inner.recommend_cleanup(&branch_name).await;
-
-                            match (summary_res, cleanup_res) {
-                                (Ok(s), Ok(c)) => {
-                                    if let Some(ref d) = db {
-                                        let _ = d.save_analysis(&branch_name, &hash, &s, &c);
-                                    }
-                                    let _ = ai_update_tx
-                                        .send(AIUpdate {
-                                            analysis: format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
-                                        })
-                                        .await;
-                                }
-                                _ => {
-                                    let _ = ai_update_tx
-                                        .send(AIUpdate {
-                                            analysis: "AI Analysis failed.".to_string(),
-                                        })
-                                        .await;
-                                }
-                            }
-                        }
-                    }
-                    Some((_repo_path, conflict)) = conflict_trigger_rx.recv() => {
-                        let resolution = w.inner.resolve_conflict(&conflict.content).await;
-                        if let Ok(resolved_content) = resolution {
-                            let _ = conflict_resolution_tx.send(ConflictResolutionUpdate {
-                                file_path: conflict.file_path,
-                                resolved_content,
-                                original_block: conflict.content,
-                            }).await;
-                        }
-                    }
-                    else => break,
-                }
-            }
-        }
-    });
 
     let mut stdout = io::stdout();
     enable_raw_mode()?;

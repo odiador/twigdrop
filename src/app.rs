@@ -8,6 +8,9 @@ use syntect::highlighting::ThemeSet;
 use ratatui::text::{Line, Span};
 use ratatui::style::{Color, Style};
 
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
     Branches,
@@ -156,6 +159,7 @@ pub struct App {
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
     pub trigger_tx: mpsc::Sender<()>,
+    pub shared_primary_mode: Arc<RwLock<PrimaryMode>>,
 }
 
 #[derive(Default)]
@@ -194,6 +198,8 @@ impl App {
             PrimaryMode::Branches
         };
 
+        let shared_primary_mode = Arc::new(RwLock::new(primary_mode));
+
         let mut app = Self {
             branch_state: BranchState {
                 branches,
@@ -226,6 +232,7 @@ impl App {
             ts: ThemeSet::load_defaults(),
             rx,
             trigger_tx,
+            shared_primary_mode,
         };
         
         if app.primary_mode == PrimaryMode::Files {
@@ -245,6 +252,15 @@ impl App {
             PrimaryMode::Branches => 0,
             PrimaryMode::Files => 1,
         };
+        
+        // Sync shared mode
+        let mode = self.primary_mode;
+        let shared = self.shared_primary_mode.clone();
+        tokio::spawn(async move {
+            let mut w = shared.write().await;
+            *w = mode;
+        });
+
         crate::utils::config::save_config(&self.config);
     }
 
@@ -286,10 +302,14 @@ impl App {
     pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>, repo_path: &str) {
         let mut tree_needs_refresh = false;
         
-        for path in statuses.keys() {
-            if !self.file_state.git_file_statuses.contains_key(path) {
-                tree_needs_refresh = true;
-                break;
+        if statuses.len() != self.file_state.git_file_statuses.len() {
+            tree_needs_refresh = true;
+        } else {
+            for path in statuses.keys() {
+                if !self.file_state.git_file_statuses.contains_key(path) {
+                    tree_needs_refresh = true;
+                    break;
+                }
             }
         }
 
