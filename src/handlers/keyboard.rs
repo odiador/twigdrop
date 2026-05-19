@@ -364,24 +364,73 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
         return false;
     }
 
+    if app.settings_state.selecting {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                if app.settings_state.choice_idx > 0 {
+                    app.settings_state.choice_idx -= 1;
+                } else {
+                    app.settings_state.choice_idx = app.settings_state.choices.len().saturating_sub(1);
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if app.settings_state.choice_idx + 1 < app.settings_state.choices.len() {
+                    app.settings_state.choice_idx += 1;
+                } else {
+                    app.settings_state.choice_idx = 0;
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(choice) = app.settings_state.choices.get(app.settings_state.choice_idx) {
+                    match app.settings_state.selected {
+                        2 => app.config.ai_provider = choice.clone(),
+                        3 => app.config.ai_model = choice.clone(),
+                        _ => {}
+                    }
+                }
+                app.settings_state.selecting = false;
+                crate::utils::config::save_config(&app.config);
+            }
+            KeyCode::Esc | KeyCode::Char('q') => { app.settings_state.selecting = false; }
+            _ => {}
+        }
+        return false;
+    }
+
     match key.code {
         KeyCode::Up | KeyCode::Char('k') if app.settings_state.selected > 0 => { app.settings_state.selected -= 1; }
         KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 6 => { app.settings_state.selected += 1; }
         KeyCode::Enter => {
-            if app.settings_state.selected == 6 {
-                crate::utils::config::save_config(&app.config);
-                app.mode = AppMode::Normal;
-            } else {
-                app.settings_state.editing = true;
-                app.settings_state.input = match app.settings_state.selected {
-                    0 => app.config.ide_command.clone(),
-                    1 => app.config.alternative_ide_command.clone(),
-                    2 => app.config.ai_provider.clone(),
-                    3 => app.config.ai_model.clone(),
-                    4 => crate::utils::config::deobfuscate(&app.config.openai_api_key),
-                    5 => app.config.ollama_url.clone(),
-                    _ => String::new(),
-                };
+            match app.settings_state.selected {
+                2 => { // AI Provider
+                    app.settings_state.selecting = true;
+                    app.settings_state.choices = crate::utils::config::PROVIDER_ARCHETYPES.iter().map(|s| s.to_string()).collect();
+                    app.settings_state.choice_idx = app.settings_state.choices.iter().position(|s| s == &app.config.ai_provider).unwrap_or(0);
+                }
+                3 => { // AI Model
+                    app.settings_state.selecting = true;
+                    app.settings_state.choices = match app.config.ai_provider.as_str() {
+                        "openai" => crate::utils::config::OPENAI_MODELS.iter().map(|s| s.to_string()).collect(),
+                        "anthropic" => crate::utils::config::ANTHROPIC_MODELS.iter().map(|s| s.to_string()).collect(),
+                        "google" => crate::utils::config::GOOGLE_MODELS.iter().map(|s| s.to_string()).collect(),
+                        _ => vec!["Loading models...".to_string()],
+                    };
+                    app.settings_state.choice_idx = app.settings_state.choices.iter().position(|s| s == &app.config.ai_model).unwrap_or(0);
+                }
+                6 => {
+                    crate::utils::config::save_config(&app.config);
+                    app.mode = AppMode::Normal;
+                }
+                _ => {
+                    app.settings_state.editing = true;
+                    app.settings_state.input = match app.settings_state.selected {
+                        0 => app.config.ide_command.clone(),
+                        1 => app.config.alternative_ide_command.clone(),
+                        4 => crate::utils::config::deobfuscate(&app.config.openai_api_key),
+                        5 => app.config.ollama_url.clone(),
+                        _ => String::new(),
+                    };
+                }
             }
         }
         KeyCode::Char('q') | KeyCode::Esc | KeyCode::BackTab => { app.mode = AppMode::Normal; }

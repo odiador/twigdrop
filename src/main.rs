@@ -57,6 +57,7 @@ async fn main() -> Result<()> {
     let (conflict_trigger_tx, conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
 
     let (file_status_tx, file_status_rx) = mpsc::channel::<app::FileStatusUpdate>(10);
+    let (fetched_models_tx, fetched_models_rx) = mpsc::channel::<Vec<String>>(1);
 
     let mut app = App::new(
         &path,
@@ -69,6 +70,7 @@ async fn main() -> Result<()> {
         conflict_resolution_rx,
         conflict_trigger_tx.clone(),
         file_status_rx,
+        fetched_models_rx,
     );
     app.setup_ai(&path);
 
@@ -77,7 +79,7 @@ async fn main() -> Result<()> {
     // Spawn specialized background workers
     runtime.spawn_file_status_poller(file_status_tx, app.shared_primary_mode.clone());
     runtime.spawn_merge_analyzer(trigger_rx, tx);
-    runtime.spawn_ai_worker(ai_trigger_rx, ai_update_tx, conflict_trigger_rx, conflict_resolution_tx);
+    runtime.spawn_ai_worker(ai_trigger_rx, ai_update_tx, conflict_trigger_rx, conflict_resolution_tx, fetched_models_tx);
 
     // Initial trigger for merge analysis
     let _ = trigger_tx.try_send(());
