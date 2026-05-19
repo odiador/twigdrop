@@ -237,6 +237,70 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(p, help_inner);
 }
 
+pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(30),
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+            ]
+            .as_ref(),
+        )
+        .split(f.area())[1];
+
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ]
+            .as_ref(),
+        )
+        .split(area)[1];
+
+    f.render_widget(Clear, inner);
+
+    let branch_list = if names.len() > 3 {
+        format!("{} branches (including {})", names.len(), names[0])
+    } else {
+        names.join(", ")
+    };
+
+    let block = Block::default()
+        .title(Line::from(" ⚠️ UNPUSHED COMMITS DETECTED ⚠️ ").alignment(Alignment::Center))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
+        .style(Style::default().bg(Color::Rgb(30, 10, 10)));
+
+    let text = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("The following branch(es) have "),
+            Span::styled("unique commits", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::raw(" not found in remote:"),
+        ]).alignment(Alignment::Center),
+        Line::from(""),
+        Line::from(Span::styled(branch_list, Style::default().fg(Color::Cyan))).alignment(Alignment::Center),
+        Line::from(""),
+        Line::from("Deleting these branches will result in PERMANENT data loss.").alignment(Alignment::Center),
+        Line::from(""),
+        Line::from(vec![
+            Span::raw("Are you absolutely sure? ("),
+            Span::styled("y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::raw("/"),
+            Span::styled("n", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::raw(")"),
+        ]).alignment(Alignment::Center),
+    ];
+
+    let p = Paragraph::new(text).block(block).alignment(Alignment::Center);
+    f.render_widget(p, inner);
+}
+
 pub fn render_manage(f: &mut Frame, app: &App) {
     let area = Layout::default()
         .direction(Direction::Vertical)
@@ -266,21 +330,23 @@ pub fn render_manage(f: &mut Frame, app: &App) {
 
     let options = [
         "1. Checkout",
-        "2. View Diff",
-        "3. Delete (Individual)",
-        "4. Help",
-        "5. Cancel",
+        "2. View Diff / AI Analysis",
+        "3. Delete (Snap)",
+        "4. Rename Branch",
+        "5. Create Stash from current",
+        "6. Help",
+        "7. Cancel",
     ];
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.branch_state.manage_selected {
-            style = style.fg(Color::Cyan).bg(Color::Rgb(40, 40, 40));
+            style = style.fg(Color::Cyan).bg(Color::Rgb(40, 40, 40)).add_modifier(Modifier::BOLD);
         }
         if i == 2 {
             style = style.fg(Color::Red);
             if i == app.branch_state.manage_selected {
-                style = style.bg(Color::Rgb(40, 40, 40));
+                style = style.bg(Color::Rgb(40, 40, 40)).add_modifier(Modifier::BOLD);
             }
         }
         items.push(ListItem::new(*opt).style(style));

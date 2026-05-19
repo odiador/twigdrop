@@ -56,6 +56,7 @@ pub enum AppMode {
     Settings,
     Search,
     CodePreview(PreviewState),
+    ConfirmDelete(Vec<String>),
     Message(String),
 }
 
