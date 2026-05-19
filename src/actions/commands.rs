@@ -9,13 +9,6 @@ pub fn delete_branch(path: &str, name: &str) -> String {
     }
 }
 
-pub fn checkout_branch(path: &str, name: &str) -> String {
-    match run_git(path, &["checkout", name]) {
-        Ok(output) => format!("> git checkout {}\n{}", name, output.trim()),
-        Err(e) => format!("Error checking out branch {}: {}", name, e),
-    }
-}
-
 pub fn bulk_delete_branches(path: &str, names: &[String]) -> String {
     let mut results = String::new();
     for name in names {
