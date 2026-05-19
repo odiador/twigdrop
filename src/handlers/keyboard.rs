@@ -21,6 +21,25 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         return handle_search_keyboard(app, key);
     }
 
+    if let AppMode::Manage = app.mode {
+        return handle_manage_keyboard(app, key, path);
+    }
+
+    if let AppMode::ConfirmDelete(names) = &app.mode {
+        let names = names.clone();
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                app.snap_animation = Some(SnapAnimation::new(names));
+                app.mode = AppMode::Normal;
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                app.mode = AppMode::Normal;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
     if let AppMode::CodePreview(ref mut state) = app.mode {
         if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
             app.needs_clear = true;
@@ -152,7 +171,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 }
                 false
             } else {
-                handle_enter_or_selection(app, path)
+                handle_enter_or_selection(app)
             }
         }
         KeyCode::Char('j') | KeyCode::Down => {
@@ -328,6 +347,10 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                 match app.settings_state.selected {
                     0 => app.config.ide_command = app.settings_state.input.clone(),
                     1 => app.config.alternative_ide_command = app.settings_state.input.clone(),
+                    2 => app.config.ai_provider = app.settings_state.input.clone(),
+                    3 => app.config.ai_model = app.settings_state.input.clone(),
+                    4 => app.config.openai_api_key = crate::utils::config::obfuscate(&app.settings_state.input),
+                    5 => app.config.ollama_url = app.settings_state.input.clone(),
                     _ => {}
                 }
                 app.settings_state.editing = false;
@@ -343,9 +366,9 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') if app.settings_state.selected > 0 => { app.settings_state.selected -= 1; }
-        KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 2 => { app.settings_state.selected += 1; }
+        KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 6 => { app.settings_state.selected += 1; }
         KeyCode::Enter => {
-            if app.settings_state.selected == 2 {
+            if app.settings_state.selected == 6 {
                 crate::utils::config::save_config(&app.config);
                 app.mode = AppMode::Normal;
             } else {
@@ -353,6 +376,10 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                 app.settings_state.input = match app.settings_state.selected {
                     0 => app.config.ide_command.clone(),
                     1 => app.config.alternative_ide_command.clone(),
+                    2 => app.config.ai_provider.clone(),
+                    3 => app.config.ai_model.clone(),
+                    4 => crate::utils::config::deobfuscate(&app.config.openai_api_key),
+                    5 => app.config.ollama_url.clone(),
                     _ => String::new(),
                 };
             }
@@ -363,37 +390,65 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
     false
 }
 
-fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
+fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
+    const MANAGE_OPTIONS_COUNT: usize = 7;
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.branch_state.manage_selected = app.branch_state.manage_selected.saturating_sub(1);
+        }
+        KeyCode::Down | KeyCode::Char('j') if app.branch_state.manage_selected < MANAGE_OPTIONS_COUNT - 1 => {
+            app.branch_state.manage_selected += 1;
+        }
+        KeyCode::Enter => {
+            let branch = app.get_filtered_branches().get(app.branch_state.selected).cloned();
+            if let Some(b) = branch {
+                match app.branch_state.manage_selected {
+                    0 => {
+                        let msg = crate::git::commands::run_git(path, &["checkout", &b.name]).unwrap_or_else(|e| e.to_string());
+                        app.refresh_branches(path);
+                        app.current_branch = git::get_current_branch(path);
+                        app.mode = AppMode::Message(msg);
+                    }
+                    1 => {
+                        let branch_name = b.name.clone();
+                        let _ = app.ai_state.ai_trigger_tx.try_send((path.to_string(), branch_name.clone()));
+                        app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
+                        app.branch_state.branch_info = git::get_branch_info(path, &branch_name);
+                        app.branch_state.info_scroll = 0;
+                        app.mode = AppMode::Diff;
+                    }
+                    2 => {
+                        let names = vec![b.name.clone()];
+                        if b.status.contains(&crate::models::BranchStatus::HasUniqueCommits) {
+                            app.mode = AppMode::ConfirmDelete(names);
+                        } else {
+                            app.snap_animation = Some(SnapAnimation::new(names));
+                            app.mode = AppMode::Normal;
+                        }
+                    }
+                    3 => { app.mode = AppMode::Message("Rename branch coming soon!".to_string()); }
+                    4 => { 
+                        let msg = crate::git::commands::run_git(path, &["stash", "push", "-m", &format!("Stash from Twigdrop: {}", b.name)]).unwrap_or_else(|e| e.to_string());
+                        app.mode = AppMode::Message(msg);
+                    }
+                    5 => app.mode = AppMode::Help,
+                    _ => app.mode = AppMode::Normal,
+                }
+            }
+        }
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.mode = AppMode::Normal;
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_enter_or_selection(app: &mut App) -> bool {
     if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
         app.mode = AppMode::Manage;
         app.branch_state.manage_selected = 0;
         return false;
-    }
-    
-    if let AppMode::Manage = app.mode {
-        let branch_name = app.get_filtered_branches().get(app.branch_state.selected).map(|b| b.name.clone());
-        if let Some(name) = branch_name {
-            match app.branch_state.manage_selected {
-                0 => {
-                    let msg = crate::git::commands::run_git(path, &["checkout", &name]).unwrap_or_else(|e| e.to_string());
-                    app.refresh_branches(path);
-                    app.current_branch = git::get_current_branch(path);
-                    app.mode = AppMode::Message(msg);
-                }
-                1 => {
-                    let info = git::get_branch_info(path, &name);
-                    app.branch_state.branch_info = info;
-                    app.branch_state.info_scroll = 0;
-                    app.mode = AppMode::Diff;
-                }
-                2 => {
-                    app.snap_animation = Some(SnapAnimation::new(vec![name]));
-                    app.mode = AppMode::Normal;
-                }
-                3 => app.mode = AppMode::Help,
-                _ => app.mode = AppMode::Normal,
-            }
-        }
     }
     false
 }

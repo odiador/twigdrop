@@ -112,6 +112,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::StashDetail => screens::render_stash_detail(f, chunks[0], app),
         AppMode::Settings => screens::render_settings(f, app),
         AppMode::Search => screens::render_search(f, app),
+        AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
         // CodePreview is handled inside render_directory_searcher for side-by-side
         _ => {}
     }
