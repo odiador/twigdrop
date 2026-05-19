@@ -109,17 +109,32 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Left => {
             if app.primary_mode == PrimaryMode::Files
-                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
-                && entry.is_dir && entry.is_open {
-                    app.toggle_file_dir(path);
+                && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
+                    if entry.is_dir && entry.is_open {
+                        app.toggle_file_dir(path);
+                    } else if entry.depth > 0 {
+                        let current_depth = entry.depth;
+                        let mut i = app.file_state.file_selected;
+                        while i > 0 {
+                            i -= 1;
+                            if app.file_state.file_tree[i].depth < current_depth {
+                                app.file_state.file_selected = i;
+                                break;
+                            }
+                        }
+                    }
             }
             false
         }
         KeyCode::Right => {
             if app.primary_mode == PrimaryMode::Files
                 && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
-                && entry.is_dir && !entry.is_open {
-                    app.toggle_file_dir(path);
+                && entry.is_dir {
+                    if !entry.is_open {
+                        app.toggle_file_dir(path);
+                    } else if app.file_state.file_selected + 1 < app.file_state.file_tree.len() {
+                        app.file_state.file_selected += 1;
+                    }
             }
             false
         }
@@ -293,7 +308,14 @@ fn handle_search_keyboard(app: &mut App, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Enter | KeyCode::Esc => { app.mode = AppMode::Normal; }
         KeyCode::Char(c) => { app.branch_state.search_query.push(c); app.refresh_filtered_branches(); }
-        KeyCode::Backspace => { app.branch_state.search_query.pop(); app.refresh_filtered_branches(); }
+        KeyCode::Backspace => {
+            if key.modifiers.contains(KeyModifiers::ALT) {
+                app.branch_state.search_query.clear();
+            } else {
+                app.branch_state.search_query.pop();
+            }
+            app.refresh_filtered_branches();
+        }
         _ => {}
     }
     false

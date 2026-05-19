@@ -77,7 +77,7 @@ async fn main() -> Result<()> {
         loop {
             let statuses = crate::git::files::get_git_file_statuses(&path_clone_files);
             let _ = file_status_tx_clone.send(app::FileStatusUpdate { statuses }).await;
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         }
     });
 

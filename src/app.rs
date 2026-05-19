@@ -71,21 +71,6 @@ pub struct ConflictResolutionUpdate {
     pub original_block: String,
 }
 
-#[derive(Default)]
-pub struct BranchState {
-    pub branches: Vec<Branch>,
-    pub selected: usize,
-    pub manage_selected: usize,
-    pub filter_selected: usize,
-    pub current_filter: Option<BranchStatus>,
-    pub list_start_index: usize,
-    pub filtered_indices: Vec<usize>,
-    pub bulk_selected: HashSet<String>,
-    pub branch_info: String,
-    pub info_scroll: u16,
-    pub search_query: String,
-}
-
 pub struct FileStatusUpdate {
     pub statuses: HashMap<String, crate::git::files::FileStatus>,
 }
@@ -98,6 +83,7 @@ pub struct FileState {
     pub sidebar_width: u16,
     pub active_panel: FilePanel,
     pub status_rx: mpsc::Receiver<FileStatusUpdate>,
+    pub open_paths: HashSet<String>,
 }
 
 impl FileState {
@@ -110,6 +96,7 @@ impl FileState {
             sidebar_width: 30,
             active_panel: FilePanel::Directory,
             status_rx,
+            open_paths: HashSet::new(),
         }
     }
 }
@@ -169,6 +156,21 @@ pub struct App {
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
     pub trigger_tx: mpsc::Sender<()>,
+}
+
+#[derive(Default)]
+pub struct BranchState {
+    pub branches: Vec<Branch>,
+    pub selected: usize,
+    pub manage_selected: usize,
+    pub filter_selected: usize,
+    pub current_filter: Option<BranchStatus>,
+    pub list_start_index: usize,
+    pub filtered_indices: Vec<usize>,
+    pub bulk_selected: HashSet<String>,
+    pub branch_info: String,
+    pub info_scroll: u16,
+    pub search_query: String,
 }
 
 impl App {
@@ -277,15 +279,52 @@ impl App {
             }
         }
         while let Ok(update) = self.file_state.status_rx.try_recv() {
-            self.update_file_statuses(update.statuses);
+            self.update_file_statuses(update.statuses, path);
         }
     }
 
-    pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>) {
+    pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>, repo_path: &str) {
+        let mut tree_needs_refresh = false;
+        
+        for path in statuses.keys() {
+            if !self.file_state.git_file_statuses.contains_key(path) {
+                tree_needs_refresh = true;
+                break;
+            }
+        }
+
+        if tree_needs_refresh {
+            self.load_file_tree(repo_path);
+        }
+
         self.file_state.git_file_statuses = statuses;
         for entry in self.file_state.file_tree.iter_mut() {
             let rel_path = entry.path.to_string_lossy().to_string();
             entry.status = self.file_state.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
+        }
+
+        // If we are in code preview, check if the current file was modified
+        let mut new_preview_data = None;
+        if let AppMode::CodePreview(ref mut state) = self.mode {
+            let current_path = state.file_path.clone();
+            if let Some(status) = self.file_state.git_file_statuses.get(&current_path)
+                && *status == crate::git::files::FileStatus::Modified {
+                    state.line_diffs = crate::git::get_line_diffs(repo_path, &current_path);
+                    
+                    let full_path = std::path::Path::new(repo_path).join(&current_path);
+                    if let Ok(metadata) = std::fs::metadata(&full_path)
+                        && metadata.modified().is_ok() {
+                            new_preview_data = Some((current_path, state.cursor_y, state.scroll_y));
+                    }
+            }
+        }
+
+        if let Some((path, cy, sy)) = new_preview_data
+            && let Some(mut np) = self.create_preview_state(repo_path, &path)
+            && let AppMode::CodePreview(ref mut state) = self.mode {
+                np.cursor_y = cy;
+                np.scroll_y = sy;
+                *state = np;
         }
     }
 
@@ -379,49 +418,52 @@ impl App {
 
     pub fn load_file_tree(&mut self, path: &str) {
         self.file_state.git_file_statuses = crate::git::files::get_git_file_statuses(path);
-        self.file_state.file_tree = crate::git::files::build_file_tree(
-            path,
-            "",
-            0,
-            &self.file_state.git_file_statuses,
-        );
+        let mut new_tree = Vec::new();
+        self.build_tree_recursive(path, "", 0, &mut new_tree);
+        self.file_state.file_tree = new_tree;
     }
 
-    pub fn toggle_file_dir(&mut self, path_str: &str) {
+    fn build_tree_recursive(&self, root: &str, current_dir: &str, depth: usize, tree: &mut Vec<crate::git::files::FileEntry>) {
+        let entries = crate::git::files::build_file_tree(
+            root,
+            current_dir,
+            depth,
+            &self.file_state.git_file_statuses,
+        );
+
+        for mut entry in entries {
+            let path_str = entry.path.to_string_lossy().to_string();
+            let is_open = self.file_state.open_paths.contains(&path_str);
+            entry.is_open = is_open;
+            
+            tree.push(entry.clone());
+            
+            if entry.is_dir && is_open {
+                self.build_tree_recursive(root, &path_str, depth + 1, tree);
+            }
+        }
+    }
+
+    pub fn toggle_file_dir(&mut self, _path_str: &str) {
         if self.file_state.file_selected >= self.file_state.file_tree.len() {
             return;
         }
 
-        let is_dir = self.file_state.file_tree[self.file_state.file_selected].is_dir;
-        let is_open = self.file_state.file_tree[self.file_state.file_selected].is_open;
-        let depth = self.file_state.file_tree[self.file_state.file_selected].depth;
-        let rel_path = self.file_state.file_tree[self.file_state.file_selected]
-            .path
-            .to_string_lossy()
-            .to_string();
-
-        if is_dir {
-            if is_open {
-                self.file_state.file_tree[self.file_state.file_selected].is_open = false;
-                let i = self.file_state.file_selected + 1;
-                while i < self.file_state.file_tree.len() && self.file_state.file_tree[i].depth > depth {
-                    self.file_state.file_tree.remove(i);
-                }
-            } else {
-                self.file_state.file_tree[self.file_state.file_selected].is_open = true;
-                let children = crate::git::files::build_file_tree(
-                    path_str,
-                    &rel_path,
-                    depth + 1,
-                    &self.file_state.git_file_statuses,
-                );
-                for (j, child) in children.into_iter().enumerate() {
-                    self.file_state
-                        .file_tree
-                        .insert(self.file_state.file_selected + 1 + j, child);
-                }
-            }
+        let entry = &self.file_state.file_tree[self.file_state.file_selected];
+        if !entry.is_dir { return; }
+        
+        let path = entry.path.to_string_lossy().to_string();
+        if self.file_state.open_paths.contains(&path) {
+            self.file_state.open_paths.remove(&path);
+        } else {
+            self.file_state.open_paths.insert(path);
         }
+        
+        // Rebuild tree to reflect change
+        let repo_path = _path_str.to_string();
+        let mut new_tree = Vec::new();
+        self.build_tree_recursive(&repo_path, "", 0, &mut new_tree);
+        self.file_state.file_tree = new_tree;
     }
 
     pub fn load_stashes(&mut self, path: &str) {
@@ -472,13 +514,12 @@ impl App {
     pub fn create_preview_state(&self, repo_path: &str, rel_path: &str) -> Option<PreviewState> {
         let full_path = std::path::Path::new(repo_path).join(rel_path);
         
-        // Use a limit for large files to prevent lag
         let file = std::fs::File::open(&full_path).ok()?;
         let reader = std::io::BufReader::new(file);
         use std::io::BufRead;
         
         let mut lines = Vec::new();
-        let max_lines = 5000; // Limit initial read for safety
+        let max_lines = 5000;
         for (i, line) in reader.lines().enumerate() {
             if i >= max_lines { break; }
             if let Ok(l) = line {
@@ -499,7 +540,6 @@ impl App {
             line_diffs,
         };
 
-        // Pre-highlight the first visible window
         self.update_preview_highlighting(&mut state);
         
         Some(state)
@@ -508,8 +548,6 @@ impl App {
     pub fn update_preview_highlighting(&self, state: &mut PreviewState) {
         if state.lines.is_empty() { return; }
         
-        // We highlight the whole (limited) file once and cache it.
-        // For 5000 lines, syntect is fast enough to do once.
         let extension = std::path::Path::new(&state.file_path).extension().and_then(|s| s.to_str()).unwrap_or("");
         let syntax = self.ps.find_syntax_by_extension(extension)
             .or_else(|| self.ps.find_syntax_for_file(&state.file_path).unwrap_or(None))

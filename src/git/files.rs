@@ -14,6 +14,7 @@ pub enum FileStatus {
     Normal,
 }
 
+#[derive(Debug, Clone)]
 pub struct FileEntry {
     pub path: PathBuf,
     pub is_dir: bool,
@@ -24,6 +25,17 @@ pub struct FileEntry {
 
 pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, FileStatus> {
     let mut map = std::collections::HashMap::new();
+    
+    // Get the repository root to normalize paths correctly
+    let repo_root = match run_git(path, &["rev-parse", "--show-toplevel"]) {
+        Ok(out) => out.trim().to_string(),
+        Err(_) => path.to_string(),
+    };
+    
+    // We want the status relative to the provided 'path'
+    let abs_path = std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path));
+    let abs_root = std::fs::canonicalize(&repo_root).unwrap_or_else(|_| PathBuf::from(&repo_root));
+    
     let stdout = match run_git(path, &["status", "--porcelain", "--ignored"]) {
         Ok(out) => out,
         Err(_) => return map,
@@ -34,16 +46,28 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
             continue;
         }
         let status_code = &line[0..2];
-        let mut file_path = line[3..].to_string();
+        let mut raw_path = line[3..].to_string();
         
-        // Handle renames "R  old -> new" or copies "C  old -> new"
         if status_code.starts_with('R') || status_code.starts_with('C') {
-            if let Some(pos) = file_path.find(" -> ") {
-                file_path = file_path[pos + 4..].trim_matches('"').to_string();
+            if let Some(pos) = raw_path.find(" -> ") {
+                raw_path = raw_path[pos + 4..].trim_matches('"').to_string();
             }
         } else {
-            file_path = file_path.trim_matches('"').to_string();
+            raw_path = raw_path.trim_matches('"').to_string();
         }
+
+        // raw_path is relative to repo_root. We need it relative to abs_path.
+        let full_file_path = abs_root.join(raw_path);
+        let final_rel_path = match full_file_path.strip_prefix(&abs_path) {
+            Ok(p) => p.to_string_lossy().to_string(),
+            Err(_) => {
+                // If the file is outside our current view, we still track it 
+                // but it might not match anything in the tree.
+                continue; 
+            }
+        };
+
+        if final_rel_path.is_empty() { continue; }
 
         let status = match status_code {
             "DD" | "AU" | "UD" | "UA" | "DU" | "AA" | "UU" => FileStatus::Conflict,
@@ -81,10 +105,10 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
             }
         };
 
-        map.insert(file_path.clone(), refined_status.clone());
+        map.insert(final_rel_path.clone(), refined_status.clone());
 
         // Propagate status to parent directories
-        let path_obj = Path::new(&file_path);
+        let path_obj = Path::new(&final_rel_path);
         for ancestor in path_obj.ancestors().skip(1) {
             let ancestor_str = ancestor.to_string_lossy().to_string();
             if ancestor_str.is_empty() || ancestor_str == "." {
@@ -123,6 +147,7 @@ pub fn build_file_tree(
 ) -> Vec<FileEntry> {
     let mut entries = vec![];
     let base_path = Path::new(root);
+    let abs_base = std::fs::canonicalize(base_path).unwrap_or_else(|_| PathBuf::from(base_path));
     let search_path = base_path.join(current_dir);
 
     // Use ignore crate to walk the directory one level deep
@@ -172,11 +197,17 @@ pub fn build_file_tree(
 
     for entry in dir_entries {
         let path = entry.path();
-        let rel_path = path
-            .strip_prefix(base_path)
-            .unwrap_or(path)
-            .to_string_lossy()
-            .to_string();
+        let abs_item = std::fs::canonicalize(path).unwrap_or_else(|_| PathBuf::from(path));
+        
+        let rel_path = match abs_item.strip_prefix(&abs_base) {
+            Ok(p) => p.to_string_lossy().to_string(),
+            Err(_) => {
+                // Fallback for safety
+                path.strip_prefix(base_path).unwrap_or(path).to_string_lossy().to_string()
+            }
+        };
+
+        if rel_path.is_empty() { continue; }
 
         let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);
         let status = statuses
