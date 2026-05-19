@@ -8425,7 +8425,7 @@ dependencies = [
 
 [[package]]
 name = "twigdrop"
-version = "0.0.2-dev"
+version = "0.0.3-dev"
 dependencies = [
  "anyhow",
  "async-trait",
