@@ -65,11 +65,20 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
         ai_update_tx: mpsc::Sender<AIUpdate>,
         mut conflict_trigger_rx: mpsc::Receiver<(String, ConflictBlock)>,
         conflict_resolution_tx: mpsc::Sender<ConflictResolutionUpdate>,
+        fetched_models_tx: mpsc::Sender<Vec<String>>,
     ) {
         tokio::spawn(async move {
+            let mut last_ollama_url = String::new();
             loop {
-                // Load config inside the loop to pick up UI changes
                 let config = crate::utils::config::load_config();
+                
+                // Fetch Ollama models if URL changed or once at startup
+                if config.ai_provider == "ollama" && config.ollama_url != last_ollama_url {
+                    last_ollama_url = config.ollama_url.clone();
+                    let models = crate::utils::config::fetch_ollama_models(&last_ollama_url).await;
+                    let _ = fetched_models_tx.send(models).await;
+                }
+
                 let provider_type = config.ai_provider.clone();
                 let model = config.ai_model.clone();
                 let api_key = if config.openai_api_key.is_empty() { None } else { Some(crate::utils::config::deobfuscate(&config.openai_api_key)) };

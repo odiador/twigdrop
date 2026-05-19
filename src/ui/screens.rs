@@ -548,20 +548,43 @@ pub fn render_settings(f: &mut Frame, app: &App) {
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.settings_state.selected { style = style.bg(Color::White).fg(Color::Black).add_modifier(Modifier::BOLD); }
-        let text = if i == app.settings_state.selected && app.settings_state.editing { 
-            if i == 4 { // API Key field
-                format!("> {}", "*".repeat(app.settings_state.input.len()))
+        if i == app.settings_state.selected { 
+            style = style.bg(Color::Rgb(45, 45, 65)).add_modifier(Modifier::BOLD); 
+        }
+        
+        let text = if i == app.settings_state.selected {
+            if app.settings_state.editing {
+                if i == 4 { format!("> {}", "*".repeat(app.settings_state.input.len())) }
+                else { format!("> {}", app.settings_state.input) }
+            } else if app.settings_state.selecting {
+                let choice = app.settings_state.choices.get(app.settings_state.choice_idx).cloned().unwrap_or_else(|| "...".to_string());
+                format!("← {} →", choice)
             } else {
-                format!("> {}", app.settings_state.input)
+                opt.clone()
             }
-        } else { opt.clone() };
+        } else {
+            opt.clone()
+        };
+
+        if i == app.settings_state.selected {
+            style = style.fg(Color::White);
+        }
+
         items.push(ListItem::new(text).style(style));
     }
 
     f.render_widget(List::new(items).block(Block::default().title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center)).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan))), inner);
+    
+    let footer_msg = if app.settings_state.selecting {
+        "↑/↓: cycle options │ Enter: select │ Esc: cancel"
+    } else if app.settings_state.editing {
+        "Type your value │ Enter: save │ Esc: cancel"
+    } else {
+        "↑/↓: navigate │ Enter: edit/select │ Esc: cancel"
+    };
+
     let help_area = Rect::new(inner.x, inner.y + inner.height - 2, inner.width, 1);
-    f.render_widget(Paragraph::new("↑/↓: navigate │ Enter: edit/select │ Esc: cancel").alignment(Alignment::Center).style(Style::default().fg(Color::DarkGray)), help_area);
+    f.render_widget(Paragraph::new(footer_msg).alignment(Alignment::Center).style(Style::default().fg(Color::DarkGray)), help_area);
 }
 
 pub fn render_search(f: &mut Frame, app: &App) {

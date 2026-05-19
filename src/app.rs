@@ -126,6 +126,9 @@ pub struct AIState {
 pub struct SettingsState {
     pub selected: usize,
     pub editing: bool,
+    pub selecting: bool,
+    pub choice_idx: usize,
+    pub choices: Vec<String>,
     pub input: String,
 }
 
@@ -160,6 +163,7 @@ pub struct App {
     pub rx: mpsc::Receiver<MergeUpdate>,
     pub trigger_tx: mpsc::Sender<()>,
     pub shared_primary_mode: Arc<std::sync::RwLock<PrimaryMode>>,
+    pub fetched_models_rx: mpsc::Receiver<Vec<String>>,
 }
 
 #[derive(Default)]
@@ -190,6 +194,7 @@ impl App {
         conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
         conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
         file_status_rx: mpsc::Receiver<FileStatusUpdate>,
+        fetched_models_rx: mpsc::Receiver<Vec<String>>,
     ) -> Self {
         let config = crate::utils::config::load_config();
         let primary_mode = if config.last_primary_mode == 1 {
@@ -233,6 +238,7 @@ impl App {
             rx,
             trigger_tx,
             shared_primary_mode,
+            fetched_models_rx,
         };
         
         if app.primary_mode == PrimaryMode::Files {
@@ -293,6 +299,14 @@ impl App {
         }
         while let Ok(update) = self.file_state.status_rx.try_recv() {
             self.update_file_statuses(update.statuses, path);
+        }
+        while let Ok(models) = self.fetched_models_rx.try_recv() {
+            if self.settings_state.selecting && self.settings_state.selected == 3 {
+                self.settings_state.choices = models;
+                if self.settings_state.choices.is_empty() {
+                    self.settings_state.choices = vec!["No models found".to_string()];
+                }
+            }
         }
     }
 

@@ -54,6 +54,30 @@ pub fn deobfuscate(data: &str) -> String {
     String::from_utf8(result).unwrap_or_default()
 }
 
+pub const PROVIDER_ARCHETYPES: &[&str] = &["ollama", "openai", "anthropic", "google", "cohere"];
+
+pub const OPENAI_MODELS: &[&str] = &["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"];
+pub const ANTHROPIC_MODELS: &[&str] = &["claude-3-5-sonnet-latest", "claude-3-opus-latest", "claude-3-haiku-20240307"];
+pub const GOOGLE_MODELS: &[&str] = &["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"];
+
+pub async fn fetch_ollama_models(url: &str) -> Vec<String> {
+    let client = reqwest::Client::new();
+    let res = client.get(format!("{}/api/tags", url)).send().await;
+    
+    match res {
+        Ok(response) => {
+            if let Ok(json) = response.json::<serde_json::Value>().await
+                && let Some(models) = json["models"].as_array() {
+                    return models.iter()
+                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                        .collect();
+            }
+            Vec::new()
+        }
+        Err(_) => Vec::new()
+    }
+}
+
 pub fn get_config_path() -> Option<PathBuf> {
     ProjectDirs::from("dev", "odiador", "twigdrop").map(|dirs| {
         let config_dir = dirs.config_dir();
