@@ -310,13 +310,25 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 }
                 false
             } else {
-                handle_enter_or_selection(app)
+                handle_enter_or_selection(app, path)
             }
         }
         KeyCode::Char('j') | KeyCode::Down => {
             match app.mode {
                 AppMode::CodePreview(ref mut state) if app.file_state.active_panel == FilePanel::Preview => {
                     handle_preview_keyboard(state, KeyCode::Down);
+                    false
+                }
+                AppMode::CodePreview(_) if app.file_state.active_panel == FilePanel::Directory => {
+                    app.next();
+                    if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
+                        if !entry.is_dir {
+                            let rel_path = entry.path.to_string_lossy().to_string();
+                            if let Some(preview) = app.create_preview_state(path, &rel_path) {
+                                app.mode = AppMode::CodePreview(preview);
+                            }
+                        }
+                    }
                     false
                 }
                 AppMode::Diff => { 
@@ -346,6 +358,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             match app.mode {
                 AppMode::CodePreview(ref mut state) if app.file_state.active_panel == FilePanel::Preview => {
                     handle_preview_keyboard(state, KeyCode::Up);
+                    false
+                }
+                AppMode::CodePreview(_) if app.file_state.active_panel == FilePanel::Directory => {
+                    app.previous();
+                    if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
+                        if !entry.is_dir {
+                            let rel_path = entry.path.to_string_lossy().to_string();
+                            if let Some(preview) = app.create_preview_state(path, &rel_path) {
+                                app.mode = AppMode::CodePreview(preview);
+                            }
+                        }
+                    }
                     false
                 }
                 AppMode::Diff => { 
@@ -417,13 +441,13 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('i') if app.mode == AppMode::Normal => {
             if let Some(branch) = app.get_filtered_branches().get(app.branch_state.selected) {
+                if branch.name.starts_with('*') { return false; }
                 let branch_name = branch.name.clone();
                 let _ = app.ai_state.ai_trigger_tx.try_send((path.to_string(), branch_name.clone()));
                 app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
                 app.branch_state.branch_info = git::get_branch_info(path, &branch_name);
                 app.branch_state.info_scroll = 0;
                 
-                // Load diff files
                 app.branch_state.diff_files = git::get_branch_diff_files(path, &branch_name);
                 app.branch_state.diff_file_selected = 0;
                 app.branch_state.diff_preview = None;
@@ -449,7 +473,11 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char(' ') if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches => {
-            app.toggle_selection();
+            if let Some(branch) = app.get_filtered_branches().get(app.branch_state.selected) {
+                if !branch.name.starts_with('*') {
+                    app.toggle_selection();
+                }
+            }
             false
         }
         KeyCode::F(8) | KeyCode::Char('D') if (key.code == KeyCode::F(8) || app.shift_pressed) && app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches => {
@@ -751,8 +779,40 @@ fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     false
 }
 
-fn handle_enter_or_selection(app: &mut App) -> bool {
+fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
     if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
+        if let Some(branch) = app.get_filtered_branches().get(app.branch_state.selected).cloned() {
+            if branch.name.starts_with('*') {
+                // Pseudo branch: open Diff directly
+                let branch_name = branch.name.clone();
+                app.branch_state.branch_info = git::get_branch_info(path, &branch_name);
+                app.branch_state.info_scroll = 0;
+                
+                app.branch_state.diff_files = git::get_branch_diff_files(path, &branch_name);
+                app.branch_state.diff_file_selected = 0;
+                app.branch_state.diff_preview = None;
+                if !app.branch_state.diff_files.is_empty() {
+                    let first_file = app.branch_state.diff_files[0].clone();
+                    let diff_content = git::get_branch_file_diff(path, &branch_name, &first_file);
+                    let mut preview = PreviewState {
+                        file_path: first_file,
+                        lines: diff_content.lines().map(|s| s.to_string()).collect(),
+                        highlighted_lines: vec![],
+                        cursor_y: 0,
+                        scroll_y: 0,
+                        selection_start: None,
+                        selection_end: None,
+                        line_diffs: std::collections::HashMap::new(),
+                    };
+                    app.update_diff_highlighting(&mut preview);
+                    app.branch_state.diff_preview = Some(preview);
+                }
+                
+                app.mode = AppMode::Diff;
+                return false;
+            }
+        }
+        
         app.mode = AppMode::Manage;
         app.branch_state.manage_selected = 0;
         return false;

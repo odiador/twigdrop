@@ -14,13 +14,38 @@ use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus, GutterStat
 use std::collections::HashMap;
 
 pub fn build_branches(path: &str) -> Vec<Branch> {
+    let mut branches = vec![];
+    
+    // Add Pseudo-branches for Local and Staged changes
+    branches.push(Branch {
+        name: "*Local Changes*".to_string(),
+        status: vec![BranchStatus::Local],
+        merge_status: MergeStatus::NotAnalyzed,
+        age: "".to_string(),
+        author: "You".to_string(),
+        commit_date: "Now".to_string(),
+        ahead_count: 0,
+        behind_count: 0,
+    });
+    
+    branches.push(Branch {
+        name: "*Staged Changes*".to_string(),
+        status: vec![BranchStatus::Local],
+        merge_status: MergeStatus::NotAnalyzed,
+        age: "".to_string(),
+        author: "You".to_string(),
+        commit_date: "Now".to_string(),
+        ahead_count: 0,
+        behind_count: 0,
+    });
+
     let names = get_branches(path);
     let merged = get_merged_branches(path);
     let tracks = get_upstream_tracks(path);
     let stashed = get_stashed_branches(path);
     let metadata = get_branch_metadata(path);
 
-    names
+    let mut git_branches: Vec<Branch> = names
         .into_iter()
         .map(|name| {
             let mut status = vec![];
@@ -83,10 +108,19 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
                 behind_count,
             }
         })
-        .collect()
+        .collect();
+        
+    branches.append(&mut git_branches);
+    branches
 }
 
 pub fn get_branch_info(path: &str, branch: &str) -> String {
+    if branch == "*Local Changes*" {
+        return "Unstaged changes in working directory.".to_string();
+    } else if branch == "*Staged Changes*" {
+        return "Staged changes ready to be committed.".to_string();
+    }
+    
     run_git(
         path,
         &["log", "-n", "3", "--stat", "-p", "--color=never", branch],
@@ -95,6 +129,22 @@ pub fn get_branch_info(path: &str, branch: &str) -> String {
 }
 
 pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
+    if branch == "*Local Changes*" {
+        return run_git(path, &["diff", "--name-only"])
+            .unwrap_or_default()
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+    } else if branch == "*Staged Changes*" {
+        return run_git(path, &["diff", "--cached", "--name-only"])
+            .unwrap_or_default()
+            .lines()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+    }
+    
     // Diff against HEAD
     run_git(path, &["diff", "--name-only", "HEAD", branch])
         .unwrap_or_default()
@@ -105,6 +155,14 @@ pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
 }
 
 pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
+    if branch == "*Local Changes*" {
+        return run_git(path, &["diff", "--", file])
+            .unwrap_or_else(|e| format!("Error loading diff: {}", e));
+    } else if branch == "*Staged Changes*" {
+        return run_git(path, &["diff", "--cached", "--", file])
+            .unwrap_or_else(|e| format!("Error loading diff: {}", e));
+    }
+    
     run_git(path, &["diff", "HEAD", branch, "--", file])
         .unwrap_or_else(|e| format!("Error loading diff: {}", e))
 }
