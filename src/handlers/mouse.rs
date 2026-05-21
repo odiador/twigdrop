@@ -12,8 +12,37 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
     match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
             if app.mode != AppMode::Normal && !matches!(app.mode, AppMode::CodePreview(_))
+                && app.mode != AppMode::Diff
                 && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize, path)
             {
+                return;
+            }
+
+            if app.mode == AppMode::Diff {
+                let v_start = (term_rows as f32 * 0.05) as usize;
+                let v_end = (term_rows as f32 * 0.95) as usize;
+                let h_start = (term_cols as f32 * 0.05) as usize;
+                let h_end = (term_cols as f32 * 0.95) as usize;
+                
+                if row < v_start || row > v_end || col < h_start || col > h_end {
+                    app.mode = AppMode::Normal;
+                    return;
+                }
+                
+                let sidebar_width = ((h_end - h_start) as f32 * 0.25) as usize;
+                if col < h_start + sidebar_width {
+                    app.branch_state.diff_panel = FilePanel::Directory;
+                    let list_v_start = v_start + 1;
+                    if row > list_v_start {
+                        let idx = row - list_v_start - 1;
+                        if idx < app.branch_state.diff_files.len() {
+                            app.branch_state.diff_file_selected = idx;
+                            crate::handlers::keyboard::update_diff_preview(app, path);
+                        }
+                    }
+                } else {
+                    app.branch_state.diff_panel = FilePanel::Preview;
+                }
                 return;
             }
 
@@ -62,7 +91,14 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             }
         }
         MouseEventKind::ScrollUp => {
-            if let AppMode::CodePreview(ref mut state) = app.mode {
+            if app.mode == AppMode::Diff {
+                if app.branch_state.diff_panel == FilePanel::Directory {
+                    app.branch_state.diff_file_selected = app.branch_state.diff_file_selected.saturating_sub(1);
+                    crate::handlers::keyboard::update_diff_preview(app, path);
+                } else if let Some(ref mut state) = app.branch_state.diff_preview {
+                    if state.scroll_y > 0 { state.scroll_y -= 1; }
+                }
+            } else if let AppMode::CodePreview(ref mut state) = app.mode {
                 if state.scroll_y > 0 {
                     state.scroll_y -= 1;
                 }
@@ -71,7 +107,17 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             }
         }
         MouseEventKind::ScrollDown => {
-            if let AppMode::CodePreview(ref mut state) = app.mode {
+            if app.mode == AppMode::Diff {
+                if app.branch_state.diff_panel == FilePanel::Directory {
+                    if app.branch_state.diff_file_selected + 1 < app.branch_state.diff_files.len() {
+                        app.branch_state.diff_file_selected += 1;
+                        crate::handlers::keyboard::update_diff_preview(app, path);
+                    }
+                } else if let Some(ref mut state) = app.branch_state.diff_preview {
+                    let line_count = state.lines.len();
+                    if state.scroll_y < line_count.saturating_sub(1) { state.scroll_y += 1; }
+                }
+            } else if let AppMode::CodePreview(ref mut state) = app.mode {
                 let line_count = state.lines.len();
                 if state.scroll_y < line_count.saturating_sub(1) {
                     state.scroll_y += 1;

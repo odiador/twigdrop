@@ -410,7 +410,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     }
 }
 
-fn update_diff_preview(app: &mut App, path: &str) {
+pub fn update_diff_preview(app: &mut App, path: &str) {
     if let Some(branch) = app.get_filtered_branches().get(app.branch_state.selected) {
         let branch_name = branch.name.clone();
         if let Some(file) = app.branch_state.diff_files.get(app.branch_state.diff_file_selected) {

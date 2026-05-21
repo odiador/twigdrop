@@ -85,7 +85,6 @@ pub struct FileStatusUpdate {
 pub struct FileState {
     pub file_tree: Vec<crate::git::files::FileEntry>,
     pub file_selected: usize,
-    pub file_scroll: usize,
     pub git_file_statuses: HashMap<String, crate::git::files::FileStatus>,
     pub sidebar_width: u16,
     pub active_panel: FilePanel,
@@ -98,7 +97,6 @@ impl FileState {
         Self {
             file_tree: Vec::new(),
             file_selected: 0,
-            file_scroll: 0,
             git_file_statuses: HashMap::new(),
             sidebar_width: default_width,
             active_panel: FilePanel::Directory,
@@ -629,17 +627,29 @@ impl App {
         state.highlighted_lines.clear();
         for line in &state.lines {
             let color = if line.starts_with('+') && !line.starts_with("+++") {
-                Color::Green
+                Color::Rgb(161, 239, 173) // Light Green
             } else if line.starts_with('-') && !line.starts_with("---") {
-                Color::Red
+                Color::Rgb(245, 194, 231) // Pinkish Red
             } else if line.starts_with("@@") {
-                Color::Cyan
+                Color::Rgb(137, 180, 250) // Blue for hunk headers
+            } else if line.starts_with("diff --git") {
+                Color::Rgb(249, 226, 175) // Yellow for file headers
+            } else if line.starts_with("index ") {
+                Color::Rgb(148, 156, 187) // Gray for index info
             } else if line.starts_with("+++") || line.starts_with("---") {
-                Color::Yellow
+                Color::Rgb(180, 190, 254) // Lavender for file paths
             } else {
-                Color::White
+                Color::Rgb(205, 214, 244) // Default text color
             };
-            state.highlighted_lines.push(Line::from(vec![Span::styled(line.to_string(), Style::default().fg(color))]));
+
+            let spans = vec![Span::styled(line.to_string(), Style::default().fg(color))];
+            
+            // If it's a hunk header, add some visual structure
+            if line.starts_with("@@") {
+                state.highlighted_lines.push(Line::from(vec![Span::styled(" ".repeat(100), Style::default().bg(Color::Rgb(30, 30, 46)))]));
+            }
+
+            state.highlighted_lines.push(Line::from(spans));
         }
     }
 }

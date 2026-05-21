@@ -55,7 +55,7 @@ impl Default for Config {
             last_primary_mode: 0,
             ai_provider: "ollama".to_string(),
             providers,
-            enable_animations: true,
+            enable_animations: false,
             default_sidebar_width: 30,
         }
     }

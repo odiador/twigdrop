@@ -1,4 +1,4 @@
-.PHONY: setup dev build format lint check install release help
+.PHONY: setup dev build format lint check test install release help
 
 # Default target
 all: help
@@ -13,6 +13,7 @@ help:
 	@echo "  make format   - Formats the Rust code"
 	@echo "  make lint     - Runs Clippy to catch common mistakes"
 	@echo "  make check    - Checks compilation without generating a binary"
+	@echo "  make test     - Runs unit tests"
 	@echo "  make install  - Installs the binary locally via Cargo"
 	@echo "  make release VERSION=v0.1.0 - Creates a GitHub release and tag using the gh cli"
 
@@ -44,6 +45,9 @@ lint:
 
 check:
 	cargo check
+
+test:
+	cargo test
 
 install: build
 	cargo install --path .
