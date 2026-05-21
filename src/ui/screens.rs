@@ -119,13 +119,48 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref()).split(area);
         f.render_widget(table, chunks[0]);
 
-        let mut info_text = app.branch_state.branch_info.clone();
-        if let Some(ai) = &app.ai_state.ai_analysis {
-            info_text = format!("--- AI ANALYSIS ---\n\n{}\n\n------------------\n\n{}", ai, info_text);
-        }
+        let diff_area = chunks[1];
+        let diff_chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(diff_area);
 
-        let diff = Paragraph::new(info_text).block(Block::default().title(" Intelligence & Diff ").borders(Borders::ALL)).scroll((app.branch_state.info_scroll, 0));
-        f.render_widget(diff, chunks[1]);
+        // 1. Files List
+        let mut file_items = vec![];
+        for (i, file) in app.branch_state.diff_files.iter().enumerate() {
+            let mut style = Style::default().fg(Color::Gray);
+            if i == app.branch_state.diff_file_selected {
+                style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+            }
+            file_items.push(ListItem::new(file.clone()).style(style));
+        }
+        let list_title = format!(" Changed Files ({}) ", app.branch_state.diff_files.len());
+        let files_list = List::new(file_items).block(Block::default().title(list_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        f.render_widget(files_list, diff_chunks[0]);
+
+        // 2. File Preview
+        if let Some(state) = &app.branch_state.diff_preview {
+            let mut final_lines = Vec::new();
+            let visible_rows = diff_chunks[1].height.saturating_sub(2) as usize;
+            let start_idx = state.scroll_y;
+            let end_idx = (start_idx + visible_rows + 5).min(state.highlighted_lines.len());
+
+            for i in start_idx..end_idx {
+                let mut line_style = Style::default();
+                if i == state.cursor_y {
+                    line_style = line_style.bg(Color::Rgb(60, 60, 80));
+                }
+                final_lines.push(state.highlighted_lines[i].clone().style(line_style));
+            }
+            
+            let preview_title = format!(" Diff: {} ", state.file_path);
+            let diff_preview = Paragraph::new(Text::from(final_lines)).block(Block::default().title(preview_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Green)));
+            f.render_widget(diff_preview, diff_chunks[1]);
+        } else {
+            let mut info_text = app.branch_state.branch_info.clone();
+            if let Some(ai) = &app.ai_state.ai_analysis {
+                info_text = format!("--- AI ANALYSIS ---\n\n{}\n\n------------------\n\n{}", ai, info_text);
+            }
+            let fallback_diff = Paragraph::new(info_text).block(Block::default().title(" Intelligence & Diff ").borders(Borders::ALL)).scroll((app.branch_state.info_scroll, 0));
+            f.render_widget(fallback_diff, diff_chunks[1]);
+        }
     } else {
         f.render_widget(table, area);
     }
