@@ -42,4 +42,6 @@ pub struct Branch {
     pub age: String,
     pub author: String,
     pub commit_date: String,
+    pub ahead_count: usize,
+    pub behind_count: usize,
 }

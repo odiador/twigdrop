@@ -60,7 +60,16 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         let is_bulk_selected = app.branch_state.bulk_selected.contains(&b.name);
         let checkbox = if is_bulk_selected { "[x]" } else { "[ ]" };
 
-        let branch_name = format!("{}{}", b.name, current_tag);
+        let mut diff_counts = String::new();
+        if b.ahead_count > 0 {
+            diff_counts.push_str(&format!("↑{} ", b.ahead_count));
+        }
+        if b.behind_count > 0 {
+            diff_counts.push_str(&format!("↓{} ", b.behind_count));
+        }
+        let diff_counts_str = if diff_counts.is_empty() { String::new() } else { format!(" [{}]", diff_counts.trim_end()) };
+
+        let branch_name = format!("{}{}{}", b.name, current_tag, diff_counts_str);
         let status_str = if b.status.contains(&BranchStatus::Merged) { "merged" } else { "unmerged" };
         let type_str = if b.status.contains(&BranchStatus::RemoteTracked) { "remote" } else { "local" };
         let author_str = format!("{} {}", b.commit_date, b.author);
@@ -92,13 +101,6 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         rows.push(Row::new(cells).style(row_style));
     }
 
-    let filter_text = if let Some(f) = &app.branch_state.current_filter { format!("sort: {:?}", f) } else { "sort: None".to_string() };
-
-    let title_line = Line::from(vec![
-        Span::styled(" 🧹 twigdrop ".to_string(), Style::default().fg(Color::Rgb(180, 190, 254)).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("│ {} · {} branches · {} ", app.current_branch, branches_len, filter_text), Style::default().fg(Color::Rgb(124, 128, 156))),
-    ]);
-
     let widths = [
         Constraint::Length(4),
         Constraint::Percentage(35),
@@ -110,8 +112,8 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     ];
 
     let table = Table::new(rows, widths)
-        .header(Row::new(vec!["", "Branch", "Age", "Status", "Merge", "Type", "Last Commit Author"]).style(Style::default().fg(Color::Rgb(124, 128, 156)).add_modifier(Modifier::BOLD)).bottom_margin(1))
-        .block(Block::default().title(title_line).borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(74, 79, 106))));
+        .header(Row::new(vec!["", "Branch", "Age", "Status", "Merge", "Type", "Last Commit"]).style(Style::default().fg(Color::Rgb(124, 128, 156)).add_modifier(Modifier::BOLD)).bottom_margin(1))
+        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(74, 79, 106))));
 
     if app.mode == AppMode::Diff {
         let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref()).split(area);
@@ -162,6 +164,7 @@ pub const ASCII_LOGO: &str = r#"
 "#;
 
 pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
+    f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -199,14 +202,15 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             "  S (Green)   : Stashed changes exist for this branch",
             "",
             "Shortcuts (Branches):",
-            "  ↑/k, ↓/j    : Navigate list",
-            "  /           : Fuzzy search branches",
-            "  Space       : Toggle branch selection (for bulk delete)",
-            "  D (Shift+D) : Bulk delete selected branches",
-            "  p           : Prune 'Gone' branches (Safe only)",
-            "  i           : AI Intelligence Analysis for branch",
-            "  f           : Open Filters",
-            "  m / Enter   : Manage selected branch (Checkout, Diff, Delete)",
+            "  ↑/k, ↓/j       : Navigate list",
+            "  F3 / /         : Fuzzy search branches",
+            "  Space          : Toggle branch selection (for bulk delete)",
+            "  F8 / Shift+D   : Bulk delete selected branches",
+            "  F5 / p         : Prune 'Gone' branches (Safe only)",
+            "  i              : AI Intelligence Analysis for branch",
+            "  F4 / c         : Create new branch",
+            "  F2 / f         : Open Filters",
+            "  F9 / m / Enter : Manage selected branch (Checkout, Diff, Delete)",
         ]);
     } else {
         help_text.extend(vec![
@@ -222,6 +226,8 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             "  → / Enter   : Open folder / Move into children",
             "  ←           : Close folder / Move to parent",
             "  Enter       : Preview file content",
+            "  e           : Open folder in Explorer (Alt+e for selected path)",
+            "  F5 / s      : Stage / Unstage file",
             "  v           : Open in IDE (Root by default, Path with Alt)",
             "  t           : Internal TTY (Alt+t for External)",
             "  a           : Alt IDE (Root by default, Path with Alt)",
@@ -233,12 +239,13 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     help_text.extend(vec![
         "",
         "Global Shortcuts:",
-        "  d           : Switch between Branches and Files mode",
-        "  Shift+Tab   : Open Settings Panel",
-        "  S (Shift+S) : Open Stash Manager",
-        "  F (Shift+F) : AI Auto-Fix (in Diff mode with conflicts)",
-        "  Ctrl+o      : Open IDE (Root by default, Path with Alt)",
-        "  q / Esc     : Quit / Back",
+        "  d              : Switch between Branches and Files mode",
+        "  F10 / Shift+Tab: Open Settings Panel",
+        "  F1 / ? / h     : Help & Legend",
+        "  S (Shift+S)    : Open Stash Manager",
+        "  F (Shift+F)    : AI Auto-Fix (in Diff mode with conflicts)",
+        "  Ctrl+o         : Open IDE (Root by default, Path with Alt)",
+        "  q / Esc        : Quit / Back",
     ]);
 
     let p = Paragraph::new(help_text.join("\n"))
@@ -331,6 +338,44 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
     ];
 
     let p = Paragraph::new(text).block(block).alignment(Alignment::Center);
+    f.render_widget(p, inner);
+}
+
+pub fn render_create_branch(f: &mut Frame, input: &str) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(35),
+                Constraint::Percentage(30),
+                Constraint::Percentage(35),
+            ]
+            .as_ref(),
+        )
+        .split(f.area())[1];
+
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(25),
+                Constraint::Percentage(50),
+                Constraint::Percentage(25),
+            ]
+            .as_ref(),
+        )
+        .split(area)[1];
+
+    f.render_widget(Clear, inner);
+
+    let block = Block::default()
+        .title(Line::from(" Create New Branch ").alignment(Alignment::Left))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    
+    let p = Paragraph::new(format!("\nName: {}\n\n(Enter to create, Esc to cancel)", input))
+        .block(block)
+        .alignment(Alignment::Center);
     f.render_widget(p, inner);
 }
 
@@ -540,9 +585,9 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         format!("Primary IDE: {}", app.config.ide_command),
         format!("Alternative IDE: {}", app.config.alternative_ide_command),
         format!("AI Provider: {}", app.config.ai_provider),
-        format!("AI Model: {}", app.config.ai_model),
-        format!("OpenAI API Key: {}", if app.config.openai_api_key.is_empty() { "None".to_string() } else { "****".to_string() }),
-        format!("Ollama URL: {}", app.config.ollama_url),
+        format!("AI Model: {}", app.config.current_provider().model),
+        format!("OpenAI API Key: {}", if app.config.current_provider().api_key.is_empty() { "None".to_string() } else { "****".to_string() }),
+        format!("Ollama URL: {}", app.config.current_provider().url),
         "Save and Exit".to_string()
     ];
     let mut items = vec![];
@@ -557,8 +602,7 @@ pub fn render_settings(f: &mut Frame, app: &App) {
                 if i == 4 { format!("> {}", "*".repeat(app.settings_state.input.len())) }
                 else { format!("> {}", app.settings_state.input) }
             } else if app.settings_state.selecting {
-                let choice = app.settings_state.choices.get(app.settings_state.choice_idx).cloned().unwrap_or_else(|| "...".to_string());
-                format!("← {} →", choice)
+                format!("{} (Selecting...)", opt)
             } else {
                 opt.clone()
             }
@@ -575,6 +619,33 @@ pub fn render_settings(f: &mut Frame, app: &App) {
 
     f.render_widget(List::new(items).block(Block::default().title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center)).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan))), inner);
     
+    if app.settings_state.selecting {
+        let menu_width = 40;
+        let menu_height = app.settings_state.choices.len().min(10) as u16 + 2;
+        
+        let center_x = inner.x + (inner.width / 2);
+        let center_y = inner.y + (inner.height / 2);
+        
+        let menu_area = Rect::new(
+            center_x.saturating_sub(menu_width / 2),
+            center_y.saturating_sub(menu_height / 2),
+            menu_width,
+            menu_height,
+        );
+        f.render_widget(Clear, menu_area);
+        
+        let mut choice_items = vec![];
+        for (i, choice) in app.settings_state.choices.iter().enumerate() {
+            let mut style = Style::default().fg(Color::Gray);
+            if i == app.settings_state.choice_idx {
+                style = style.bg(Color::Rgb(80, 80, 100)).fg(Color::White).add_modifier(Modifier::BOLD);
+            }
+            choice_items.push(ListItem::new(format!(" {} ", choice)).style(style));
+        }
+        let list = List::new(choice_items).block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)).title(" Select Option "));
+        f.render_widget(list, menu_area);
+    }
+
     let footer_msg = if app.settings_state.selecting {
         "↑/↓: cycle options │ Enter: select │ Esc: cancel"
     } else if app.settings_state.editing {

@@ -46,8 +46,8 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                 if state.scroll_y > 0 {
                     state.scroll_y -= 1;
                 }
-            } else if app.primary_mode == PrimaryMode::Files && app.file_state.file_scroll > 0 {
-                app.file_state.file_scroll -= 1;
+            } else {
+                app.previous();
             }
         }
         MouseEventKind::ScrollDown => {
@@ -56,8 +56,8 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                 if state.scroll_y < line_count.saturating_sub(1) {
                     state.scroll_y += 1;
                 }
-            } else if app.primary_mode == PrimaryMode::Files {
-                app.file_state.file_scroll += 1;
+            } else {
+                app.next();
             }
         }
         _ => {}
@@ -173,13 +173,13 @@ fn handle_modal_click(
                     app.mode = AppMode::Normal;
                 } else if is_double || !app.settings_state.editing {
                     app.settings_state.editing = true;
-                    app.settings_state.input = match target_option {
+                    app.settings_state.input = match option_idx {
                         0 => app.config.ide_command.clone(),
                         1 => app.config.alternative_ide_command.clone(),
                         2 => app.config.ai_provider.clone(),
-                        3 => app.config.ai_model.clone(),
-                        4 => crate::utils::config::deobfuscate(&app.config.openai_api_key),
-                        5 => app.config.ollama_url.clone(),
+                        3 => app.config.current_provider().model.clone(),
+                        4 => crate::utils::config::deobfuscate(&app.config.current_provider().api_key),
+                        5 => app.config.current_provider().url.clone(),
                         _ => String::new(),
                     };
                 }
