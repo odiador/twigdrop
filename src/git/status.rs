@@ -89,6 +89,8 @@ pub fn get_merged_branches(path: &str) -> Vec<String> {
 pub struct TrackInfo {
     pub has_upstream: bool,
     pub track: String,
+    pub ahead: usize,
+    pub behind: usize,
 }
 
 pub fn get_upstream_tracks(path: &str) -> std::collections::HashMap<String, TrackInfo> {
@@ -105,11 +107,28 @@ pub fn get_upstream_tracks(path: &str) -> std::collections::HashMap<String, Trac
     for line in out.lines() {
         let parts: Vec<&str> = line.trim().split('|').collect();
         if parts.len() >= 3 {
+            let track_str = parts[2].to_string();
+            let mut ahead = 0;
+            let mut behind = 0;
+            
+            if track_str.contains("ahead") {
+                if let Some(a) = track_str.split("ahead ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
+                    ahead = a.parse().unwrap_or(0);
+                }
+            }
+            if track_str.contains("behind") {
+                if let Some(b) = track_str.split("behind ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
+                    behind = b.parse().unwrap_or(0);
+                }
+            }
+
             map.insert(
                 parts[0].to_string(),
                 TrackInfo {
                     has_upstream: !parts[1].is_empty(),
-                    track: parts[2].to_string(),
+                    track: track_str,
+                    ahead,
+                    behind,
                 },
             );
         }

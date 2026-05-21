@@ -21,6 +21,10 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         return handle_search_keyboard(app, key);
     }
 
+    if let AppMode::Filter = app.mode {
+        return handle_filter_keyboard(app, key);
+    }
+
     if let AppMode::Manage = app.mode {
         return handle_manage_keyboard(app, key, path);
     }
@@ -35,6 +39,31 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
                 app.mode = AppMode::Normal;
             }
+            _ => {}
+        }
+        return false;
+    }
+
+    if let AppMode::CreateBranch(ref mut input) = app.mode {
+        match key.code {
+            KeyCode::Enter => {
+                let name = input.clone();
+                if !name.is_empty() {
+                    match crate::git::commands::run_git(path, &["checkout", "-b", &name]) {
+                        Ok(msg) => {
+                            app.refresh_branches(path);
+                            app.current_branch = git::get_current_branch(path);
+                            app.mode = AppMode::Message(format!("Created and checked out: {}\n{}", name, msg));
+                        }
+                        Err(e) => app.mode = AppMode::Message(format!("Error creating branch: {}", e)),
+                    }
+                } else {
+                    app.mode = AppMode::Normal;
+                }
+            }
+            KeyCode::Esc => { app.mode = AppMode::Normal; }
+            KeyCode::Char(c) => { input.push(c); }
+            KeyCode::Backspace => { input.pop(); }
             _ => {}
         }
         return false;
@@ -81,12 +110,35 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::Char('/') => {
+        KeyCode::F(1) | KeyCode::Char('?') => {
+            app.toggle_help();
+            false
+        }
+        KeyCode::F(2) | KeyCode::Char('f') => {
+            if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
+                app.mode = AppMode::Filter;
+                app.branch_state.filter_selected = 0;
+            }
+            false
+        }
+        KeyCode::F(3) | KeyCode::Char('/') => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
                 app.mode = AppMode::Search;
                 app.branch_state.search_query.clear();
                 app.refresh_filtered_branches();
             }
+            false
+        }
+        KeyCode::F(4) | KeyCode::Char('c') => {
+            if app.mode == AppMode::Normal {
+                app.mode = AppMode::CreateBranch(String::new());
+            }
+            false
+        }
+        KeyCode::F(10) | KeyCode::BackTab => {
+            app.mode = AppMode::Settings;
+            app.settings_state.selected = 0;
+            app.settings_state.editing = false;
             false
         }
         KeyCode::Char('[') => {
@@ -103,14 +155,22 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::BackTab => {
-            app.mode = AppMode::Settings;
-            app.settings_state.selected = 0;
-            app.settings_state.editing = false;
+        KeyCode::Char('e') => {
+            if app.mode == AppMode::Normal {
+                let target_path = if app.alt_pressed
+                    && app.primary_mode == PrimaryMode::Files
+                    && let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected)
+                {
+                    std::path::PathBuf::from(path).join(&entry.path)
+                } else {
+                    std::path::PathBuf::from(path)
+                };
+                crate::utils::terminal::open_folder(&target_path);
+            }
             false
         }
-        KeyCode::Char('h') => {
-            app.toggle_help();
+        KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::ALT) => {
+            app.show_terminal = !app.show_terminal;
             false
         }
         KeyCode::Char('d') => {
@@ -157,8 +217,8 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::Char('m') | KeyCode::Enter => {
-            if app.primary_mode == PrimaryMode::Files {
+        KeyCode::F(9) | KeyCode::Char('m') | KeyCode::Enter => {
+            if app.primary_mode == PrimaryMode::Files && key.code == KeyCode::Enter {
                 if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
                     if entry.is_dir {
                         app.toggle_file_dir(path);
@@ -227,7 +287,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 
 fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
     match key.code {
-        KeyCode::Char('p') if app.mode == AppMode::Normal => {
+        KeyCode::F(5) | KeyCode::Char('p') if app.mode == AppMode::Normal => {
             let msg = prune_branches(path, &app.branch_state.branches, &app.current_branch);
             app.refresh_branches(path);
             app.mode = AppMode::Message(msg);
@@ -248,7 +308,7 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.toggle_selection();
             false
         }
-        KeyCode::Char('D') if app.shift_pressed && app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches => {
+        KeyCode::F(8) | KeyCode::Char('D') if (key.code == KeyCode::F(8) || app.shift_pressed) && app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches => {
             if !app.branch_state.bulk_selected.is_empty() {
                 let names: Vec<String> = app.branch_state.bulk_selected.iter().cloned().collect();
                 app.snap_animation = Some(SnapAnimation::new(names));
@@ -288,6 +348,27 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 let full_path = std::path::PathBuf::from(path).join(&entry.path);
                 let dir = if entry.is_dir { full_path } else { full_path.parent().unwrap_or(&std::path::PathBuf::from(path)).to_path_buf() };
                 crate::utils::terminal::open_terminal(&dir);
+            }
+            false
+        }
+        KeyCode::F(5) | KeyCode::Char('s') if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Files => {
+            if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
+                if !entry.is_dir {
+                    let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
+                    let result = if entry.status == crate::git::files::FileStatus::Staged {
+                        crate::actions::commands::unstage_file(path, &rel_path)
+                    } else {
+                        crate::actions::commands::stage_file(path, &rel_path)
+                    };
+
+                    match result {
+                        Ok(msg) => {
+                            app.load_file_tree(path);
+                            app.mode = AppMode::Message(msg);
+                        }
+                        Err(e) => app.mode = AppMode::Message(e),
+                    }
+                }
             }
             false
         }
@@ -348,9 +429,9 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                     0 => app.config.ide_command = app.settings_state.input.clone(),
                     1 => app.config.alternative_ide_command = app.settings_state.input.clone(),
                     2 => app.config.ai_provider = app.settings_state.input.clone(),
-                    3 => app.config.ai_model = app.settings_state.input.clone(),
-                    4 => app.config.openai_api_key = crate::utils::config::obfuscate(&app.settings_state.input),
-                    5 => app.config.ollama_url = app.settings_state.input.clone(),
+                    3 => app.config.current_provider_mut().model = app.settings_state.input.clone(),
+                    4 => app.config.current_provider_mut().api_key = crate::utils::config::obfuscate(&app.settings_state.input),
+                    5 => app.config.current_provider_mut().url = app.settings_state.input.clone(),
                     _ => {}
                 }
                 app.settings_state.editing = false;
@@ -384,7 +465,7 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                 if let Some(choice) = app.settings_state.choices.get(app.settings_state.choice_idx) {
                     match app.settings_state.selected {
                         2 => app.config.ai_provider = choice.clone(),
-                        3 => app.config.ai_model = choice.clone(),
+                        3 => app.config.current_provider_mut().model = choice.clone(),
                         _ => {}
                     }
                 }
@@ -400,7 +481,7 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
     match key.code {
         KeyCode::Up | KeyCode::Char('k') if app.settings_state.selected > 0 => { app.settings_state.selected -= 1; }
         KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 6 => { app.settings_state.selected += 1; }
-        KeyCode::Enter => {
+        KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
             match app.settings_state.selected {
                 2 => { // AI Provider
                     app.settings_state.selecting = true;
@@ -415,7 +496,7 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                         "google" => crate::utils::config::GOOGLE_MODELS.iter().map(|s| s.to_string()).collect(),
                         _ => vec!["Loading models...".to_string()],
                     };
-                    app.settings_state.choice_idx = app.settings_state.choices.iter().position(|s| s == &app.config.ai_model).unwrap_or(0);
+                    app.settings_state.choice_idx = app.settings_state.choices.iter().position(|s| s == &app.config.current_provider().model).unwrap_or(0);
                 }
                 6 => {
                     crate::utils::config::save_config(&app.config);
@@ -426,8 +507,8 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                     app.settings_state.input = match app.settings_state.selected {
                         0 => app.config.ide_command.clone(),
                         1 => app.config.alternative_ide_command.clone(),
-                        4 => crate::utils::config::deobfuscate(&app.config.openai_api_key),
-                        5 => app.config.ollama_url.clone(),
+                        4 => crate::utils::config::deobfuscate(&app.config.current_provider().api_key),
+                        5 => app.config.current_provider().url.clone(),
                         _ => String::new(),
                     };
                 }
@@ -498,6 +579,38 @@ fn handle_enter_or_selection(app: &mut App) -> bool {
         app.mode = AppMode::Manage;
         app.branch_state.manage_selected = 0;
         return false;
+    }
+    false
+}
+
+fn handle_filter_keyboard(app: &mut App, key: KeyEvent) -> bool {
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.branch_state.filter_selected = app.branch_state.filter_selected.saturating_sub(1);
+        }
+        KeyCode::Down | KeyCode::Char('j') if app.branch_state.filter_selected < 9 => {
+            app.branch_state.filter_selected += 1;
+        }
+        KeyCode::Enter => {
+            app.branch_state.current_filter = match app.branch_state.filter_selected {
+                1 => Some(crate::models::BranchStatus::Merged),
+                2 => Some(crate::models::BranchStatus::Local),
+                3 => Some(crate::models::BranchStatus::Stashed),
+                4 => Some(crate::models::BranchStatus::Gone),
+                5 => Some(crate::models::BranchStatus::Ahead),
+                6 => Some(crate::models::BranchStatus::Behind),
+                7 => Some(crate::models::BranchStatus::HasUniqueCommits),
+                8 => Some(crate::models::BranchStatus::RemoteTracked),
+                9 => Some(crate::models::BranchStatus::RemoteUntracked),
+                _ => None,
+            };
+            app.refresh_filtered_branches();
+            app.mode = AppMode::Normal;
+        }
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.mode = AppMode::Normal;
+        }
+        _ => {}
     }
     false
 }

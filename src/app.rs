@@ -56,6 +56,7 @@ pub enum AppMode {
     Search,
     CodePreview(PreviewState),
     ConfirmDelete(Vec<String>),
+    CreateBranch(String),
     Message(String),
 }
 
@@ -149,6 +150,7 @@ pub struct App {
     pub needs_clear: bool,
     pub alt_pressed: bool,
     pub shift_pressed: bool,
+    pub show_terminal: bool,
     pub config: crate::utils::config::Config,
 
     // Animations
@@ -230,6 +232,7 @@ impl App {
             needs_clear: false,
             alt_pressed: false,
             shift_pressed: false,
+            show_terminal: false,
             config,
             snap_animation: None,
             branch_screen_positions: Vec::new(),

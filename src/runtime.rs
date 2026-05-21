@@ -71,18 +71,19 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
             let mut last_ollama_url = String::new();
             loop {
                 let config = crate::utils::config::load_config();
+                let provider_cfg = config.current_provider().clone();
                 
                 // Fetch Ollama models if URL changed or once at startup
-                if config.ai_provider == "ollama" && config.ollama_url != last_ollama_url {
-                    last_ollama_url = config.ollama_url.clone();
+                if config.ai_provider == "ollama" && provider_cfg.url != last_ollama_url {
+                    last_ollama_url = provider_cfg.url.clone();
                     let models = crate::utils::config::fetch_ollama_models(&last_ollama_url).await;
                     let _ = fetched_models_tx.send(models).await;
                 }
 
                 let provider_type = config.ai_provider.clone();
-                let model = config.ai_model.clone();
-                let api_key = if config.openai_api_key.is_empty() { None } else { Some(crate::utils::config::deobfuscate(&config.openai_api_key)) };
-                let url = Some(config.ollama_url.clone());
+                let model = provider_cfg.model.clone();
+                let api_key = if provider_cfg.api_key.is_empty() { None } else { Some(crate::utils::config::deobfuscate(&provider_cfg.api_key)) };
+                let url = Some(provider_cfg.url.clone());
 
                 let worker = crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
 

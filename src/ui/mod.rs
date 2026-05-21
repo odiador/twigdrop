@@ -13,9 +13,15 @@ use crate::ui::animations::{SnapPhase, DENSITY_CHARS};
 
 pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     let area = f.area();
+    let main_constraints = if app.show_terminal {
+        vec![Constraint::Min(3), Constraint::Percentage(30), Constraint::Length(1)]
+    } else {
+        vec![Constraint::Min(3), Constraint::Length(1)]
+    };
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(3), Constraint::Length(1)].as_ref())
+        .constraints(main_constraints)
         .split(area);
 
     // 1. Regular Rendering (includes side-by-side preview if active)
@@ -65,10 +71,11 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         // Apply Dissolve on Buffer
         let buf = f.buffer_mut();
         if anim.phase == SnapPhase::Flash {
-            // Flash effect: fill background with gray temporarily
+            // Flash effect: fill background with dark gray temporarily and text white
             for x in 0..area.width {
                 for y in 0..area.height {
-                    buf[(x, y)].set_bg(Color::Rgb(60, 60, 60));
+                    buf[(x, y)].set_bg(Color::Rgb(30, 30, 40));
+                    buf[(x, y)].set_fg(Color::White);
                 }
             }
         }
@@ -103,6 +110,17 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         }
     }
 
+    if app.show_terminal {
+        let terminal_block = ratatui::widgets::Block::default()
+            .title(" Integrated TTY (Alt+j to toggle) ")
+            .borders(ratatui::widgets::Borders::ALL)
+            .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(74, 79, 106)));
+        let terminal_placeholder = ratatui::widgets::Paragraph::new("Terminal session placeholder...\n(Working on full PTY integration)")
+            .block(terminal_block)
+            .style(ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray));
+        f.render_widget(terminal_placeholder, chunks[1]);
+    }
+
     // 3. Modals and Overlays
     match &app.mode {
         AppMode::Manage => screens::render_manage(f, app),
@@ -113,12 +131,35 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::Settings => screens::render_settings(f, app),
         AppMode::Search => screens::render_search(f, app),
         AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
+        AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
         // CodePreview is handled inside render_directory_searcher for side-by-side
         _ => {}
     }
 
+    let footer_area = if app.show_terminal { chunks[2] } else { chunks[1] };
+
+    // Status prefix
+    let status_prefix = match app.primary_mode {
+        PrimaryMode::Branches => {
+            let filter_text = if let Some(f) = &app.branch_state.current_filter {
+                format!("sort: {:?}", f)
+            } else {
+                "none".to_string()
+            };
+            format!(
+                " 🧹 twigdrop │ {} · {} branches · {} │",
+                app.current_branch,
+                app.branch_state.filtered_indices.len(),
+                filter_text
+            )
+        }
+        PrimaryMode::Files => {
+            format!(" 📂 Files │ {} │", app.current_branch)
+        }
+    };
+
     // 4. Footer shortcuts
-    let footer_text = if let AppMode::CodePreview(_) = app.mode {
+    let footer_shortcuts = if let AppMode::CodePreview(_) = app.mode {
         " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar "
     } else if app.mode == AppMode::Diff {
         " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
@@ -129,23 +170,35 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         }
     } else if app.alt_pressed {
         match app.primary_mode {
-            PrimaryMode::Branches => " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ f: filter ",
+            PrimaryMode::Branches => " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ Alt+j: TTY │ f: filter ",
             PrimaryMode::Files => {
-                " ↑/↓: move │ d: switch mode │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+t: External TTY "
+                " ↑/↓: move │ d: switch mode │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+t: External TTY │ Alt+j: TTY "
             }
         }
     } else {
         match app.primary_mode {
             PrimaryMode::Branches => {
-                " ↑/↓: move │ d: files │ /: search │ p: prune │ f: filter │ m: manage │ h: help │ q: quit "
+                " ↑/↓: move │ d: files │ F2: filter │ F3: search │ F4: create │ F5: prune │ F8: bulk delete │ F9: manage │ F10: settings │ F1: help │ q: quit "
             }
             PrimaryMode::Files => {
-                " ↑/↓: move │ d: branches │ Enter: preview │ v: IDE │ t: Inline TTY │ h: help "
+                " ↑/↓: move │ d: branches │ e: explorer │ v: IDE │ F5: stage/unstage │ t: TTY (Alt+j toggle) │ F10: settings │ F1: help "
             }
         }
     };
 
-    let footer = ratatui::widgets::Paragraph::new(footer_text)
-        .style(ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray));
-    f.render_widget(footer, chunks[1]);
+    let footer_line = ratatui::text::Line::from(vec![
+        ratatui::text::Span::styled(
+            status_prefix,
+            ratatui::style::Style::default()
+                .fg(ratatui::style::Color::Rgb(180, 190, 254))
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        ),
+        ratatui::text::Span::styled(
+            footer_shortcuts,
+            ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray),
+        ),
+    ]);
+
+    let footer = ratatui::widgets::Paragraph::new(footer_line);
+    f.render_widget(footer, footer_area);
 }

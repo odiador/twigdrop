@@ -60,6 +60,32 @@ pub fn apply_stash(path: &str, id: &str) -> String {
     }
 }
 
+pub fn stage_file(path: &str, file_path: &str) -> Result<String, String> {
+    match run_git(path, &["add", file_path]) {
+        Ok(_) => Ok(format!("Staged {}", file_path)),
+        Err(e) => Err(format!("Error staging {}: {}", file_path, e)),
+    }
+}
+
+pub fn unstage_file(path: &str, file_path: &str) -> Result<String, String> {
+    // Check if it's a new file or already in HEAD
+    let is_new = match run_git(path, &["ls-files", "--stage", file_path]) {
+        Ok(out) => out.is_empty(),
+        Err(_) => true,
+    };
+
+    let args = if is_new {
+        vec!["rm", "--cached", file_path]
+    } else {
+        vec!["restore", "--staged", file_path]
+    };
+
+    match run_git(path, &args) {
+        Ok(_) => Ok(format!("Unstaged {}", file_path)),
+        Err(e) => Err(format!("Error unstaging {}: {}", file_path, e)),
+    }
+}
+
 pub fn apply_resolution_to_file(repo_path: &str, file_path: &str, original_block: &str, resolved_content: &str) -> Result<(), String> {
     let full_path = std::path::Path::new(repo_path).join(file_path);
     let content = fs::read_to_string(&full_path).map_err(|e| e.to_string())?;

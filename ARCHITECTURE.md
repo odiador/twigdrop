@@ -1,6 +1,8 @@
 # Twigdrop Architecture
 
-Twigdrop is a TUI tool for managing local git branches. It follows a modular design to separate concerns between state management, UI rendering, and Git interaction.
+Twigdrop is a
+
+ TUI tool for managing local git branches. It follows a modular design to separate concerns between state management, UI rendering, and Git interaction.
 
 ## Directory Structure
 

@@ -25,8 +25,13 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
         .map(|name| {
             let mut status = vec![];
             let track_info = tracks.get(&name);
+            let mut ahead_count = 0;
+            let mut behind_count = 0;
 
             if let Some(ti) = track_info {
+                ahead_count = ti.ahead;
+                behind_count = ti.behind;
+                
                 if !ti.has_upstream {
                     status.push(BranchStatus::Local);
                     status.push(BranchStatus::RemoteUntracked);
@@ -74,6 +79,8 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
                 age,
                 author,
                 commit_date,
+                ahead_count,
+                behind_count,
             }
         })
         .collect()
