@@ -116,50 +116,82 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(74, 79, 106))));
 
     if app.mode == AppMode::Diff {
-        let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref()).split(area);
-        f.render_widget(table, chunks[0]);
+        let overlay_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(5),
+                Constraint::Percentage(90),
+                Constraint::Percentage(5),
+            ].as_ref())
+            .split(area)[1];
+            
+        let inner_area = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(5),
+                Constraint::Percentage(90),
+                Constraint::Percentage(5),
+            ].as_ref())
+            .split(overlay_area)[1];
 
-        let diff_area = chunks[1];
-        let diff_chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(diff_area);
+        f.render_widget(Clear, inner_area);
+
+        let main_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(25), Constraint::Percentage(75)].as_ref())
+            .split(inner_area);
+
+        let left_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
+            .split(main_chunks[0]);
 
         // 1. Files List
         let mut file_items = vec![];
         for (i, file) in app.branch_state.diff_files.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
             if i == app.branch_state.diff_file_selected {
-                style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+                let bg = if app.branch_state.diff_panel == FilePanel::Directory { Color::White } else { Color::Rgb(45, 45, 65) };
+                let fg = if app.branch_state.diff_panel == FilePanel::Directory { Color::Black } else { Color::White };
+                style = style.bg(bg).fg(fg).add_modifier(Modifier::BOLD);
             }
             file_items.push(ListItem::new(file.clone()).style(style));
         }
         let list_title = format!(" Changed Files ({}) ", app.branch_state.diff_files.len());
         let files_list = List::new(file_items).block(Block::default().title(list_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
-        f.render_widget(files_list, diff_chunks[0]);
+        f.render_widget(files_list, left_chunks[0]);
 
-        // 2. File Preview
+        // 2. AI Analysis separate
+        let mut info_text = "No AI analysis yet. Press 'i' to analyze.".to_string();
+        if let Some(ai) = &app.ai_state.ai_analysis {
+            info_text = ai.clone();
+        }
+        let ai_block = Block::default().title(" AI Intelligence ").borders(Borders::ALL).border_style(Style::default().fg(Color::Magenta));
+        let ai_p = Paragraph::new(info_text).block(ai_block).wrap(ratatui::widgets::Wrap { trim: true });
+        f.render_widget(ai_p, left_chunks[1]);
+
+        // 3. File Preview (The Diff)
         if let Some(state) = &app.branch_state.diff_preview {
+            let border_color = if app.branch_state.diff_panel == FilePanel::Preview { Color::Green } else { Color::Rgb(74, 79, 106) };
             let mut final_lines = Vec::new();
-            let visible_rows = diff_chunks[1].height.saturating_sub(2) as usize;
+            let visible_rows = main_chunks[1].height.saturating_sub(2) as usize;
             let start_idx = state.scroll_y;
             let end_idx = (start_idx + visible_rows + 5).min(state.highlighted_lines.len());
 
             for i in start_idx..end_idx {
                 let mut line_style = Style::default();
-                if i == state.cursor_y {
+                if i == state.cursor_y && app.branch_state.diff_panel == FilePanel::Preview {
                     line_style = line_style.bg(Color::Rgb(60, 60, 80));
                 }
                 final_lines.push(state.highlighted_lines[i].clone().style(line_style));
             }
             
-            let preview_title = format!(" Diff: {} ", state.file_path);
-            let diff_preview = Paragraph::new(Text::from(final_lines)).block(Block::default().title(preview_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Green)));
-            f.render_widget(diff_preview, diff_chunks[1]);
+            let preview_title = format!(" Diff: {} (Tab to switch) ", state.file_path);
+            let diff_preview = Paragraph::new(Text::from(final_lines)).block(Block::default().title(preview_title).borders(Borders::ALL).border_style(Style::default().fg(border_color)));
+            f.render_widget(diff_preview, main_chunks[1]);
         } else {
-            let mut info_text = app.branch_state.branch_info.clone();
-            if let Some(ai) = &app.ai_state.ai_analysis {
-                info_text = format!("--- AI ANALYSIS ---\n\n{}\n\n------------------\n\n{}", ai, info_text);
-            }
-            let fallback_diff = Paragraph::new(info_text).block(Block::default().title(" Intelligence & Diff ").borders(Borders::ALL)).scroll((app.branch_state.info_scroll, 0));
-            f.render_widget(fallback_diff, diff_chunks[1]);
+            let fallback_diff = Paragraph::new("Select a file to see diff").block(Block::default().title(" Diff Preview ").borders(Borders::ALL));
+            f.render_widget(fallback_diff, main_chunks[1]);
         }
     } else {
         f.render_widget(table, area);
