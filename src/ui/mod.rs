@@ -140,6 +140,8 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
         AppMode::Commits => screens::render_commits(f, app),
         AppMode::CommitAction(hash) => screens::render_commit_action(f, app, hash),
+        AppMode::Shell(input) => screens::render_shell(f, input),
+        AppMode::QuickActions => screens::render_quick_actions(f, app),
         // CodePreview is handled inside render_directory_searcher for side-by-side
         _ => {}
     }
@@ -186,10 +188,10 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     } else {
         match app.primary_mode {
             PrimaryMode::Branches => {
-                " ↑/↓: move │ d: files │ F2: filter │ F3: search │ F4: create │ F5: prune │ F8: bulk delete │ F9: manage │ F10: settings │ F1: help │ q: quit "
+                " ↑/↓: move │ d: files │ F2: filter │ F3: search │ F4: create │ F5: prune │ F7: actions │ !: shell │ F8: bulk delete │ F9: manage │ F1: help │ q: quit "
             }
             PrimaryMode::Files => {
-                " ↑/↓: move │ d: branches │ e: explorer │ v: IDE │ F5: stage/unstage │ t: TTY (Alt+j toggle) │ F10: settings │ F1: help "
+                " ↑/↓: move │ d: branches │ e: explorer │ v: IDE │ F5: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ F1: help "
             }
         }
     };

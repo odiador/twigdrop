@@ -60,7 +60,15 @@ pub enum AppMode {
     CreateBranch(String),
     Commits,
     CommitAction(String), // Option selected inside a commit
+    Shell(String),
+    QuickActions,
     Message(String),
+}
+
+#[derive(Default)]
+pub struct QuickActionsState {
+    pub selected: usize,
+    pub actions: Vec<String>,
 }
 
 pub struct MergeUpdate {
@@ -147,6 +155,7 @@ pub struct App {
     pub ai_state: AIState,
     pub settings_state: SettingsState,
     pub commits_state: CommitsState,
+    pub quick_actions_state: QuickActionsState,
 
     pub current_branch: String,
     pub primary_mode: PrimaryMode,
@@ -237,6 +246,19 @@ impl App {
             },
             settings_state: SettingsState::default(),
             commits_state: CommitsState::default(),
+            quick_actions_state: QuickActionsState {
+                selected: 0,
+                actions: vec![
+                    "git pull".to_string(),
+                    "git push".to_string(),
+                    "git fetch --all".to_string(),
+                    "git status".to_string(),
+                    "git remote -v".to_string(),
+                    "git branch -a".to_string(),
+                    "git commit --amend --no-edit".to_string(),
+                    "git log -n 5".to_string(),
+                ],
+            },
             current_branch,
             primary_mode,
             mode: AppMode::Normal,
