@@ -44,6 +44,80 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         return false;
     }
 
+    if let AppMode::Commits = app.mode {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') if app.commits_state.selected > 0 => {
+                app.commits_state.selected -= 1;
+            }
+            KeyCode::Down | KeyCode::Char('j') if app.commits_state.selected < app.commits_state.commits.len().saturating_sub(1) => {
+                app.commits_state.selected += 1;
+            }
+            KeyCode::Enter => {
+                if let Some(commit) = app.commits_state.commits.get(app.commits_state.selected) {
+                    app.mode = AppMode::CommitAction(commit.hash.clone());
+                    // we can use settings_state to hold the selected action
+                    app.settings_state.selected = 0; 
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('q') => {
+                app.mode = AppMode::Normal;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
+    if let AppMode::CommitAction(ref hash) = app.mode {
+        let hash = hash.clone();
+        if app.settings_state.editing {
+            match key.code {
+                KeyCode::Enter => {
+                    let new_date = app.settings_state.input.clone();
+                    app.settings_state.editing = false;
+                    // Run rebase to change date
+                    // For YOLO mode simplicity, let's use rebase --exec
+                    let exec_cmd = format!("git commit --amend --no-edit --date=\"{}\"", new_date);
+                    let msg = match crate::git::commands::run_git(path, &["rebase", &format!("{}^", hash), "--exec", &exec_cmd]) {
+                        Ok(m) => format!("Date updated to {}.\n{}", new_date, m),
+                        Err(e) => format!("Failed to update date: {}", e),
+                    };
+                    app.mode = AppMode::Message(msg);
+                }
+                KeyCode::Esc => {
+                    app.settings_state.editing = false;
+                }
+                KeyCode::Char(c) => { app.settings_state.input.push(c); }
+                KeyCode::Backspace => { app.settings_state.input.pop(); }
+                _ => {}
+            }
+            return false;
+        }
+
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') if app.settings_state.selected > 0 => {
+                app.settings_state.selected -= 1;
+            }
+            KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 1 => {
+                app.settings_state.selected += 1;
+            }
+            KeyCode::Enter => {
+                if app.settings_state.selected == 0 {
+                    app.settings_state.editing = true;
+                    app.settings_state.input = "now".to_string();
+                } else if app.settings_state.selected == 1 {
+                    let msg = crate::git::commands::run_git(path, &["commit", "--fixup", &hash]).unwrap_or_else(|e| e.to_string());
+                    let _ = crate::git::commands::run_git(path, &["-c", "sequence.editor=:", "rebase", "-i", "--autosquash", &format!("{}^", hash)]);
+                    app.mode = AppMode::Message(format!("Amended to {}:\n{}", hash, msg));
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('q') => {
+                app.mode = AppMode::Commits;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
     if let AppMode::CreateBranch(ref mut input) = app.mode {
         match key.code {
             KeyCode::Enter => {
@@ -383,6 +457,12 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 let names: Vec<String> = app.branch_state.bulk_selected.iter().cloned().collect();
                 app.snap_animation = Some(SnapAnimation::new(names));
             }
+            false
+        }
+        KeyCode::Char('C') if app.shift_pressed && app.mode == AppMode::Normal => {
+            app.commits_state.commits = crate::git::get_unpushed_commits(path);
+            app.commits_state.selected = 0;
+            app.mode = AppMode::Commits;
             false
         }
         KeyCode::Char('v') if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Files => {

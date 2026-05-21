@@ -58,6 +58,8 @@ pub enum AppMode {
     CodePreview(PreviewState),
     ConfirmDelete(Vec<String>),
     CreateBranch(String),
+    Commits,
+    CommitAction(String), // Option selected inside a commit
     Message(String),
 }
 
@@ -134,12 +136,19 @@ pub struct SettingsState {
     pub input: String,
 }
 
+#[derive(Default)]
+pub struct CommitsState {
+    pub commits: Vec<crate::models::Commit>,
+    pub selected: usize,
+}
+
 pub struct App {
     pub branch_state: BranchState,
     pub file_state: FileState,
     pub stash_state: StashState,
     pub ai_state: AIState,
     pub settings_state: SettingsState,
+    pub commits_state: CommitsState,
 
     pub current_branch: String,
     pub primary_mode: PrimaryMode,
@@ -229,6 +238,7 @@ impl App {
                 conflict_trigger_tx,
             },
             settings_state: SettingsState::default(),
+            commits_state: CommitsState::default(),
             current_branch,
             primary_mode,
             mode: AppMode::Normal,

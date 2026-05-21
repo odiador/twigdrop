@@ -132,6 +132,8 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::Search => screens::render_search(f, app),
         AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
         AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
+        AppMode::Commits => screens::render_commits(f, app),
+        AppMode::CommitAction(hash) => screens::render_commit_action(f, app, hash),
         // CodePreview is handled inside render_directory_searcher for side-by-side
         _ => {}
     }
@@ -165,8 +167,8 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
     } else if app.shift_pressed {
         match app.primary_mode {
-            PrimaryMode::Branches => " S: Stash Mgr │ D: Delete ALL Selected │ h: Legend │ q: quit ",
-            PrimaryMode::Files => " S: Stash Mgr │ h: Legend │ q: back ",
+            PrimaryMode::Branches => " S: Stash Mgr │ C: Unpushed Commits │ D: Delete ALL Selected │ h: Legend │ q: quit ",
+            PrimaryMode::Files => " S: Stash Mgr │ C: Unpushed Commits │ h: Legend │ q: back ",
         }
     } else if app.alt_pressed {
         match app.primary_mode {
