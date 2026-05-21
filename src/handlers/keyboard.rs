@@ -107,6 +107,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     FilePanel::Directory => FilePanel::Preview,
                     FilePanel::Preview => FilePanel::Directory,
                 };
+            } else if app.mode == AppMode::Diff {
+                app.branch_state.diff_panel = match app.branch_state.diff_panel {
+                    FilePanel::Directory => FilePanel::Preview,
+                    FilePanel::Preview => FilePanel::Directory,
+                };
             }
             false
         }
@@ -240,7 +245,19 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     handle_preview_keyboard(state, KeyCode::Down);
                     false
                 }
-                AppMode::Diff => { app.branch_state.info_scroll += 1; false }
+                AppMode::Diff => { 
+                    if app.branch_state.diff_panel == FilePanel::Directory {
+                        if app.branch_state.diff_file_selected + 1 < app.branch_state.diff_files.len() {
+                            app.branch_state.diff_file_selected += 1;
+                            update_diff_preview(app, path);
+                        }
+                    } else if let Some(ref mut state) = app.branch_state.diff_preview {
+                        handle_preview_keyboard(state, KeyCode::Down);
+                    } else {
+                        app.branch_state.info_scroll += 1; 
+                    }
+                    false 
+                }
                 AppMode::StashDetail => {
                     if app.stash_state.stash_selected < app.stash_state.stashes.len().saturating_sub(1) {
                         app.stash_state.stash_selected += 1;
@@ -257,7 +274,17 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     handle_preview_keyboard(state, KeyCode::Up);
                     false
                 }
-                AppMode::Diff => { app.branch_state.info_scroll = app.branch_state.info_scroll.saturating_sub(1); false }
+                AppMode::Diff => { 
+                    if app.branch_state.diff_panel == FilePanel::Directory {
+                        app.branch_state.diff_file_selected = app.branch_state.diff_file_selected.saturating_sub(1);
+                        update_diff_preview(app, path);
+                    } else if let Some(ref mut state) = app.branch_state.diff_preview {
+                        handle_preview_keyboard(state, KeyCode::Up);
+                    } else {
+                        app.branch_state.info_scroll = app.branch_state.info_scroll.saturating_sub(1); 
+                    }
+                    false 
+                }
                 AppMode::StashDetail => {
                     if app.stash_state.stash_selected > 0 {
                         app.stash_state.stash_selected -= 1;
@@ -285,6 +312,27 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     }
 }
 
+fn update_diff_preview(app: &mut App, path: &str) {
+    if let Some(branch) = app.get_filtered_branches().get(app.branch_state.selected) {
+        let branch_name = branch.name.clone();
+        if let Some(file) = app.branch_state.diff_files.get(app.branch_state.diff_file_selected) {
+            let diff_content = crate::git::get_branch_file_diff(path, &branch_name, file);
+            let mut preview = PreviewState {
+                file_path: file.clone(),
+                lines: diff_content.lines().map(|s| s.to_string()).collect(),
+                highlighted_lines: vec![],
+                cursor_y: 0,
+                scroll_y: 0,
+                selection_start: None,
+                selection_end: None,
+                line_diffs: std::collections::HashMap::new(),
+            };
+            app.update_diff_highlighting(&mut preview);
+            app.branch_state.diff_preview = Some(preview);
+        }
+    }
+}
+
 fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
     match key.code {
         KeyCode::F(5) | KeyCode::Char('p') if app.mode == AppMode::Normal => {
@@ -300,6 +348,28 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
                 app.branch_state.branch_info = git::get_branch_info(path, &branch_name);
                 app.branch_state.info_scroll = 0;
+                
+                // Load diff files
+                app.branch_state.diff_files = git::get_branch_diff_files(path, &branch_name);
+                app.branch_state.diff_file_selected = 0;
+                app.branch_state.diff_preview = None;
+                if !app.branch_state.diff_files.is_empty() {
+                    let first_file = app.branch_state.diff_files[0].clone();
+                    let diff_content = git::get_branch_file_diff(path, &branch_name, &first_file);
+                    let mut preview = PreviewState {
+                        file_path: first_file,
+                        lines: diff_content.lines().map(|s| s.to_string()).collect(),
+                        highlighted_lines: vec![],
+                        cursor_y: 0,
+                        scroll_y: 0,
+                        selection_start: None,
+                        selection_end: None,
+                        line_diffs: std::collections::HashMap::new(),
+                    };
+                    app.update_diff_highlighting(&mut preview);
+                    app.branch_state.diff_preview = Some(preview);
+                }
+                
                 app.mode = AppMode::Diff;
             }
             false
@@ -545,6 +615,27 @@ fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
                         app.branch_state.branch_info = git::get_branch_info(path, &branch_name);
                         app.branch_state.info_scroll = 0;
+                        
+                        app.branch_state.diff_files = git::get_branch_diff_files(path, &branch_name);
+                        app.branch_state.diff_file_selected = 0;
+                        app.branch_state.diff_preview = None;
+                        if !app.branch_state.diff_files.is_empty() {
+                            let first_file = app.branch_state.diff_files[0].clone();
+                            let diff_content = git::get_branch_file_diff(path, &branch_name, &first_file);
+                            let mut preview = PreviewState {
+                                file_path: first_file,
+                                lines: diff_content.lines().map(|s| s.to_string()).collect(),
+                                highlighted_lines: vec![],
+                                cursor_y: 0,
+                                scroll_y: 0,
+                                selection_start: None,
+                                selection_end: None,
+                                line_diffs: std::collections::HashMap::new(),
+                            };
+                            app.update_diff_highlighting(&mut preview);
+                            app.branch_state.diff_preview = Some(preview);
+                        }
+                        
                         app.mode = AppMode::Diff;
                     }
                     2 => {

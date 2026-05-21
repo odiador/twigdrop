@@ -16,8 +16,9 @@ pub enum PrimaryMode {
     Files,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone, Copy, Default)]
 pub enum FilePanel {
+    #[default]
     Directory,
     Preview,
 }
@@ -181,6 +182,10 @@ pub struct BranchState {
     pub branch_info: String,
     pub info_scroll: u16,
     pub search_query: String,
+    pub diff_files: Vec<String>,
+    pub diff_file_selected: usize,
+    pub diff_preview: Option<PreviewState>,
+    pub diff_panel: FilePanel,
 }
 
 impl App {
@@ -358,8 +363,9 @@ impl App {
         if let Some((path, cy, sy)) = new_preview_data
             && let Some(mut np) = self.create_preview_state(repo_path, &path)
             && let AppMode::CodePreview(ref mut state) = self.mode {
-                np.cursor_y = cy;
-                np.scroll_y = sy;
+                let max_idx = np.lines.len().saturating_sub(1);
+                np.cursor_y = cy.min(max_idx);
+                np.scroll_y = sy.min(max_idx);
                 *state = np;
         }
     }
@@ -606,6 +612,24 @@ impl App {
                 }
             }
             state.highlighted_lines.push(Line::from(spans));
+        }
+    }
+
+    pub fn update_diff_highlighting(&self, state: &mut PreviewState) {
+        state.highlighted_lines.clear();
+        for line in &state.lines {
+            let color = if line.starts_with('+') && !line.starts_with("+++") {
+                Color::Green
+            } else if line.starts_with('-') && !line.starts_with("---") {
+                Color::Red
+            } else if line.starts_with("@@") {
+                Color::Cyan
+            } else if line.starts_with("+++") || line.starts_with("---") {
+                Color::Yellow
+            } else {
+                Color::White
+            };
+            state.highlighted_lines.push(Line::from(vec![Span::styled(line.to_string(), Style::default().fg(color))]));
         }
     }
 }

@@ -94,6 +94,21 @@ pub fn get_branch_info(path: &str, branch: &str) -> String {
     .unwrap_or_else(|e| format!("Error loading branch info: {}", e))
 }
 
+pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
+    // Diff against HEAD
+    run_git(path, &["diff", "--name-only", "HEAD", branch])
+        .unwrap_or_default()
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
+    run_git(path, &["diff", "HEAD", branch, "--", file])
+        .unwrap_or_else(|e| format!("Error loading diff: {}", e))
+}
+
 pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &str) -> MergeStatus {
     if target_branch == current_branch {
         return MergeStatus::Clean;
