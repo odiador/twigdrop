@@ -118,6 +118,58 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         return false;
     }
 
+    if let AppMode::Shell(ref mut input) = app.mode {
+        match key.code {
+            KeyCode::Enter => {
+                let cmd = input.clone();
+                if !cmd.is_empty() {
+                    let msg = match crate::git::commands::run_git(path, &["-c", "alias.s=!", &cmd, "s"]) {
+                        Ok(m) => format!("$ {}\n{}", cmd, m),
+                        Err(e) => format!("Error executing {}: {}", cmd, e),
+                    };
+                    app.mode = AppMode::Message(msg);
+                } else {
+                    app.mode = AppMode::Normal;
+                }
+            }
+            KeyCode::Esc => { app.mode = AppMode::Normal; }
+            KeyCode::Char(c) => { input.push(c); }
+            KeyCode::Backspace => { input.pop(); }
+            _ => {}
+        }
+        return false;
+    }
+
+    if let AppMode::QuickActions = app.mode {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') if app.quick_actions_state.selected > 0 => {
+                app.quick_actions_state.selected -= 1;
+            }
+            KeyCode::Down | KeyCode::Char('j') if app.quick_actions_state.selected < app.quick_actions_state.actions.len().saturating_sub(1) => {
+                app.quick_actions_state.selected += 1;
+            }
+            KeyCode::Enter => {
+                let action = app.quick_actions_state.actions[app.quick_actions_state.selected].clone();
+                // Simple parser for git commands
+                let parts: Vec<&str> = action.split_whitespace().collect();
+                if parts.len() >= 2 && parts[0] == "git" {
+                    let args = &parts[1..];
+                    let msg = match crate::git::commands::run_git(path, args) {
+                        Ok(m) => format!("> {}\n{}", action, m),
+                        Err(e) => format!("Error: {}", e),
+                    };
+                    app.refresh_branches(path);
+                    app.mode = AppMode::Message(msg);
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('q') => {
+                app.mode = AppMode::Normal;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
     if let AppMode::CreateBranch(ref mut input) = app.mode {
         match key.code {
             KeyCode::Enter => {
@@ -211,6 +263,19 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::F(4) | KeyCode::Char('c') => {
             if app.mode == AppMode::Normal {
                 app.mode = AppMode::CreateBranch(String::new());
+            }
+            false
+        }
+        KeyCode::Char('!') => {
+            if app.mode == AppMode::Normal {
+                app.mode = AppMode::Shell(String::new());
+            }
+            false
+        }
+        KeyCode::F(7) => {
+            if app.mode == AppMode::Normal {
+                app.mode = AppMode::QuickActions;
+                app.quick_actions_state.selected = 0;
             }
             false
         }
