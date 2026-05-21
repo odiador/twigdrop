@@ -582,6 +582,7 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                     3 => app.config.current_provider_mut().model = app.settings_state.input.clone(),
                     4 => app.config.current_provider_mut().api_key = crate::utils::config::obfuscate(&app.settings_state.input),
                     5 => app.config.current_provider_mut().url = app.settings_state.input.clone(),
+                    7 => app.config.default_sidebar_width = app.settings_state.input.parse().unwrap_or(30),
                     _ => {}
                 }
                 app.settings_state.editing = false;
@@ -630,7 +631,7 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') if app.settings_state.selected > 0 => { app.settings_state.selected -= 1; }
-        KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 6 => { app.settings_state.selected += 1; }
+        KeyCode::Down | KeyCode::Char('j') if app.settings_state.selected < 8 => { app.settings_state.selected += 1; }
         KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
             match app.settings_state.selected {
                 2 => { // AI Provider
@@ -648,7 +649,11 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                     };
                     app.settings_state.choice_idx = app.settings_state.choices.iter().position(|s| s == &app.config.current_provider().model).unwrap_or(0);
                 }
-                6 => {
+                6 => { // Enable Animations
+                    app.config.enable_animations = !app.config.enable_animations;
+                    crate::utils::config::save_config(&app.config);
+                }
+                8 => { // Save and Exit
                     crate::utils::config::save_config(&app.config);
                     app.mode = AppMode::Normal;
                 }
@@ -659,6 +664,7 @@ fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                         1 => app.config.alternative_ide_command.clone(),
                         4 => crate::utils::config::deobfuscate(&app.config.current_provider().api_key),
                         5 => app.config.current_provider().url.clone(),
+                        7 => app.config.default_sidebar_width.to_string(),
                         _ => String::new(),
                     };
                 }

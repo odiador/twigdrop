@@ -94,13 +94,13 @@ pub struct FileState {
 }
 
 impl FileState {
-    pub fn new(status_rx: mpsc::Receiver<FileStatusUpdate>) -> Self {
+    pub fn new(status_rx: mpsc::Receiver<FileStatusUpdate>, default_width: u16) -> Self {
         Self {
             file_tree: Vec::new(),
             file_selected: 0,
             file_scroll: 0,
             git_file_statuses: HashMap::new(),
-            sidebar_width: 30,
+            sidebar_width: default_width,
             active_panel: FilePanel::Directory,
             status_rx,
             open_paths: HashSet::new(),
@@ -226,7 +226,7 @@ impl App {
                 branches,
                 ..Default::default()
             },
-            file_state: FileState::new(file_status_rx),
+            file_state: FileState::new(file_status_rx, config.default_sidebar_width as u16),
             stash_state: StashState::default(),
             ai_state: AIState {
                 ai_worker: None,

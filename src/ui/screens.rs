@@ -677,6 +677,8 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         format!("AI Model: {}", app.config.current_provider().model),
         format!("OpenAI API Key: {}", if app.config.current_provider().api_key.is_empty() { "None".to_string() } else { "****".to_string() }),
         format!("Ollama URL: {}", app.config.current_provider().url),
+        format!("Enable Animations: {}", app.config.enable_animations),
+        format!("Default Sidebar Width: {}", app.config.default_sidebar_width),
         "Save and Exit".to_string()
     ];
     let mut items = vec![];

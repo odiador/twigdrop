@@ -166,11 +166,16 @@ fn handle_modal_click(
                     app.refresh_filtered_branches();
                     app.mode = AppMode::Normal;
                 }
-            } else if app.mode == AppMode::Settings && target_option < 7 {
+            } else if app.mode == AppMode::Settings && target_option < 9 {
                 app.settings_state.selected = target_option;
-                if target_option == 6 {
+                if target_option == 8 {
                     crate::utils::config::save_config(&app.config);
                     app.mode = AppMode::Normal;
+                } else if target_option == 6 {
+                    if is_double || !app.settings_state.editing {
+                        app.config.enable_animations = !app.config.enable_animations;
+                        crate::utils::config::save_config(&app.config);
+                    }
                 } else if is_double || !app.settings_state.editing {
                     app.settings_state.editing = true;
                     app.settings_state.input = match option_idx {
@@ -180,6 +185,7 @@ fn handle_modal_click(
                         3 => app.config.current_provider().model.clone(),
                         4 => crate::utils::config::deobfuscate(&app.config.current_provider().api_key),
                         5 => app.config.current_provider().url.clone(),
+                        7 => app.config.default_sidebar_width.to_string(),
                         _ => String::new(),
                     };
                 }
