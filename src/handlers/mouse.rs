@@ -37,7 +37,27 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             if let AppMode::CodePreview(ref mut state) = app.mode {
                 let sidebar_width_px = (term_cols as f32 * app.file_state.sidebar_width as f32 / 100.0) as usize;
                 if col >= sidebar_width_px {
-                    handle_preview_drag(state, row);
+                    handle_preview_drag(state, row, term_rows as usize);
+                }
+            }
+        }
+        MouseEventKind::Up(MouseButton::Left) => {
+            if let AppMode::CodePreview(ref mut state) = app.mode {
+                if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) {
+                    if start != end {
+                        let min_y = start.min(end);
+                        let max_y = start.max(end);
+                        let mut selected_text = String::new();
+                        for i in min_y..=max_y {
+                            if let Some(line) = state.lines.get(i) {
+                                selected_text.push_str(line);
+                                selected_text.push('\n');
+                            }
+                        }
+                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                            let _ = clipboard.set_text(selected_text);
+                        }
+                    }
                 }
             }
         }
@@ -73,8 +93,21 @@ fn handle_preview_click(state: &mut PreviewState, row: usize, _col: usize, _side
     }
 }
 
-fn handle_preview_drag(state: &mut PreviewState, row: usize) {
-    if row >= 1 {
+fn handle_preview_drag(state: &mut PreviewState, row: usize, term_rows: usize) {
+    if row == 0 {
+        if state.scroll_y > 0 {
+            state.scroll_y -= 1;
+            state.cursor_y = state.scroll_y;
+            state.selection_end = Some(state.cursor_y);
+        }
+    } else if row >= term_rows.saturating_sub(3) {
+        let line_count = state.lines.len();
+        if state.scroll_y < line_count.saturating_sub(1) {
+            state.scroll_y += 1;
+            state.cursor_y = state.scroll_y + row.saturating_sub(1);
+            state.selection_end = Some(state.cursor_y);
+        }
+    } else {
         let relative_row = row - 1;
         state.selection_end = Some(state.scroll_y + relative_row);
         state.cursor_y = state.scroll_y + relative_row;
