@@ -278,6 +278,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         "  F10 / Shift+Tab: Open Settings Panel",
         "  F1 / ? / h     : Help & Legend",
         "  S (Shift+S)    : Open Stash Manager",
+        "  C (Shift+C)    : Open Unpushed Commits Manager",
         "  F (Shift+F)    : AI Auto-Fix (in Diff mode with conflicts)",
         "  Ctrl+o         : Open IDE (Root by default, Path with Alt)",
         "  q / Esc        : Quit / Back",
@@ -374,6 +375,59 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
 
     let p = Paragraph::new(text).block(block).alignment(Alignment::Center);
     f.render_widget(p, inner);
+}
+
+pub fn render_commits(f: &mut Frame, app: &App) {
+    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)].as_ref()).split(f.area())[1];
+    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)].as_ref()).split(area)[1];
+    f.render_widget(Clear, inner);
+
+    let mut items = vec![];
+    if app.commits_state.commits.is_empty() {
+        items.push(ListItem::new("No unpushed commits found.").style(Style::default().fg(Color::Gray)));
+    } else {
+        for (i, commit) in app.commits_state.commits.iter().enumerate() {
+            let mut style = Style::default().fg(Color::Gray);
+            if i == app.commits_state.selected {
+                style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+            }
+            let text = format!("{} | {} | {}", commit.hash, commit.date, commit.message);
+            items.push(ListItem::new(text).style(style));
+        }
+    }
+
+    let list = List::new(items).block(Block::default().title(" Unpushed Commits (Enter to Manage) ").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+    f.render_widget(list, inner);
+}
+
+pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
+    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)].as_ref()).split(f.area())[1];
+    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)].as_ref()).split(area)[1];
+    f.render_widget(Clear, inner);
+
+    let options = [
+        "1. Change Date (git commit --amend --date=...)",
+        "2. Amend Staged Files (git commit --fixup & rebase)",
+    ];
+
+    let mut items = vec![];
+    for (i, opt) in options.iter().enumerate() {
+        let mut style = Style::default().fg(Color::Gray);
+        if i == app.settings_state.selected {
+            style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+        }
+        
+        let text = if i == app.settings_state.selected && app.settings_state.editing && i == 0 {
+            format!("> {}", app.settings_state.input)
+        } else {
+            opt.to_string()
+        };
+
+        items.push(ListItem::new(text).style(style));
+    }
+
+    let list = List::new(items).block(Block::default().title(format!(" Manage Commit: {} ", hash)).borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
+    f.render_widget(list, inner);
 }
 
 pub fn render_create_branch(f: &mut Frame, input: &str) {

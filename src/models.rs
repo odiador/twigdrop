@@ -45,3 +45,11 @@ pub struct Branch {
     pub ahead_count: usize,
     pub behind_count: usize,
 }
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Commit {
+    pub hash: String,
+    pub message: String,
+    pub date: String,
+    pub author: String,
+}

@@ -109,6 +109,44 @@ pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
         .unwrap_or_else(|e| format!("Error loading diff: {}", e))
 }
 
+pub fn get_unpushed_commits(path: &str) -> Vec<crate::models::Commit> {
+    // Determine the upstream tracking branch or use origin/HEAD
+    let upstream = run_git(path, &["rev-parse", "--abbrev-ref", "@{u}"]).unwrap_or_else(|_| "".to_string());
+    
+    let range = if upstream.trim().is_empty() {
+        "HEAD".to_string() // If no upstream, all commits are unpushed technically, or we could just show last 10
+    } else {
+        format!("{}..HEAD", upstream.trim())
+    };
+
+    let out = run_git(
+        path,
+        &["log", &range, "--format=%h|%s|%cr|%an"],
+    ).unwrap_or_default();
+
+    out.lines()
+        .map(|line| {
+            let parts: Vec<&str> = line.splitn(4, '|').collect();
+            if parts.len() == 4 {
+                crate::models::Commit {
+                    hash: parts[0].to_string(),
+                    message: parts[1].to_string(),
+                    date: parts[2].to_string(),
+                    author: parts[3].to_string(),
+                }
+            } else {
+                crate::models::Commit {
+                    hash: "".to_string(),
+                    message: line.to_string(),
+                    date: "".to_string(),
+                    author: "".to_string(),
+                }
+            }
+        })
+        .filter(|c| !c.hash.is_empty())
+        .collect()
+}
+
 pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &str) -> MergeStatus {
     if target_branch == current_branch {
         return MergeStatus::Clean;
