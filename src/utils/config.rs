@@ -17,6 +17,8 @@ pub struct Config {
     pub last_primary_mode: usize,        // 0: Branches, 1: Files
     pub ai_provider: String,
     pub providers: std::collections::HashMap<String, ProviderConfig>,
+    pub enable_animations: bool,
+    pub default_sidebar_width: usize,
 }
 
 impl Default for Config {
@@ -53,6 +55,8 @@ impl Default for Config {
             last_primary_mode: 0,
             ai_provider: "ollama".to_string(),
             providers,
+            enable_animations: true,
+            default_sidebar_width: 30,
         }
     }
 }
