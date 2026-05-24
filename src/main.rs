@@ -2,9 +2,12 @@ mod actions;
 mod ai;
 mod app;
 mod db;
+mod events;
 mod git;
 mod handlers;
 mod models;
+mod state;
+mod tasks;
 mod ui;
 mod utils;
 mod runtime;
@@ -26,9 +29,10 @@ use std::{env, io};
 use tokio::sync::mpsc;
 
 use app::{AIUpdate, App, ConflictResolutionUpdate};
-use handlers::handle_event;
 use models::ConflictBlock;
 use runtime::Runtime;
+
+use events::Event;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -51,13 +55,15 @@ async fn main() -> Result<()> {
     let (trigger_tx, trigger_rx) = mpsc::channel::<()>(1);
     
     let (ai_update_tx, ai_rx) = mpsc::channel::<AIUpdate>(10);
-    let (ai_trigger_tx, ai_trigger_rx) = mpsc::channel::<(String, String)>(10);
+    let (ai_trigger_tx, ai_trigger_rx) = mpsc::channel::<(String, String, String)>(10);
     
     let (conflict_resolution_tx, conflict_resolution_rx) = mpsc::channel::<ConflictResolutionUpdate>(10);
     let (conflict_trigger_tx, conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
 
     let (file_status_tx, file_status_rx) = mpsc::channel::<app::FileStatusUpdate>(10);
     let (fetched_models_tx, fetched_models_rx) = mpsc::channel::<Vec<String>>(1);
+    
+    let (event_tx, mut event_rx) = mpsc::channel::<Event>(100);
 
     let mut app = App::new(
         &path,
@@ -73,6 +79,7 @@ async fn main() -> Result<()> {
         fetched_models_rx,
     );
     app.setup_ai(&path);
+    app.event_tx = Some(event_tx.clone());
 
     let runtime = Runtime::new(&path);
     
@@ -95,7 +102,24 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let res = run_app(&mut terminal, &mut app, &path).await;
+    // Spawn event listener task
+    let event_tx_clone = event_tx.clone();
+    tokio::spawn(async move {
+        loop {
+            if event::poll(std::time::Duration::from_millis(50)).unwrap_or(false) {
+                if let Ok(crossterm_event) = event::read() {
+                    match crossterm_event {
+                        event::Event::Key(k) => { let _ = event_tx_clone.send(Event::Key(k)).await; }
+                        event::Event::Mouse(m) => { let _ = event_tx_clone.send(Event::Mouse(m)).await; }
+                        event::Event::Resize(w, h) => { let _ = event_tx_clone.send(Event::Resize(w, h)).await; }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    });
+
+    let res = run_app(&mut terminal, &mut app, &path, &mut event_rx).await;
 
     disable_raw_mode()?;
     execute!(
@@ -117,6 +141,7 @@ async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut App,
     path: &str,
+    event_rx: &mut mpsc::Receiver<Event>,
 ) -> io::Result<()> {
     loop {
         app.update_from_channel(path);
@@ -128,8 +153,23 @@ async fn run_app(
 
         terminal.draw(|f| ui::draw(f, app, path))?;
 
-        if event::poll(std::time::Duration::from_millis(50))? && handle_event(app, path)? {
-            return Ok(());
+        while let Ok(event) = event_rx.try_recv() {
+            // First we give it to keyboard/mouse handlers
+            match &event {
+                Event::Key(key) => {
+                    if handlers::keyboard::handle_keyboard(app, *key, path) {
+                        return Ok(());
+                    }
+                }
+                Event::Mouse(mouse) => {
+                    handlers::mouse::handle_mouse(app, *mouse, path);
+                }
+                _ => {}
+            }
+            // Then we update the app state
+            app.update(event);
         }
+        
+        tokio::time::sleep(std::time::Duration::from_millis(16)).await;
     }
 }

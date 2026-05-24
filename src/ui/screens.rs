@@ -775,15 +775,15 @@ pub fn render_settings(f: &mut Frame, app: &App) {
     f.render_widget(Clear, inner);
 
     let options = [
-        format!("Primary IDE: {}", app.config.ide_command),
-        format!("Alternative IDE: {}", app.config.alternative_ide_command),
-        format!("AI Provider: {}", app.config.ai_provider),
-        format!("AI Model: {}", app.config.current_provider().model),
-        format!("OpenAI API Key: {}", if app.config.current_provider().api_key.is_empty() { "None".to_string() } else { "****".to_string() }),
-        format!("Ollama URL: {}", app.config.current_provider().url),
-        format!("Enable Animations: {}", app.config.enable_animations),
-        format!("Default Sidebar Width: {}", app.config.default_sidebar_width),
-        "Save and Exit".to_string()
+        format!("[ Editor ] Primary IDE          : {}", app.config.ide_command),
+        format!("[ Editor ] Alternative IDE      : {}", app.config.alternative_ide_command),
+        format!("[ AI ]     AI Provider          : {}", app.config.ai_provider),
+        format!("[ AI ]     AI Model             : {}", app.config.current_provider().model),
+        format!("[ AI ]     OpenAI API Key       : {}", if app.config.current_provider().api_key.is_empty() { "None".to_string() } else { "****".to_string() }),
+        format!("[ AI ]     Ollama URL           : {}", app.config.current_provider().url),
+        format!("[ UI ]     Enable Animations    : {}", app.config.enable_animations),
+        format!("[ UI ]     Default Sidebar Width: {}", app.config.default_sidebar_width),
+        "           [ Save and Exit ]".to_string()
     ];
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
@@ -893,4 +893,119 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
     }
     f.render_widget(Clear, area);
     f.render_widget(Paragraph::new(Text::from(final_lines)).block(block), area);
+}
+
+pub fn render_interactive_rebase(f: &mut ratatui::Frame, app: &mut crate::app::App) {
+    let area = crate::ui::components::centered_rect(80, 80, f.area());
+    f.render_widget(ratatui::widgets::Clear, area);
+
+    let block = ratatui::widgets::Block::default()
+        .title(" Interactive Rebase ")
+        .borders(ratatui::widgets::Borders::ALL)
+        .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(203, 166, 247)));
+        
+    let items: Vec<ratatui::widgets::ListItem> = app.rebase_state.commits.iter().enumerate().map(|(i, commit)| {
+        let action_str = match commit.action {
+            crate::app::RebaseAction::Pick => "pick  ",
+            crate::app::RebaseAction::Reword => "reword",
+            crate::app::RebaseAction::Drop => "drop  ",
+            crate::app::RebaseAction::Squash => "squash",
+        };
+        
+        let action_color = match commit.action {
+            crate::app::RebaseAction::Pick => ratatui::style::Color::DarkGray,
+            crate::app::RebaseAction::Reword => ratatui::style::Color::Cyan,
+            crate::app::RebaseAction::Drop => ratatui::style::Color::Red,
+            crate::app::RebaseAction::Squash => ratatui::style::Color::Yellow,
+        };
+
+        let message = if let Some(new_msg) = &commit.new_message {
+            new_msg.clone()
+        } else {
+            commit.original_message.clone()
+        };
+
+        let content = if app.rebase_state.editing && app.rebase_state.selected == i {
+            format!("{} {} {}", action_str, commit.hash, app.rebase_state.input)
+        } else {
+            format!("{} {} {}", action_str, commit.hash, message)
+        };
+
+        let mut style = ratatui::style::Style::default();
+        if i == app.rebase_state.selected {
+            style = style.bg(ratatui::style::Color::Rgb(49, 50, 68)).fg(ratatui::style::Color::White);
+        } else {
+            style = style.fg(action_color);
+        }
+
+        ratatui::widgets::ListItem::new(content).style(style)
+    }).collect();
+
+    let list = ratatui::widgets::List::new(items)
+        .block(block)
+        .highlight_style(ratatui::style::Style::default().add_modifier(ratatui::style::Modifier::BOLD));
+
+    f.render_widget(list, area);
+}
+
+pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
+    let area = crate::ui::components::centered_rect(35, 35, f.area());
+    f.render_widget(ratatui::widgets::Clear, area);
+
+    let ascii_logo = r#"
+ ______         _           __               
+/_  __/        (_)___ _____/ /________  ____ 
+ / / | | /| / / / __ `/ __  / ___/ __ \/ __ \
+/ /  | |/ |/ / / /_/ / /_/ / /  / /_/ / /_/ /
+/_/   |__/|__/_/\__, /\__,_/_/   \____/ .___/ 
+               /____/                /_/     
+"#;
+
+    let logo_paragraph = ratatui::widgets::Paragraph::new(ascii_logo)
+        .style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan))
+        .alignment(ratatui::layout::Alignment::Center);
+
+    let _chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Length(8), // Logo
+            ratatui::layout::Constraint::Min(0),
+        ])
+        .split(area);
+
+    let block = ratatui::widgets::Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan));
+        
+    let inner_area = block.inner(area);
+    f.render_widget(block, area);
+
+    let inner_chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Length(8), // Logo
+            ratatui::layout::Constraint::Min(0),
+        ])
+        .split(inner_area);
+
+
+    f.render_widget(logo_paragraph, inner_chunks[0]);
+
+    let options = vec![" Options ", " Help ", " Quit "];
+    let mut items = vec![];
+    for (i, opt) in options.iter().enumerate() {
+        let mut style = ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray);
+        let mut txt = opt.to_string();
+        if i == app.main_menu_state.selected {
+            style = style.bg(ratatui::style::Color::Rgb(45, 45, 65)).fg(ratatui::style::Color::White).add_modifier(ratatui::style::Modifier::BOLD);
+            txt = format!("> {}", txt);
+        } else {
+            txt = format!("  {}", txt);
+        }
+        items.push(ratatui::widgets::ListItem::new(txt).style(style));
+    }
+
+    let list = ratatui::widgets::List::new(items);
+
+    f.render_widget(list, inner_chunks[1]);
 }

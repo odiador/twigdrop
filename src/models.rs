@@ -35,6 +35,7 @@ pub enum GutterStatus {
     Deleted,
 }
 
+#[derive(Debug, Clone)]
 pub struct Branch {
     pub name: String,
     pub status: Vec<BranchStatus>,
