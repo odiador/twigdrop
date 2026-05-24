@@ -103,13 +103,13 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
             
             if anim.phase == SnapPhase::Done {
                 let msg = app.apply_snap_deletion(path);
-                app.ui.mode = AppMode::Message(msg);
+                app.ui.push_modal(AppMode::Message(msg));
                 app.ui.snap_animation = None;
             }
         }
     } else if app.ui.snap_animation.is_some() {
         let msg = app.apply_snap_deletion(path);
-        app.ui.mode = AppMode::Message(msg);
+        app.ui.push_modal(AppMode::Message(msg));
         app.ui.snap_animation = None;
     }
 
@@ -191,10 +191,10 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     f.render_widget(footer, footer_area);
 
     // Apply global darkening overlay for modals
-    let is_modal = match app.ui.current_mode() {
-        AppMode::Normal | AppMode::CodePreview(_) | AppMode::Diff => false,
-        _ => true,
-    };
+    let is_modal = !matches!(
+        app.ui.current_mode(),
+        AppMode::Normal | AppMode::CodePreview(_) | AppMode::Diff
+    );
 
     if is_modal {
         let area = f.area();

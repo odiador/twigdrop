@@ -12,21 +12,22 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
 
     match event.kind {
         MouseEventKind::Down(MouseButton::Left) => {
-            if app.ui.mode != AppMode::Normal && !matches!(app.ui.mode, AppMode::CodePreview(_))
-                && app.ui.mode != AppMode::Diff
+            let cur = app.ui.current_mode().clone();
+            if cur != AppMode::Normal && !matches!(cur, AppMode::CodePreview(_))
+                && cur != AppMode::Diff
                 && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize, path)
             {
                 return;
             }
 
-            if app.ui.mode == AppMode::Diff {
+            if *app.ui.current_mode() == AppMode::Diff {
                 let v_start = (term_rows as f32 * 0.05) as usize;
                 let v_end = (term_rows as f32 * 0.95) as usize;
                 let h_start = (term_cols as f32 * 0.05) as usize;
                 let h_end = (term_cols as f32 * 0.95) as usize;
-                
+
                 if row < v_start || row > v_end || col < h_start || col > h_end {
-                    app.ui.mode = AppMode::Normal;
+                    app.ui.pop_modal();
                     return;
                 }
                 
@@ -47,11 +48,13 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                 return;
             }
 
-            if let AppMode::CodePreview(ref mut state) = app.ui.mode {
+            if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
                 let sidebar_width_px = (term_cols as f32 * app.ui.sidebar_width as f32 / 100.0) as usize;
                 if col >= sidebar_width_px {
                     app.ui.active_panel = FilePanel::Preview;
-                    handle_preview_click(state, row, col, sidebar_width_px);
+                    if let AppMode::CodePreview(state) = app.ui.current_mode_mut() {
+                        handle_preview_click(state, row, col, sidebar_width_px);
+                    }
                     return;
                 } else {
                     app.ui.active_panel = FilePanel::Directory;
@@ -64,51 +67,55 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {
-            if let AppMode::CodePreview(ref mut state) = app.ui.mode {
+            if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
                 let sidebar_width_px = (term_cols as f32 * app.ui.sidebar_width as f32 / 100.0) as usize;
                 if col >= sidebar_width_px {
-                    handle_preview_drag(state, row, term_rows as usize);
+                    if let AppMode::CodePreview(state) = app.ui.current_mode_mut() {
+                        handle_preview_drag(state, row, term_rows as usize);
+                    }
                 }
             }
         }
         MouseEventKind::Up(MouseButton::Left) => {
-            if let AppMode::CodePreview(ref mut state) = app.ui.mode {
-                if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) {
-                    if start != end {
-                        let min_y = start.min(end);
-                        let max_y = start.max(end);
-                        let mut selected_text = String::new();
-                        for i in min_y..=max_y {
-                            if let Some(line) = state.lines.get(i) {
-                                selected_text.push_str(line);
-                                selected_text.push('\n');
-                            }
+            if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
+                let (sel_start, sel_end, lines) = if let AppMode::CodePreview(state) = app.ui.current_mode_mut() {
+                    (state.selection_start, state.selection_end, state.lines.clone())
+                } else { (None, None, vec![]) };
+
+                if let (Some(start), Some(end)) = (sel_start, sel_end)
+                    && start != end {
+                    let min_y = start.min(end);
+                    let max_y = start.max(end);
+                    let mut selected_text = String::new();
+                    for i in min_y..=max_y {
+                        if let Some(line) = lines.get(i) {
+                            selected_text.push_str(line);
+                            selected_text.push('\n');
                         }
-                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                            let _ = clipboard.set_text(selected_text);
-                        }
+                    }
+                    if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                        let _ = clipboard.set_text(selected_text);
                     }
                 }
             }
         }
         MouseEventKind::ScrollUp => {
-            if app.ui.mode == AppMode::Diff {
+            if *app.ui.current_mode() == AppMode::Diff {
                 if app.ui.diff_panel == FilePanel::Directory {
                     app.ui.diff_file_selected = app.ui.diff_file_selected.saturating_sub(1);
                     crate::handlers::keyboard::update_diff_preview(app, path);
-                } else if let Some(ref mut state) = app.repo.diff_preview {
+                } else if let Some(ref mut state) = app.repo.diff_preview
+                    && state.scroll_y > 0 { state.scroll_y -= 1; }
+            } else if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
+                if let AppMode::CodePreview(state) = app.ui.current_mode_mut() {
                     if state.scroll_y > 0 { state.scroll_y -= 1; }
-                }
-            } else if let AppMode::CodePreview(ref mut state) = app.ui.mode {
-                if state.scroll_y > 0 {
-                    state.scroll_y -= 1;
                 }
             } else {
                 app.previous();
             }
         }
         MouseEventKind::ScrollDown => {
-            if app.ui.mode == AppMode::Diff {
+            if *app.ui.current_mode() == AppMode::Diff {
                 if app.ui.diff_panel == FilePanel::Directory {
                     if app.ui.diff_file_selected + 1 < app.repo.diff_files.len() {
                         app.ui.diff_file_selected += 1;
@@ -118,10 +125,10 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                     let line_count = state.lines.len();
                     if state.scroll_y < line_count.saturating_sub(1) { state.scroll_y += 1; }
                 }
-            } else if let AppMode::CodePreview(ref mut state) = app.ui.mode {
-                let line_count = state.lines.len();
-                if state.scroll_y < line_count.saturating_sub(1) {
-                    state.scroll_y += 1;
+            } else if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
+                if let AppMode::CodePreview(state) = app.ui.current_mode_mut() {
+                    let line_count = state.lines.len();
+                    if state.scroll_y < line_count.saturating_sub(1) { state.scroll_y += 1; }
                 }
             } else {
                 app.next();
@@ -169,16 +176,18 @@ fn handle_modal_click(
     term_cols: usize,
     path: &str,
 ) -> bool {
+    let cur = app.ui.current_mode().clone();
+
     // Modal areas based on percentages in screens.rs
-    let (v_start_pct, v_size_pct) = match app.ui.mode {
+    let (v_start_pct, v_size_pct) = match &cur {
         AppMode::Filter => (0.20, 0.60),
         AppMode::Manage | AppMode::Message(_) | AppMode::ConfirmDelete(_) => (0.30, 0.40),
         AppMode::Settings => (0.25, 0.50),
-        AppMode::Help => (0.0, 1.0), // Help is full screen
+        AppMode::Help => (0.0, 1.0),
         _ => (0.30, 0.40),
     };
 
-    let h_start_pct = match app.ui.mode {
+    let h_start_pct = match &cur {
         AppMode::Filter | AppMode::Manage => 0.30,
         AppMode::Settings => 0.20,
         AppMode::Message(_) | AppMode::Help | AppMode::ConfirmDelete(_) => 0.15,
@@ -192,23 +201,23 @@ fn handle_modal_click(
 
     // [X] detection (Top right corner of the modal)
     if row == min_row && col > max_col.saturating_sub(6) && col <= max_col {
-        app.ui.mode = AppMode::Normal;
+        app.ui.pop_modal();
         return true;
     }
 
     // Click outside to close
     if row < min_row || row > max_row || col < min_col || col > max_col {
-        app.ui.mode = AppMode::Normal;
+        app.ui.pop_modal();
         return true;
     }
 
     // Click inside handling
     let now = Instant::now();
-    if app.ui.mode == AppMode::Manage || app.ui.mode == AppMode::Filter || app.ui.mode == AppMode::Settings {
+    if cur == AppMode::Manage || cur == AppMode::Filter || cur == AppMode::Settings {
         if row > min_row {
             let option_idx = row - min_row - 1;
-            
-            let (is_double, target_option) = if let Some(last_opt) = app.ui.last_click_row 
+
+            let (is_double, target_option) = if let Some(last_opt) = app.ui.last_click_row
                 && last_opt == option_idx
                 && now.duration_since(app.ui.last_click_time).as_millis() < 500 {
                     (true, option_idx)
@@ -216,7 +225,7 @@ fn handle_modal_click(
                     (false, option_idx)
                 };
 
-            if app.ui.mode == AppMode::Manage && target_option < 7 {
+            if cur == AppMode::Manage && target_option < 7 {
                 app.ui.manage_selected = target_option;
                 if is_double {
                     use ratatui::crossterm::event::{KeyEvent, KeyCode, KeyEventKind, KeyEventState, KeyModifiers};
@@ -228,7 +237,7 @@ fn handle_modal_click(
                     };
                     crate::handlers::keyboard::handle_keyboard(app, enter_event, path);
                 }
-            } else if app.ui.mode == AppMode::Filter && target_option < 10 {
+            } else if cur == AppMode::Filter && target_option < 10 {
                 app.ui.filter_selected = target_option;
                 if is_double {
                     app.ui.current_filter = match target_option {
@@ -244,13 +253,13 @@ fn handle_modal_click(
                         _ => None,
                     };
                     app.refresh_filtered_branches();
-                    app.ui.mode = AppMode::Normal;
+                    app.ui.pop_modal();
                 }
-            } else if app.ui.mode == AppMode::Settings && target_option < 9 {
+            } else if cur == AppMode::Settings && target_option < 9 {
                 app.ui.settings_state.selected = target_option;
                 if target_option == 8 {
                     crate::utils::config::save_config(&app.config);
-                    app.ui.mode = AppMode::Normal;
+                    app.ui.pop_modal();
                 } else if target_option == 6 {
                     if is_double || !app.ui.settings_state.editing {
                         app.config.enable_animations = !app.config.enable_animations;
@@ -270,23 +279,20 @@ fn handle_modal_click(
                     };
                 }
             }
-            
+
             app.ui.last_click_row = Some(option_idx);
             app.ui.last_click_time = now;
         }
-    } else if let AppMode::ConfirmDelete(names) = &app.ui.mode {
-        let names = names.clone();
+    } else if let AppMode::ConfirmDelete(names) = cur {
         if row >= max_row.saturating_sub(3) {
             let mid_col = min_col + (max_col - min_col) / 2;
             if col < mid_col {
                 app.ui.snap_animation = Some(SnapAnimation::new(names));
-                app.ui.mode = AppMode::Normal;
-            } else {
-                app.ui.mode = AppMode::Normal;
             }
+            app.ui.pop_modal();
         }
-    } else if let AppMode::Message(_) = app.ui.mode {
-        app.ui.mode = AppMode::Normal;
+    } else if matches!(cur, AppMode::Message(_)) {
+        app.ui.pop_modal();
     }
 
     true
@@ -341,7 +347,7 @@ fn handle_directory_click(app: &mut App, row: usize, path: &str, col: usize) {
             } else {
                 let rel_path = app.repo.file_tree[target_idx].path.to_string_lossy().to_string();
                 if let Some(preview) = app.create_preview_state(path, &rel_path) {
-                    app.ui.mode = AppMode::CodePreview(preview);
+                    app.ui.push_modal(AppMode::CodePreview(preview));
                 }
             }
             app.ui.last_click_row = None;
@@ -360,10 +366,10 @@ fn process_double_click(app: &mut App, target_idx: usize, double_click_mode: App
         && now.duration_since(app.ui.last_click_time).as_millis() < 500
     {
         app.ui.selected_branch_idx = target_idx;
-        app.ui.mode = double_click_mode;
-        if let AppMode::Manage = app.ui.mode {
+        if let AppMode::Manage = double_click_mode {
             app.ui.manage_selected = 0;
         }
+        app.ui.push_modal(double_click_mode);
         app.ui.last_click_row = None;
         return;
     }

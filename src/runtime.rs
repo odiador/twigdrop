@@ -114,13 +114,11 @@ impl Runtime {
                                 };
 
                                 let mut cached = None;
-                                if let Some(ref d) = db {
-                                    if let Ok(Some((hash, s, c))) = d.get_analysis(&branch_name) {
-                                        if hash == current_hash {
+                                if let Some(ref d) = db
+                                    && let Ok(Some((hash, s, c))) = d.get_analysis(&branch_name)
+                                        && hash == current_hash {
                                             cached = Some(format!("--- CACHED ---\nSummary:\n{}\n\nRecommendation:\n{}", s, c));
                                         }
-                                    }
-                                }
 
                                 if let Some(msg) = cached {
                                     let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(msg))).await;

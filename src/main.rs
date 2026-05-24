@@ -84,8 +84,8 @@ async fn main() -> Result<()> {
     let event_tx_clone = event_tx.clone();
     tokio::task::spawn_blocking(move || {
         loop {
-            if event::poll(std::time::Duration::from_millis(10)).unwrap_or(false) {
-                if let Ok(crossterm_event) = event::read() {
+            if event::poll(std::time::Duration::from_millis(10)).unwrap_or(false)
+                && let Ok(crossterm_event) = event::read() {
                     match crossterm_event {
                         event::Event::Key(k) => { let _ = event_tx_clone.blocking_send(Event::Key(k)); }
                         event::Event::Mouse(m) => { let _ = event_tx_clone.blocking_send(Event::Mouse(m)); }
@@ -93,7 +93,6 @@ async fn main() -> Result<()> {
                         _ => {}
                     }
                 }
-            }
         }
     });
 
@@ -125,11 +124,10 @@ async fn run_app(
     loop {
         while let Ok(event) = event_rx.try_recv() {
             match &event {
-                Event::Key(key) => {
-                    if handlers::keyboard::handle_keyboard(app, *key, path) {
+                Event::Key(key)
+                    if handlers::keyboard::handle_keyboard(app, *key, path) => {
                         return Ok(());
                     }
-                }
                 Event::Mouse(mouse) => {
                     handlers::mouse::handle_mouse(app, *mouse, path);
                 }
