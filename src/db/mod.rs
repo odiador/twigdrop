@@ -9,6 +9,11 @@ pub struct Database {
 impl Database {
     pub fn new(path: PathBuf) -> Result<Self> {
         let conn = Connection::open(path)?;
+        
+        // Activación del modo WAL para optimizar lecturas concurrentes
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        
         let db = Self { conn };
         db.init()?;
         Ok(db)
@@ -21,7 +26,7 @@ impl Database {
                 last_commit_hash TEXT NOT NULL,
                 summary TEXT,
                 cleanup_recommendation TEXT,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )",
             [],
         )?;
@@ -49,7 +54,7 @@ impl Database {
         cleanup: &str,
     ) -> Result<()> {
         self.conn.execute(
-            "INSERT OR REPLACE INTO branch_analysis (branch_name, last_commit_hash, summary, cleanup_recommendation, updated_at)
+            "INSERT OR REPLACE INTO branch_analysis (branch_name, last_commit_hash, summary, cleanup_recommendation, timestamp)
              VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
             [branch_name, hash, summary, cleanup],
         )?;

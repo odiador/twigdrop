@@ -60,14 +60,13 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
 
 
     pub fn spawn_ai_worker(
-        &self, 
-        mut ai_trigger_rx: mpsc::Receiver<(String, String)>, 
+        &self,
+        mut ai_trigger_rx: mpsc::Receiver<(String, String, String)>,
         ai_update_tx: mpsc::Sender<AIUpdate>,
         mut conflict_trigger_rx: mpsc::Receiver<(String, ConflictBlock)>,
         conflict_resolution_tx: mpsc::Sender<ConflictResolutionUpdate>,
         fetched_models_tx: mpsc::Sender<Vec<String>>,
-    ) {
-        tokio::spawn(async move {
+    ) {        tokio::spawn(async move {
             let mut last_ollama_url = String::new();
             loop {
                 let config = crate::utils::config::load_config();
@@ -89,8 +88,7 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
 
                 if let Some(w) = worker {
                     tokio::select! {
-                        Some((repo_path, branch_name)) = ai_trigger_rx.recv() => {
-                            // ... existing logic
+                        Some((task_type, repo_path, payload)) = ai_trigger_rx.recv() => {
                             let db_path = crate::utils::config::get_config_path()
                                 .unwrap_or_else(|| std::path::PathBuf::from(".git"))
                                 .parent()
@@ -98,38 +96,53 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
                                 .join("twigdrop.db");
                             let db = crate::db::Database::new(db_path).ok();
                             
-                            let hash = match git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
-                                Ok(h) => h.trim().to_string(),
-                                Err(_) => continue,
-                            };
-
-                            let mut cached_result = None;
-                            if let Some(ref d) = db
-                                && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
-                                && cached_hash == hash
-                            {
-                                cached_result = Some(format!("--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}", summary, cleanup));
-                            }
-
-                            if let Some(analysis) = cached_result {
-                                let _ = ai_update_tx.send(AIUpdate { analysis }).await;
+                            if task_type == "rename_commit" {
+                                let hash = payload;
+                                let diff = git::commands::run_git(&repo_path, &["show", &hash]).unwrap_or_default();
+                                let _ = ai_update_tx.send(AIUpdate { analysis: "Generating commit message with AI...".to_string() }).await;
+                                
+                                // Actually, we should create a new method in w.inner for this, or just use summarize_diff for now.
+                                // It returns a summary which we can use.
+                                if let Ok(s) = w.inner.summarize_diff(&diff).await {
+                                    let _ = ai_update_tx.send(AIUpdate { analysis: format!("Commit Msg Suggestion:\n{}", s) }).await;
+                                } else {
+                                    let _ = ai_update_tx.send(AIUpdate { analysis: "Failed to generate commit message.".to_string() }).await;
+                                }
                             } else {
-                                let _ = ai_update_tx.send(AIUpdate { analysis: "Analyzing with AI...".to_string() }).await;
-                                let diff = git::get_branch_info(&repo_path, &branch_name);
-                                let summary_res = w.inner.summarize_diff(&diff).await;
-                                let cleanup_res = w.inner.recommend_cleanup(&branch_name).await;
+                                let branch_name = payload;
+                                let hash = match git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
+                                    Ok(h) => h.trim().to_string(),
+                                    Err(_) => continue,
+                                };
 
-                                match (summary_res, cleanup_res) {
-                                    (Ok(s), Ok(c)) => {
-                                        if let Some(ref d) = db {
-                                            let _ = d.save_analysis(&branch_name, &hash, &s, &c);
+                                let mut cached_result = None;
+                                if let Some(ref d) = db
+                                    && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
+                                    && cached_hash == hash
+                                {
+                                    cached_result = Some(format!("--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}", summary, cleanup));
+                                }
+
+                                if let Some(analysis) = cached_result {
+                                    let _ = ai_update_tx.send(AIUpdate { analysis }).await;
+                                } else {
+                                    let _ = ai_update_tx.send(AIUpdate { analysis: "Analyzing with AI...".to_string() }).await;
+                                    let diff = git::get_branch_info(&repo_path, &branch_name);
+                                    let summary_res = w.inner.summarize_diff(&diff).await;
+                                    let cleanup_res = w.inner.recommend_cleanup(&branch_name).await;
+
+                                    match (summary_res, cleanup_res) {
+                                        (Ok(s), Ok(c)) => {
+                                            if let Some(ref d) = db {
+                                                let _ = d.save_analysis(&branch_name, &hash, &s, &c);
+                                            }
+                                            let _ = ai_update_tx.send(AIUpdate {
+                                                analysis: format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
+                                            }).await;
                                         }
-                                        let _ = ai_update_tx.send(AIUpdate {
-                                            analysis: format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
-                                        }).await;
-                                    }
-                                    _ => {
-                                        let _ = ai_update_tx.send(AIUpdate { analysis: "AI Analysis failed.".to_string() }).await;
+                                        _ => {
+                                            let _ = ai_update_tx.send(AIUpdate { analysis: "AI Analysis failed.".to_string() }).await;
+                                        }
                                     }
                                 }
                             }

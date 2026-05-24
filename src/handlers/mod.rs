@@ -6,6 +6,7 @@ use crate::handlers::keyboard::handle_keyboard;
 use crate::handlers::mouse::handle_mouse;
 use ratatui::crossterm::event::{self, Event};
 
+#[allow(dead_code)]
 pub fn handle_event(app: &mut App, path: &str) -> Result<bool, std::io::Error> {
     // Wait for the first event (blocking)
     let first_event = event::read()?;
@@ -22,6 +23,7 @@ pub fn handle_event(app: &mut App, path: &str) -> Result<bool, std::io::Error> {
     Ok(quit)
 }
 
+#[allow(dead_code)]
 fn process_single_event(app: &mut App, event: Event, path: &str) -> bool {
     match event {
         Event::Key(key) => {

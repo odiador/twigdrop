@@ -8,6 +8,20 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     app.alt_pressed = key.modifiers.contains(KeyModifiers::ALT);
     app.shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
 
+    // Global quit
+    if key.code == KeyCode::Char('q') {
+        let is_editing = match &app.mode {
+            AppMode::Settings => app.settings_state.editing || app.settings_state.selecting,
+            AppMode::Search | AppMode::CreateBranch(_) | AppMode::Shell(_) => true,
+            AppMode::InteractiveRebase => app.rebase_state.editing,
+            AppMode::CommitAction(_) => app.settings_state.editing,
+            _ => false,
+        };
+        if !is_editing {
+            return true; // Quit application
+        }
+    }
+
     if let AppMode::Message(_) = app.mode {
         app.mode = AppMode::Normal;
         return false;
@@ -140,6 +154,34 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         return false;
     }
 
+    if let AppMode::MainMenu = app.mode {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') if app.main_menu_state.selected > 0 => {
+                app.main_menu_state.selected -= 1;
+            }
+            KeyCode::Down | KeyCode::Char('j') if app.main_menu_state.selected < 2 => {
+                app.main_menu_state.selected += 1;
+            }
+            KeyCode::Enter => {
+                match app.main_menu_state.selected {
+                    0 => {
+                        app.mode = AppMode::Settings;
+                        app.settings_state.selected = 0;
+                        app.settings_state.editing = false;
+                    }
+                    1 => app.toggle_help(),
+                    2 => return true, // Quit
+                    _ => {}
+                }
+            }
+            KeyCode::Esc | KeyCode::Char('q') => {
+                app.mode = AppMode::Normal;
+            }
+            _ => {}
+        }
+        return false;
+    }
+
     if let AppMode::QuickActions = app.mode {
         match key.code {
             KeyCode::Up | KeyCode::Char('k') if app.quick_actions_state.selected > 0 => {
@@ -166,6 +208,64 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.mode = AppMode::Normal;
             }
             _ => {}
+        }
+        return false;
+    }
+
+    if let AppMode::InteractiveRebase = app.mode {
+        if app.rebase_state.editing {
+            match key.code {
+                KeyCode::Enter => {
+                    app.rebase_state.editing = false;
+                    let i = app.rebase_state.selected;
+                    app.rebase_state.commits[i].new_message = Some(app.rebase_state.input.clone());
+                    app.rebase_state.commits[i].action = crate::app::RebaseAction::Reword;
+                }
+                KeyCode::Esc => { app.rebase_state.editing = false; }
+                KeyCode::Char(c) => { app.rebase_state.input.push(c); }
+                KeyCode::Backspace => { app.rebase_state.input.pop(); }
+                _ => {}
+            }
+        } else {
+            match key.code {
+                KeyCode::Up | KeyCode::Char('k') if app.rebase_state.selected > 0 => {
+                    app.rebase_state.selected -= 1;
+                }
+                KeyCode::Down | KeyCode::Char('j') if app.rebase_state.selected < app.rebase_state.commits.len().saturating_sub(1) => {
+                    app.rebase_state.selected += 1;
+                }
+                KeyCode::Char('r') => {
+                    app.rebase_state.commits[app.rebase_state.selected].action = crate::app::RebaseAction::Reword;
+                }
+                KeyCode::Char('d') => {
+                    app.rebase_state.commits[app.rebase_state.selected].action = crate::app::RebaseAction::Drop;
+                }
+                KeyCode::Char('s') => {
+                    app.rebase_state.commits[app.rebase_state.selected].action = crate::app::RebaseAction::Squash;
+                }
+                KeyCode::Char('p') => {
+                    app.rebase_state.commits[app.rebase_state.selected].action = crate::app::RebaseAction::Pick;
+                }
+                KeyCode::Enter => {
+                    app.rebase_state.editing = true;
+                    let i = app.rebase_state.selected;
+                    app.rebase_state.input = app.rebase_state.commits[i].new_message.clone().unwrap_or_else(|| app.rebase_state.commits[i].original_message.clone());
+                }
+                KeyCode::Char('A') => {
+                    app.rebase_state.ai_analyzing = true;
+                    let i = app.rebase_state.selected;
+                    let hash = app.rebase_state.commits[i].hash.clone();
+                    let _ = app.ai_state.ai_trigger_tx.try_send(("rename_commit".to_string(), path.to_string(), hash));
+                }
+                KeyCode::Char('E') => {
+                    // Execute rebase
+                    crate::actions::commands::execute_interactive_rebase(path, &app.rebase_state.commits);
+                    app.mode = AppMode::Message("Rebase script generated and executed.".to_string());
+                }
+                // When they press 'C', we could trigger the rebase execution here or in another key.
+                KeyCode::Esc | KeyCode::Char('q') => { app.mode = AppMode::Normal; }
+                _ => {}
+            }
         }
         return false;
     }
@@ -210,7 +310,8 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     }
 
     match key.code {
-        KeyCode::Char('q') | KeyCode::Esc => {
+        KeyCode::Char('q') => {
+            // Already handled by global check at the top, but we keep this for specific modes where q is "back"
             if app.mode != AppMode::Normal {
                 if app.mode == AppMode::Help {
                     app.refresh_branches(path);
@@ -227,6 +328,17 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 true 
             }
         }
+        KeyCode::Esc => {
+            if app.mode == AppMode::Normal {
+                app.mode = AppMode::MainMenu;
+                app.main_menu_state.selected = 0;
+                false
+            } else {
+                app.mode = AppMode::Normal;
+                app.needs_clear = true;
+                false
+            }
+        }
         KeyCode::Tab => {
             if matches!(app.mode, AppMode::CodePreview(_)) {
                 app.file_state.active_panel = match app.file_state.active_panel {
@@ -241,18 +353,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::F(1) | KeyCode::Char('?') => {
+        KeyCode::Char('?') => {
             app.toggle_help();
             false
         }
-        KeyCode::F(2) | KeyCode::Char('f') => {
+        KeyCode::Char('f') => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
                 app.mode = AppMode::Filter;
                 app.branch_state.filter_selected = 0;
             }
             false
         }
-        KeyCode::F(3) | KeyCode::Char('/') => {
+        KeyCode::Char('/') => {
             if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Branches {
                 app.mode = AppMode::Search;
                 app.branch_state.search_query.clear();
@@ -260,7 +372,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::F(4) | KeyCode::Char('c') => {
+        KeyCode::Char('c') => {
             if app.mode == AppMode::Normal {
                 app.mode = AppMode::CreateBranch(String::new());
             }
@@ -272,17 +384,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::F(7) => {
+        KeyCode::Char(':') => {
             if app.mode == AppMode::Normal {
                 app.mode = AppMode::QuickActions;
                 app.quick_actions_state.selected = 0;
             }
-            false
-        }
-        KeyCode::F(10) | KeyCode::BackTab => {
-            app.mode = AppMode::Settings;
-            app.settings_state.selected = 0;
-            app.settings_state.editing = false;
             false
         }
         KeyCode::Char('[') => {
@@ -361,7 +467,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::F(9) | KeyCode::Char('m') | KeyCode::Enter => {
+        KeyCode::Char('m') | KeyCode::Enter => {
             if app.primary_mode == PrimaryMode::Files && key.code == KeyCode::Enter {
                 if let Some(entry) = app.file_state.file_tree.get(app.file_state.file_selected) {
                     if entry.is_dir {
@@ -508,7 +614,7 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if let Some(branch) = app.get_filtered_branches().get(app.branch_state.selected) {
                 if branch.name.starts_with('*') { return false; }
                 let branch_name = branch.name.clone();
-                let _ = app.ai_state.ai_trigger_tx.try_send((path.to_string(), branch_name.clone()));
+                let _ = app.ai_state.ai_trigger_tx.try_send(("analyze".to_string(), path.to_string(), branch_name.clone()));
                 app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
                 app.branch_state.branch_info = git::get_branch_info(path, &branch_name);
                 app.branch_state.info_scroll = 0;
@@ -556,6 +662,11 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.commits_state.commits = crate::git::get_unpushed_commits(path);
             app.commits_state.selected = 0;
             app.mode = AppMode::Commits;
+            false
+        }
+        KeyCode::Char('R') if app.shift_pressed && app.mode == AppMode::Normal => {
+            app.load_rebase_commits(path);
+            app.mode = AppMode::InteractiveRebase;
             false
         }
         KeyCode::Char('v') if app.mode == AppMode::Normal && app.primary_mode == PrimaryMode::Files => {
@@ -790,7 +901,7 @@ fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     }
                     1 => {
                         let branch_name = b.name.clone();
-                        let _ = app.ai_state.ai_trigger_tx.try_send((path.to_string(), branch_name.clone()));
+                        let _ = app.ai_state.ai_trigger_tx.try_send(("analyze".to_string(), path.to_string(), branch_name.clone()));
                         app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
                         app.branch_state.branch_info = git::get_branch_info(path, &branch_name);
                         app.branch_state.info_scroll = 0;

@@ -7,8 +7,9 @@ use syntect::parsing::SyntaxSet;
 use syntect::highlighting::ThemeSet;
 use ratatui::text::{Line, Span};
 use ratatui::style::{Color, Style};
-
 use std::sync::Arc;
+use crate::state::ui::ModalState;
+use crate::events::{Event, TaskEvent};
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
@@ -60,8 +61,10 @@ pub enum AppMode {
     CreateBranch(String),
     Commits,
     CommitAction(String), // Option selected inside a commit
+    InteractiveRebase,
     Shell(String),
     QuickActions,
+    MainMenu,
     Message(String),
 }
 
@@ -127,7 +130,7 @@ pub struct AIState {
     pub db: Option<crate::db::Database>,
     pub ai_analysis: Option<String>,
     pub ai_rx: mpsc::Receiver<AIUpdate>,
-    pub ai_trigger_tx: mpsc::Sender<(String, String)>,
+    pub ai_trigger_tx: mpsc::Sender<(String, String, String)>,
     pub conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
     pub conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
 }
@@ -148,6 +151,37 @@ pub struct CommitsState {
     pub selected: usize,
 }
 
+#[derive(Default, Clone)]
+pub struct RebaseCommit {
+    pub hash: String,
+    pub original_message: String,
+    pub new_message: Option<String>,
+    pub action: RebaseAction,
+}
+
+#[derive(Default, Clone, PartialEq)]
+pub enum RebaseAction {
+    #[default]
+    Pick,
+    Reword,
+    Drop,
+    Squash,
+}
+
+#[derive(Default)]
+pub struct RebaseState {
+    pub commits: Vec<RebaseCommit>,
+    pub selected: usize,
+    pub editing: bool,
+    pub input: String,
+    pub ai_analyzing: bool,
+}
+
+#[derive(Default)]
+pub struct MainMenuState {
+    pub selected: usize,
+}
+
 pub struct App {
     pub branch_state: BranchState,
     pub file_state: FileState,
@@ -156,10 +190,13 @@ pub struct App {
     pub settings_state: SettingsState,
     pub commits_state: CommitsState,
     pub quick_actions_state: QuickActionsState,
+    pub rebase_state: RebaseState,
+    pub main_menu_state: MainMenuState,
 
     pub current_branch: String,
     pub primary_mode: PrimaryMode,
     pub mode: AppMode,
+    pub modal_stack: Vec<ModalState>, // New Overlay system
 
     // UI & System State
     pub last_click_time: Instant,
@@ -175,8 +212,9 @@ pub struct App {
     pub branch_screen_positions: Vec<(usize, u16)>, // (branch_index, screen_y)
 
     // Syntax Highlighting
-    pub ps: SyntaxSet,
-    pub ts: ThemeSet,
+    pub ps: Arc<SyntaxSet>,
+    pub ts: Arc<ThemeSet>,
+    pub event_tx: Option<mpsc::Sender<Event>>,
 
     // Background updates
     pub rx: mpsc::Receiver<MergeUpdate>,
@@ -213,7 +251,7 @@ impl App {
         rx: mpsc::Receiver<MergeUpdate>,
         trigger_tx: mpsc::Sender<()>,
         ai_rx: mpsc::Receiver<AIUpdate>,
-        ai_trigger_tx: mpsc::Sender<(String, String)>,
+        ai_trigger_tx: mpsc::Sender<(String, String, String)>,
         conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
         conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
         file_status_rx: mpsc::Receiver<FileStatusUpdate>,
@@ -259,9 +297,12 @@ impl App {
                     "git log -n 5".to_string(),
                 ],
             },
+            rebase_state: RebaseState::default(),
+            main_menu_state: MainMenuState::default(),
             current_branch,
             primary_mode,
             mode: AppMode::Normal,
+            modal_stack: Vec::new(),
             last_click_time: Instant::now(),
             last_click_row: None,
             needs_clear: false,
@@ -271,8 +312,9 @@ impl App {
             config,
             snap_animation: None,
             branch_screen_positions: Vec::new(),
-            ps: SyntaxSet::load_defaults_newlines(),
-            ts: ThemeSet::load_defaults(),
+            ps: Arc::new(SyntaxSet::load_defaults_newlines()),
+            ts: Arc::new(ThemeSet::load_defaults()),
+            event_tx: None,
             rx,
             trigger_tx,
             shared_primary_mode,
@@ -323,7 +365,19 @@ impl App {
             }
         }
         while let Ok(update) = self.ai_state.ai_rx.try_recv() {
-            self.ai_state.ai_analysis = Some(update.analysis);
+            if update.analysis.starts_with("Commit Msg Suggestion:\n") {
+                if let AppMode::InteractiveRebase = self.mode {
+                    let msg = update.analysis.replace("Commit Msg Suggestion:\n", "").trim().to_string();
+                    if self.rebase_state.ai_analyzing {
+                        self.rebase_state.ai_analyzing = false;
+                        let i = self.rebase_state.selected;
+                        self.rebase_state.commits[i].new_message = Some(msg);
+                        self.rebase_state.commits[i].action = crate::app::RebaseAction::Reword;
+                    }
+                }
+            } else {
+                self.ai_state.ai_analysis = Some(update.analysis);
+            }
         }
         while let Ok(update) = self.ai_state.conflict_resolution_rx.try_recv() {
             match crate::actions::commands::apply_resolution_to_file(path, &update.file_path, &update.original_block, &update.resolved_content) {
@@ -397,6 +451,34 @@ impl App {
                 np.cursor_y = cy.min(max_idx);
                 np.scroll_y = sy.min(max_idx);
                 *state = np;
+        }
+    }
+
+    pub fn update(&mut self, event: Event) {
+        match event {
+            Event::Task(TaskEvent::HighlightingComplete(path, lines)) => {
+                if let AppMode::CodePreview(ref mut state) = self.mode {
+                    if state.file_path == path {
+                        state.highlighted_lines = lines;
+                    }
+                }
+            }
+            Event::Task(TaskEvent::AiAnalysisComplete(analysis)) => {
+                self.ai_state.ai_analysis = Some(analysis);
+            }
+            Event::Task(TaskEvent::ConflictResolved { file_path: _, original_block: _, resolved_content: _ }) => {
+                // Handled via external path? Actually we don't have path here.
+                // Will need to handle it properly or pass repo_path to update.
+            }
+            Event::Task(TaskEvent::AiModelsFetched(models)) => {
+                if self.settings_state.selecting && self.settings_state.selected == 3 {
+                    self.settings_state.choices = models;
+                    if self.settings_state.choices.is_empty() {
+                        self.settings_state.choices = vec!["No models found".to_string()];
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
@@ -543,6 +625,19 @@ impl App {
         self.stash_state.stash_selected = 0;
     }
 
+    pub fn load_rebase_commits(&mut self, path: &str) {
+        let commits = crate::git::get_unpushed_commits(path);
+        self.rebase_state.commits = commits.into_iter().map(|c| RebaseCommit {
+            hash: c.hash,
+            original_message: c.message,
+            new_message: None,
+            action: RebaseAction::Pick,
+        }).collect();
+        self.rebase_state.selected = 0;
+        self.rebase_state.editing = false;
+        self.rebase_state.input.clear();
+    }
+
     pub fn load_stash_detail(&mut self, path: &str) {
         if let Some(stash) = self.stash_state.stashes.get(self.stash_state.stash_selected) {
             self.stash_state.stash_files = crate::git::stash::get_stash_files(path, &stash.id);
@@ -619,29 +714,40 @@ impl App {
 
     pub fn update_preview_highlighting(&self, state: &mut PreviewState) {
         if state.lines.is_empty() { return; }
-        
-        let extension = std::path::Path::new(&state.file_path).extension().and_then(|s| s.to_str()).unwrap_or("");
-        let syntax = self.ps.find_syntax_by_extension(extension)
-            .or_else(|| self.ps.find_syntax_for_file(&state.file_path).unwrap_or(None))
-            .unwrap_or_else(|| self.ps.find_syntax_plain_text());
 
-        let theme = &self.ts.themes["base16-ocean.dark"];
-        let mut h = syntect::easy::HighlightLines::new(syntax, theme);
-        
-        state.highlighted_lines.clear();
-        for line in &state.lines {
-            let line_with_ending = format!("{}\n", line);
-            let ranges = h.highlight_line(&line_with_ending, &self.ps).unwrap_or_default();
-            let mut spans = Vec::new();
+        if let Some(tx) = &self.event_tx {
+            crate::tasks::highlighting::spawn_highlight_task(
+                tx.clone(),
+                state.file_path.clone(),
+                state.lines.clone(),
+                self.ps.clone(),
+                self.ts.clone(),
+            );
+        } else {
+            // Fallback for tests or before tx is set
+            let extension = std::path::Path::new(&state.file_path).extension().and_then(|s| s.to_str()).unwrap_or("");
+            let syntax = self.ps.find_syntax_by_extension(extension)
+                .or_else(|| self.ps.find_syntax_for_file(&state.file_path).unwrap_or(None))
+                .unwrap_or_else(|| self.ps.find_syntax_plain_text());
 
-            for (style, text) in ranges {
-                let color = Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
-                let content = text.trim_end_matches(['\n', '\r']);
-                if !content.is_empty() || text.is_empty() {
-                    spans.push(Span::styled(content.to_string(), Style::default().fg(color)));
+            let theme = &self.ts.themes["base16-ocean.dark"];
+            let mut h = syntect::easy::HighlightLines::new(syntax, theme);
+            
+            state.highlighted_lines.clear();
+            for line in &state.lines {
+                let line_with_ending = format!("{}\n", line);
+                let ranges = h.highlight_line(&line_with_ending, &self.ps).unwrap_or_default();
+                let mut spans = Vec::new();
+
+                for (style, text) in ranges {
+                    let color = Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
+                    let content = text.trim_end_matches(['\n', '\r']);
+                    if !content.is_empty() || text.is_empty() {
+                        spans.push(Span::styled(content.to_string(), Style::default().fg(color)));
+                    }
                 }
+                state.highlighted_lines.push(Line::from(spans));
             }
-            state.highlighted_lines.push(Line::from(spans));
         }
     }
 

@@ -131,6 +131,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     match &app.mode {
         AppMode::Manage => screens::render_manage(f, app),
         AppMode::Filter => screens::render_filter(f, app),
+        AppMode::MainMenu => screens::render_main_menu(f, app),
         AppMode::Message(msg) => screens::render_message(f, msg),
         AppMode::Help => screens::render_help_content(f, chunks[0], app),
         AppMode::StashDetail => screens::render_stash_detail(f, chunks[0], app),
@@ -140,6 +141,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
         AppMode::Commits => screens::render_commits(f, app),
         AppMode::CommitAction(hash) => screens::render_commit_action(f, app, hash),
+        AppMode::InteractiveRebase => screens::render_interactive_rebase(f, app),
         AppMode::Shell(input) => screens::render_shell(f, input),
         AppMode::QuickActions => screens::render_quick_actions(f, app),
         // CodePreview is handled inside render_directory_searcher for side-by-side
