@@ -127,27 +127,6 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         f.render_widget(terminal_placeholder, chunks[1]);
     }
 
-    // 3. Modals and Overlays
-    match &app.mode {
-        AppMode::Manage => screens::render_manage(f, app),
-        AppMode::Filter => screens::render_filter(f, app),
-        AppMode::MainMenu => screens::render_main_menu(f, app),
-        AppMode::Message(msg) => screens::render_message(f, msg),
-        AppMode::Help => screens::render_help_content(f, chunks[0], app),
-        AppMode::StashDetail => screens::render_stash_detail(f, chunks[0], app),
-        AppMode::Settings => screens::render_settings(f, app),
-        AppMode::Search => screens::render_search(f, app),
-        AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
-        AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
-        AppMode::Commits => screens::render_commits(f, app),
-        AppMode::CommitAction(hash) => screens::render_commit_action(f, app, hash),
-        AppMode::InteractiveRebase => screens::render_interactive_rebase(f, app),
-        AppMode::Shell(input) => screens::render_shell(f, input),
-        AppMode::QuickActions => screens::render_quick_actions(f, app),
-        // CodePreview is handled inside render_directory_searcher for side-by-side
-        _ => {}
-    }
-
     let footer_area = if app.show_terminal { chunks[2] } else { chunks[1] };
 
     // Status prefix
@@ -213,4 +192,43 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
 
     let footer = ratatui::widgets::Paragraph::new(footer_line);
     f.render_widget(footer, footer_area);
+
+    // Apply global darkening overlay for modals
+    let is_modal = match app.mode {
+        AppMode::Normal | AppMode::CodePreview(_) | AppMode::Diff => false,
+        _ => true,
+    };
+
+    if is_modal {
+        let area = f.area();
+        let buf = f.buffer_mut();
+        for x in area.left()..area.right() {
+            for y in area.top()..area.bottom() {
+                let cell = &mut buf[(x, y)];
+                cell.set_bg(ratatui::style::Color::Rgb(15, 15, 20)); // Dark background
+                cell.set_fg(ratatui::style::Color::Rgb(70, 70, 85)); // Muted foreground
+            }
+        }
+    }
+
+    // 3. Modals and Overlays
+    match &app.mode {
+        AppMode::Manage => screens::render_manage(f, app),
+        AppMode::Filter => screens::render_filter(f, app),
+        AppMode::MainMenu => screens::render_main_menu(f, app),
+        AppMode::Message(msg) => screens::render_message(f, msg),
+        AppMode::Help => screens::render_help_content(f, chunks[0], app),
+        AppMode::StashDetail => screens::render_stash_detail(f, chunks[0], app),
+        AppMode::Settings => screens::render_settings(f, app),
+        AppMode::Search => screens::render_search(f, app),
+        AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
+        AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
+        AppMode::Commits => screens::render_commits(f, app),
+        AppMode::CommitAction(hash) => screens::render_commit_action(f, app, hash),
+        AppMode::InteractiveRebase => screens::render_interactive_rebase(f, app),
+        AppMode::Shell(input) => screens::render_shell(f, input),
+        AppMode::QuickActions => screens::render_quick_actions(f, app),
+        // CodePreview is handled inside render_directory_searcher for side-by-side
+        _ => {}
+    }
 }
