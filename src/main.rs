@@ -104,14 +104,14 @@ async fn main() -> Result<()> {
 
     // Spawn event listener task
     let event_tx_clone = event_tx.clone();
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         loop {
             if event::poll(std::time::Duration::from_millis(50)).unwrap_or(false) {
                 if let Ok(crossterm_event) = event::read() {
                     match crossterm_event {
-                        event::Event::Key(k) => { let _ = event_tx_clone.send(Event::Key(k)).await; }
-                        event::Event::Mouse(m) => { let _ = event_tx_clone.send(Event::Mouse(m)).await; }
-                        event::Event::Resize(w, h) => { let _ = event_tx_clone.send(Event::Resize(w, h)).await; }
+                        event::Event::Key(k) => { let _ = event_tx_clone.blocking_send(Event::Key(k)); }
+                        event::Event::Mouse(m) => { let _ = event_tx_clone.blocking_send(Event::Mouse(m)); }
+                        event::Event::Resize(w, h) => { let _ = event_tx_clone.blocking_send(Event::Resize(w, h)); }
                         _ => {}
                     }
                 }
