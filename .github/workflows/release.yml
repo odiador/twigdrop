@@ -1,9 +1,7 @@
 name: CD (Release)
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
   release:
@@ -25,10 +23,12 @@ jobs:
       - name: Generate Tag
         id: tag
         run: |
-          # Simple auto-incrementing tag logic for demo
-          # In a real project, we might use semantic-release or read version from Cargo.toml
           VERSION=$(grep '^version' Cargo.toml | head -n 1 | cut -d '"' -f 2)
-          TAG_NAME="v$VERSION-${{ github.run_number }}"
+          TAG_NAME="v$VERSION"
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Error: Tag $TAG_NAME already exists. Version in Cargo.toml might need an update."
+            exit 1
+          fi
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           git tag $TAG_NAME
           git push origin $TAG_NAME

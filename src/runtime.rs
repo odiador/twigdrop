@@ -1,5 +1,5 @@
 use tokio::sync::mpsc;
-use crate::app::{AIUpdate, ConflictResolutionUpdate, MergeUpdate, FileStatusUpdate};
+use crate::events::{Event, GitEvent, TaskEvent};
 use crate::state::ui::PrimaryMode;
 use crate::git;
 use crate::models::ConflictBlock;
@@ -16,7 +16,7 @@ impl Runtime {
         }
     }
 
-    pub fn spawn_merge_analyzer(&self, mut trigger_rx: mpsc::Receiver<()>, tx: mpsc::Sender<MergeUpdate>) {
+    pub fn spawn_merge_analyzer(&self, mut trigger_rx: mpsc::Receiver<()>, event_tx: mpsc::Sender<Event>) {
         let path = self.repo_path.clone();
         tokio::spawn(async move {
             while trigger_rx.recv().await.is_some() {
@@ -24,26 +24,26 @@ impl Runtime {
                 let current_branch = git::get_current_branch(&path);
 
                 for branch in branches {
-                    let tx_clone = tx.clone();
+                    let tx_clone = event_tx.clone();
                     let p = path.clone();
                     let b = branch.name.clone();
                     let cb = current_branch.clone();
                     tokio::spawn(async move {
                         let status = git::analyze_merge_status(&p, &b, &cb);
-                        let _ = tx_clone.send(MergeUpdate {
-                            branch_name: b,
+                        let _ = tx_clone.send(Event::Git(GitEvent::MergeStatusUpdated {
+                            branch: b,
                             status,
-                        }).await;
+                        })).await;
                     });
                 }
             }
         });
     }
-pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUpdate>, app_mode_rx: Arc<std::sync::RwLock<PrimaryMode>>) {
+
+    pub fn spawn_file_status_poller(&self, event_tx: mpsc::Sender<Event>, app_mode_rx: Arc<std::sync::RwLock<PrimaryMode>>) {
         let path = self.repo_path.clone();
         tokio::spawn(async move {
             loop {
-                // Read current primary mode
                 let mode = {
                     let r = app_mode_rx.read().unwrap_or_else(|e| e.into_inner());
                     *r
@@ -51,7 +51,7 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
 
                 if mode == PrimaryMode::Files {
                     let statuses = git::files::get_git_file_statuses(&path);
-                    let _ = file_status_tx.send(FileStatusUpdate { statuses }).await;
+                    let _ = event_tx.send(Event::Git(GitEvent::FileStatusesUpdated(statuses))).await;
                 }
 
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -59,25 +59,22 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
         });
     }
 
-
     pub fn spawn_ai_worker(
         &self,
         mut ai_trigger_rx: mpsc::Receiver<(String, String, String)>,
-        ai_update_tx: mpsc::Sender<AIUpdate>,
         mut conflict_trigger_rx: mpsc::Receiver<(String, ConflictBlock)>,
-        conflict_resolution_tx: mpsc::Sender<ConflictResolutionUpdate>,
-        fetched_models_tx: mpsc::Sender<Vec<String>>,
-    ) {        tokio::spawn(async move {
+        event_tx: mpsc::Sender<Event>,
+    ) {        
+        tokio::spawn(async move {
             let mut last_ollama_url = String::new();
             loop {
                 let config = crate::utils::config::load_config();
                 let provider_cfg = config.current_provider().clone();
                 
-                // Fetch Ollama models if URL changed or once at startup
                 if config.ai_provider == "ollama" && provider_cfg.url != last_ollama_url {
                     last_ollama_url = provider_cfg.url.clone();
                     let models = crate::utils::config::fetch_ollama_models(&last_ollama_url).await;
-                    let _ = fetched_models_tx.send(models).await;
+                    let _ = event_tx.send(Event::Task(TaskEvent::AiModelsFetched(models))).await;
                 }
 
                 let provider_type = config.ai_provider.clone();
@@ -90,44 +87,45 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
                 if let Some(w) = worker {
                     tokio::select! {
                         Some((task_type, repo_path, payload)) = ai_trigger_rx.recv() => {
-                            let db_path = crate::utils::config::get_config_path()
-                                .unwrap_or_else(|| std::path::PathBuf::from(".git"))
-                                .parent()
-                                .unwrap_or(&std::path::PathBuf::from("."))
-                                .join("twigdrop.db");
-                            let db = crate::db::Database::new(db_path).ok();
-                            
                             if task_type == "rename_commit" {
                                 let hash = payload;
                                 let diff = git::commands::run_git(&repo_path, &["show", &hash]).unwrap_or_default();
-                                let _ = ai_update_tx.send(AIUpdate { analysis: "Generating commit message with AI...".to_string() }).await;
+                                let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete("Generating commit message with AI...".to_string()))).await;
                                 
-                                // Actually, we should create a new method in w.inner for this, or just use summarize_diff for now.
-                                // It returns a summary which we can use.
                                 if let Ok(s) = w.inner.summarize_diff(&diff).await {
-                                    let _ = ai_update_tx.send(AIUpdate { analysis: format!("Commit Msg Suggestion:\n{}", s) }).await;
+                                    let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(format!("Commit Msg Suggestion:\n{}", s)))).await;
                                 } else {
-                                    let _ = ai_update_tx.send(AIUpdate { analysis: "Failed to generate commit message.".to_string() }).await;
+                                    let _ = event_tx.send(Event::Task(TaskEvent::TaskFailed("Failed to generate commit message.".to_string()))).await;
                                 }
                             } else {
                                 let branch_name = payload;
-                                let hash = match git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
+                                
+                                // Restore DB caching
+                                let db_path = crate::utils::config::get_config_path()
+                                    .unwrap_or_else(|| std::path::PathBuf::from(".git"))
+                                    .parent()
+                                    .unwrap_or(&std::path::PathBuf::from("."))
+                                    .join("twigdrop.db");
+                                let db = crate::db::Database::new(db_path).ok();
+                                
+                                let current_hash = match git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
                                     Ok(h) => h.trim().to_string(),
-                                    Err(_) => continue,
+                                    Err(_) => "".to_string(),
                                 };
 
-                                let mut cached_result = None;
-                                if let Some(ref d) = db
-                                    && let Ok(Some((cached_hash, summary, cleanup))) = d.get_analysis(&branch_name)
-                                    && cached_hash == hash
-                                {
-                                    cached_result = Some(format!("--- CACHED ANALYSIS ---\n\nSummary:\n{}\n\nRecommendation:\n{}", summary, cleanup));
+                                let mut cached = None;
+                                if let Some(ref d) = db {
+                                    if let Ok(Some((hash, s, c))) = d.get_analysis(&branch_name) {
+                                        if hash == current_hash {
+                                            cached = Some(format!("--- CACHED ---\nSummary:\n{}\n\nRecommendation:\n{}", s, c));
+                                        }
+                                    }
                                 }
 
-                                if let Some(analysis) = cached_result {
-                                    let _ = ai_update_tx.send(AIUpdate { analysis }).await;
+                                if let Some(msg) = cached {
+                                    let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(msg))).await;
                                 } else {
-                                    let _ = ai_update_tx.send(AIUpdate { analysis: "Analyzing with AI...".to_string() }).await;
+                                    let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete("Analyzing with AI...".to_string()))).await;
                                     let diff = git::get_branch_info(&repo_path, &branch_name);
                                     let summary_res = w.inner.summarize_diff(&diff).await;
                                     let cleanup_res = w.inner.recommend_cleanup(&branch_name).await;
@@ -135,14 +133,14 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
                                     match (summary_res, cleanup_res) {
                                         (Ok(s), Ok(c)) => {
                                             if let Some(ref d) = db {
-                                                let _ = d.save_analysis(&branch_name, &hash, &s, &c);
+                                                let _ = d.save_analysis(&branch_name, &current_hash, &s, &c);
                                             }
-                                            let _ = ai_update_tx.send(AIUpdate {
-                                                analysis: format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
-                                            }).await;
+                                            let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(
+                                                format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
+                                            ))).await;
                                         }
                                         _ => {
-                                            let _ = ai_update_tx.send(AIUpdate { analysis: "AI Analysis failed.".to_string() }).await;
+                                            let _ = event_tx.send(Event::Task(TaskEvent::TaskFailed("AI Analysis failed.".to_string()))).await;
                                         }
                                     }
                                 }
@@ -151,24 +149,19 @@ pub fn spawn_file_status_poller(&self, file_status_tx: mpsc::Sender<FileStatusUp
                         Some((_repo_path, conflict)) = conflict_trigger_rx.recv() => {
                             let resolution = w.inner.resolve_conflict(&conflict.content).await;
                             if let Ok(resolved_content) = resolution {
-                                let _ = conflict_resolution_tx.send(ConflictResolutionUpdate {
+                                let _ = event_tx.send(Event::Task(TaskEvent::ConflictResolved {
                                     file_path: conflict.file_path,
                                     resolved_content,
                                     original_block: conflict.content,
-                                }).await;
+                                })).await;
                             }
                         }
                         else => break,
                     }
                 } else {
-                    // If worker creation fails, wait a bit before retrying or just wait for next trigger
-                    // But we need to recv anyway otherwise the channel fills up
                     tokio::select! {
                         Some(_) = ai_trigger_rx.recv() => {
-                            let _ = ai_update_tx.send(AIUpdate { analysis: "AI Worker not configured correctly. Check Settings.".to_string() }).await;
-                        }
-                        Some(_) = conflict_trigger_rx.recv() => {
-                             // Ignore or error
+                            let _ = event_tx.send(Event::Task(TaskEvent::TaskFailed("AI Worker not configured correctly. Check Settings.".to_string()))).await;
                         }
                         else => break,
                     }

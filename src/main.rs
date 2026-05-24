@@ -16,10 +16,7 @@ use anyhow::Result;
 use ratatui::{
     backend::CrosstermBackend,
     crossterm::{
-        event::{
-            self, DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
-            PushKeyboardEnhancementFlags,
-        },
+        event::{self, DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
@@ -28,15 +25,12 @@ use ratatui::{
 use std::{env, io};
 use tokio::sync::mpsc;
 
-use app::{AIUpdate, App, ConflictResolutionUpdate};
-use models::ConflictBlock;
+use app::App;
 use runtime::Runtime;
-
 use events::Event;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Set panic hook to ensure terminal is restored
     let default_panic = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
@@ -51,44 +45,29 @@ async fn main() -> Result<()> {
     let branches = git::build_branches(&path);
     let current_branch = git::get_current_branch(&path);
 
-    let (tx, rx) = mpsc::channel(100);
     let (trigger_tx, trigger_rx) = mpsc::channel::<()>(1);
-    
-    let (ai_update_tx, ai_rx) = mpsc::channel::<AIUpdate>(10);
     let (ai_trigger_tx, ai_trigger_rx) = mpsc::channel::<(String, String, String)>(10);
-    
-    let (conflict_resolution_tx, conflict_resolution_rx) = mpsc::channel::<ConflictResolutionUpdate>(10);
-    let (conflict_trigger_tx, conflict_trigger_rx) = mpsc::channel::<(String, ConflictBlock)>(10);
+    let (conflict_trigger_tx, conflict_trigger_rx) = mpsc::channel::<(String, models::ConflictBlock)>(10);
 
-    let (file_status_tx, file_status_rx) = mpsc::channel::<app::FileStatusUpdate>(10);
-    let (fetched_models_tx, fetched_models_rx) = mpsc::channel::<Vec<String>>(1);
-    
     let (event_tx, mut event_rx) = mpsc::channel::<Event>(1000);
 
     let mut app = App::new(
         &path,
         branches,
         current_branch,
-        rx,
         trigger_tx.clone(),
-        ai_rx,
         ai_trigger_tx.clone(),
-        conflict_resolution_rx,
         conflict_trigger_tx.clone(),
-        file_status_rx,
-        fetched_models_rx,
     );
     app.setup_ai(&path);
     app.event_tx = Some(event_tx.clone());
 
     let runtime = Runtime::new(&path);
     
-    // Spawn specialized background workers
-    runtime.spawn_file_status_poller(file_status_tx, app.shared_primary_mode.clone());
-    runtime.spawn_merge_analyzer(trigger_rx, tx);
-    runtime.spawn_ai_worker(ai_trigger_rx, ai_update_tx, conflict_trigger_rx, conflict_resolution_tx, fetched_models_tx);
+    runtime.spawn_file_status_poller(event_tx.clone(), app.shared_primary_mode.clone());
+    runtime.spawn_merge_analyzer(trigger_rx, event_tx.clone());
+    runtime.spawn_ai_worker(ai_trigger_rx, conflict_trigger_rx, event_tx.clone());
 
-    // Initial trigger for merge analysis
     let _ = trigger_tx.try_send(());
 
     let mut stdout = io::stdout();
@@ -102,7 +81,6 @@ async fn main() -> Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Spawn event listener task
     let event_tx_clone = event_tx.clone();
     tokio::task::spawn_blocking(move || {
         loop {
@@ -111,7 +89,7 @@ async fn main() -> Result<()> {
                     match crossterm_event {
                         event::Event::Key(k) => { let _ = event_tx_clone.blocking_send(Event::Key(k)); }
                         event::Event::Mouse(m) => { let _ = event_tx_clone.blocking_send(Event::Mouse(m)); }
-                        event::Event::Resize(w, h) => { let _ = event_tx_clone.blocking_send(Event::Resize(w, h)); }
+                        event::Event::Resize(_, _) => { let _ = event_tx_clone.blocking_send(Event::Resize); }
                         _ => {}
                     }
                 }
@@ -145,7 +123,6 @@ async fn run_app(
     event_rx: &mut mpsc::Receiver<Event>,
 ) -> io::Result<()> {
     loop {
-        // 1. Process events
         while let Ok(event) = event_rx.try_recv() {
             match &event {
                 Event::Key(key) => {
@@ -161,16 +138,11 @@ async fn run_app(
             app.update(event);
         }
 
-        // 2. Update state from background channels
-        app.update_from_channel(path);
-
-        // 3. Clear if needed
         if app.ui.needs_clear {
             terminal.clear()?;
             app.ui.needs_clear = false;
         }
 
-        // 4. Draw
         terminal.draw(|f| ui::draw(f, app, path))?;
         
         tokio::time::sleep(std::time::Duration::from_millis(8)).await;

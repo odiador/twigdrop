@@ -99,7 +99,6 @@ pub struct QuickActionsState {
 
 pub struct ModalState {
     pub mode: AppMode,
-    pub focused_index: usize,
 }
 
 pub struct UiState {
@@ -206,7 +205,6 @@ impl UiState {
     pub fn push_modal(&mut self, mode: AppMode) {
         self.modal_stack.push(ModalState {
             mode,
-            focused_index: 0,
         });
     }
 
@@ -214,5 +212,21 @@ impl UiState {
         let popped = self.modal_stack.pop();
         self.needs_clear = true;
         popped
+    }
+
+    pub fn current_mode(&self) -> &AppMode {
+        if let Some(modal) = self.modal_stack.last() {
+            &modal.mode
+        } else {
+            &self.mode
+        }
+    }
+
+    pub fn current_mode_mut(&mut self) -> &mut AppMode {
+        if let Some(modal) = self.modal_stack.last_mut() {
+            &mut modal.mode
+        } else {
+            &mut self.mode
+        }
     }
 }
