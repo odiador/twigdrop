@@ -753,6 +753,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
 }
 
 pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
+    f.render_widget(Clear, area);
     let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(area);
     let mut stash_items = vec![];
     for (i, stash) in app.stash_state.stashes.iter().enumerate() {
