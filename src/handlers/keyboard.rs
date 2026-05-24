@@ -168,14 +168,19 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         app.mode = AppMode::Settings;
                         app.settings_state.selected = 0;
                         app.settings_state.editing = false;
+                        app.needs_clear = true;
                     }
-                    1 => app.toggle_help(),
+                    1 => {
+                        app.toggle_help();
+                        app.needs_clear = true;
+                    }
                     2 => return true, // Quit
                     _ => {}
                 }
             }
             KeyCode::Esc | KeyCode::Char('q') => {
                 app.mode = AppMode::Normal;
+                app.needs_clear = true;
             }
             _ => {}
         }
