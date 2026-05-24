@@ -1,13 +1,6 @@
 use crate::git::commands::{run_git, run_git_with_status};
+use crate::state::ui::{RebaseCommit, RebaseAction};
 use std::fs;
-
-#[allow(dead_code)]
-pub fn delete_branch(path: &str, name: &str) -> String {
-    match run_git(path, &["branch", "-D", name]) {
-        Ok(output) => format!("> git branch -D {}\n{}", name, output.trim()),
-        Err(e) => format!("Error deleting branch {}: {}", name, e),
-    }
-}
 
 pub fn bulk_delete_branches(path: &str, names: &[String]) -> String {
     let mut results = String::new();
@@ -104,7 +97,7 @@ pub fn apply_resolution_to_file(repo_path: &str, file_path: &str, original_block
     }
 }
 
-pub fn execute_interactive_rebase(path: &str, commits: &[crate::app::RebaseCommit]) {
+pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
     use std::io::Write;
     
     // Fallback: we write a script that git can use as sequence editor
@@ -116,15 +109,15 @@ pub fn execute_interactive_rebase(path: &str, commits: &[crate::app::RebaseCommi
     
     for commit in commits.iter().rev() {
         let action = match commit.action {
-            crate::app::RebaseAction::Pick => "pick",
-            crate::app::RebaseAction::Reword => "reword",
-            crate::app::RebaseAction::Drop => "drop",
-            crate::app::RebaseAction::Squash => "squash",
+            RebaseAction::Pick => "pick",
+            RebaseAction::Reword => "reword",
+            RebaseAction::Drop => "drop",
+            RebaseAction::Squash => "squash",
         };
         // For reword, we'd need another editor script to provide the actual new message.
         // Or we can use the `exec` command to run git commit --amend.
         // Actually, git rebase has a trick: `x git commit --amend -m "new message"`
-        if commit.action == crate::app::RebaseAction::Reword {
+        if commit.action == RebaseAction::Reword {
             script_content.push_str(&format!("pick {} {}\n", commit.hash, commit.original_message.replace("'", "'\\''")));
             let new_msg = commit.new_message.clone().unwrap_or_else(|| commit.original_message.clone());
             script_content.push_str(&format!("x git commit --amend -m '{}'\n", new_msg.replace("'", "'\\''")));

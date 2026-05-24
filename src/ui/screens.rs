@@ -6,13 +6,14 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, AppMode, PrimaryMode, PreviewState, FilePanel};
+use crate::app::App;
+use crate::state::ui::{AppMode, PrimaryMode, FilePanel, PreviewState};
 use crate::git::files::FileStatus;
 use crate::models::{BranchStatus, GutterStatus};
 use crate::ui::components::get_status_icons;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
-    let filtered_indices = app.branch_state.filtered_indices.clone();
+    let filtered_indices = app.ui.filtered_indices.clone();
     let branches_len = filtered_indices.len();
     let inner_height = area.height.saturating_sub(4) as usize;
 
@@ -23,8 +24,8 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     let mut start = 0;
     if branches_len > inner_height {
         let half_height = inner_height / 2;
-        if app.branch_state.selected > half_height {
-            start = app.branch_state.selected - half_height;
+        if app.ui.selected_branch_idx > half_height {
+            start = app.ui.selected_branch_idx - half_height;
         }
         let mut end = start + inner_height;
         if end > branches_len {
@@ -32,10 +33,10 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             start = end.saturating_sub(inner_height);
         }
     }
-    app.branch_state.list_start_index = start;
+    app.ui.list_start_index = start;
     
     let mut rows: Vec<Row> = vec![];
-    app.branch_screen_positions.clear();
+    app.ui.branch_screen_positions.clear();
 
     let branch_items_to_show = inner_height.min(branches_len.saturating_sub(start));
 
@@ -46,18 +47,18 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         }
 
         let actual_idx = filtered_indices[branch_idx];
-        let b = &app.branch_state.branches[actual_idx];
-        let selected = branch_idx == app.branch_state.selected;
-        let is_current = b.name == app.current_branch;
+        let b = &app.repo.branches[actual_idx];
+        let selected = branch_idx == app.ui.selected_branch_idx;
+        let is_current = b.name == app.repo.current_branch;
 
-        app.branch_screen_positions.push((actual_idx, area.y + 3 + i as u16));
+        app.ui.branch_screen_positions.push((actual_idx, area.y + 3 + i as u16));
 
         let (icons, color) = get_status_icons(&b.status);
         let (merge_text, merge_color) =
             crate::ui::components::get_merge_status_display(&b.merge_status);
 
         let current_tag = if is_current { " (current)" } else { "" };
-        let is_bulk_selected = app.branch_state.bulk_selected.contains(&b.name);
+        let is_bulk_selected = app.ui.bulk_selected.contains(&b.name);
         let checkbox = if is_bulk_selected { "[x]" } else { "[ ]" };
 
         let mut diff_counts = String::new();
@@ -115,7 +116,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         .header(Row::new(vec!["", "Branch", "Age", "Status", "Merge", "Type", "Last Commit"]).style(Style::default().fg(Color::Rgb(124, 128, 156)).add_modifier(Modifier::BOLD)).bottom_margin(1))
         .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(74, 79, 106))));
 
-    if app.mode == AppMode::Diff {
+    if app.ui.mode == AppMode::Diff {
         let overlay_area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -148,16 +149,16 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
         // 1. Files List
         let mut file_items = vec![];
-        for (i, file) in app.branch_state.diff_files.iter().enumerate() {
+        for (i, file) in app.repo.diff_files.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
-            if i == app.branch_state.diff_file_selected {
-                let bg = if app.branch_state.diff_panel == FilePanel::Directory { Color::White } else { Color::Rgb(45, 45, 65) };
-                let fg = if app.branch_state.diff_panel == FilePanel::Directory { Color::Black } else { Color::White };
+            if i == app.ui.diff_file_selected {
+                let bg = if app.ui.diff_panel == FilePanel::Directory { Color::White } else { Color::Rgb(45, 45, 65) };
+                let fg = if app.ui.diff_panel == FilePanel::Directory { Color::Black } else { Color::White };
                 style = style.bg(bg).fg(fg).add_modifier(Modifier::BOLD);
             }
             file_items.push(ListItem::new(file.clone()).style(style));
         }
-        let list_title = format!(" Changed Files ({}) ", app.branch_state.diff_files.len());
+        let list_title = format!(" Changed Files ({}) ", app.repo.diff_files.len());
         let files_list = List::new(file_items).block(Block::default().title(list_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
         f.render_widget(files_list, left_chunks[0]);
 
@@ -171,8 +172,8 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         f.render_widget(ai_p, left_chunks[1]);
 
         // 3. File Preview (The Diff)
-        if let Some(state) = &app.branch_state.diff_preview {
-            let border_color = if app.branch_state.diff_panel == FilePanel::Preview { Color::Green } else { Color::Rgb(74, 79, 106) };
+        if let Some(state) = &app.repo.diff_preview {
+            let border_color = if app.ui.diff_panel == FilePanel::Preview { Color::Green } else { Color::Rgb(74, 79, 106) };
             let mut final_lines = Vec::new();
             let visible_rows = main_chunks[1].height.saturating_sub(2) as usize;
             let start_idx = state.scroll_y;
@@ -180,13 +181,13 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
             for i in start_idx..end_idx {
                 let mut line_style = Style::default();
-                if i == state.cursor_y && app.branch_state.diff_panel == FilePanel::Preview {
+                if i == state.cursor_y && app.ui.diff_panel == FilePanel::Preview {
                     line_style = line_style.bg(Color::Rgb(60, 60, 80));
                 }
                 final_lines.push(state.highlighted_lines[i].clone().style(line_style));
             }
             
-            let preview_title = format!(" Diff: {} (Tab to switch) ", state.file_path);
+            let preview_title = format!(" Diff: {} (Tab: switch) ", state.file_path);
             let diff_preview = Paragraph::new(Text::from(final_lines)).block(Block::default().title(preview_title).borders(Borders::ALL).border_style(Style::default().fg(border_color)));
             f.render_widget(diff_preview, main_chunks[1]);
         } else {
@@ -207,7 +208,7 @@ pub fn render_filter(f: &mut Frame, app: &App) {
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.branch_state.filter_selected {
+        if i == app.ui.filter_selected {
             style = style.fg(Color::Magenta).bg(Color::Rgb(40, 40, 40));
         }
         items.push(ListItem::new(*opt).style(style));
@@ -257,7 +258,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         "",
     ];
 
-    if app.primary_mode == PrimaryMode::Branches {
+    if app.ui.primary_mode == PrimaryMode::Branches {
         help_text.extend(vec![
             "Status Icons (Branches):",
             "  ▲ (Red)     : Has Unique Commits (DANGER: Not in remote!)",
@@ -418,12 +419,12 @@ pub fn render_commits(f: &mut Frame, app: &App) {
     f.render_widget(Clear, inner);
 
     let mut items = vec![];
-    if app.commits_state.commits.is_empty() {
+    if app.repo.commits.is_empty() {
         items.push(ListItem::new("No unpushed commits found.").style(Style::default().fg(Color::Gray)));
     } else {
-        for (i, commit) in app.commits_state.commits.iter().enumerate() {
+        for (i, commit) in app.repo.commits.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
-            if i == app.commits_state.selected {
+            if i == app.ui.selected_commit_idx {
                 style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
             }
             let text = format!("{} | {} | {}", commit.hash, commit.date, commit.message);
@@ -448,12 +449,12 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.settings_state.selected {
+        if i == app.ui.settings_state.selected {
             style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
         }
         
-        let text = if i == app.settings_state.selected && app.settings_state.editing && i == 0 {
-            format!("> {}", app.settings_state.input)
+        let text = if i == app.ui.settings_state.selected && app.ui.settings_state.editing && i == 0 {
+            format!("> {}", app.ui.settings_state.input)
         } else {
             opt.to_string()
         };
@@ -497,7 +498,7 @@ pub fn render_shell(f: &mut Frame, input: &str) {
     f.render_widget(p, inner);
 }
 
-pub fn render_quick_actions(f: &mut Frame, app: &crate::app::App) {
+pub fn render_quick_actions(f: &mut Frame, app: &App) {
     let area = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -519,9 +520,9 @@ pub fn render_quick_actions(f: &mut Frame, app: &crate::app::App) {
     f.render_widget(Clear, inner);
 
     let mut items = vec![];
-    for (i, action) in app.quick_actions_state.actions.iter().enumerate() {
+    for (i, action) in app.ui.quick_actions_state.actions.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.quick_actions_state.selected {
+        if i == app.ui.quick_actions_state.selected {
             style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
         }
         items.push(ListItem::new(format!(" {} ", action)).style(style));
@@ -612,12 +613,12 @@ pub fn render_manage(f: &mut Frame, app: &App) {
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.branch_state.manage_selected {
+        if i == app.ui.manage_selected {
             style = style.fg(Color::Cyan).bg(Color::Rgb(40, 40, 40)).add_modifier(Modifier::BOLD);
         }
         if i == 2 {
             style = style.fg(Color::Red);
-            if i == app.branch_state.manage_selected {
+            if i == app.ui.manage_selected {
                 style = style.bg(Color::Rgb(40, 40, 40)).add_modifier(Modifier::BOLD);
             }
         }
@@ -626,7 +627,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
 
     let b_name = app
         .get_filtered_branches()
-        .get(app.branch_state.selected)
+        .get(app.ui.selected_branch_idx)
         .map(|b| b.name.as_str())
         .unwrap_or("none");
     let block = Block::default()
@@ -681,11 +682,11 @@ pub fn render_message(f: &mut Frame, msg: &str) {
 }
 
 pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
-    let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = &app.mode {
+    let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = &app.ui.mode {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(app.file_state.sidebar_width),
+                Constraint::Percentage(app.ui.sidebar_width),
                 Constraint::Min(0),
             ].as_ref())
             .split(area);
@@ -694,7 +695,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         (area, None)
     };
 
-    let sidebar_border_color = if app.file_state.active_panel == FilePanel::Directory && matches!(app.mode, AppMode::CodePreview(_)) {
+    let sidebar_border_color = if app.ui.active_panel == FilePanel::Directory && matches!(app.ui.mode, AppMode::CodePreview(_)) {
         Color::Rgb(180, 190, 254)
     } else {
         Color::Rgb(74, 79, 106)
@@ -706,7 +707,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         .border_style(Style::default().fg(sidebar_border_color));
 
     let mut items = vec![];
-    for (i, entry) in app.file_state.file_tree.iter().enumerate() {
+    for (i, entry) in app.repo.file_tree.iter().enumerate() {
         let indent = "  ".repeat(entry.depth);
         let icon = if entry.is_dir { if entry.is_open { "▼ 📂 " } else { "▶ 📁 " } } else { "  📄 " };
         let name = entry.path.file_name().unwrap_or_default().to_string_lossy();
@@ -717,18 +718,17 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
             FileStatus::Untracked => Color::Rgb(245, 194, 231),
             FileStatus::Ignored => Color::Rgb(140, 143, 161),
             FileStatus::Deleted => Color::Rgb(243, 139, 168),
-            FileStatus::Conflict => Color::Rgb(210, 15, 57), // Bright Red for conflicts
+            FileStatus::Conflict => Color::Rgb(210, 15, 57),
             FileStatus::Normal => Color::Rgb(205, 214, 244),
         };
 
         let mut style = Style::default().fg(status_color);
         
-        // Subtle background for status (desaturated colors)
         let status_bg = match entry.status {
-            FileStatus::Modified => Some(Color::Rgb(35, 48, 65)), // Subtle Blue
-            FileStatus::Added => Some(Color::Rgb(35, 60, 48)),    // Subtle Green
-            FileStatus::Conflict => Some(Color::Rgb(65, 35, 35)), // Subtle Red
-            FileStatus::Staged => Some(Color::Rgb(45, 60, 75)),   // Subtle Cyan
+            FileStatus::Modified => Some(Color::Rgb(35, 48, 65)),
+            FileStatus::Added => Some(Color::Rgb(35, 60, 48)),
+            FileStatus::Conflict => Some(Color::Rgb(65, 35, 35)),
+            FileStatus::Staged => Some(Color::Rgb(45, 60, 75)),
             _ => None,
         };
 
@@ -736,9 +736,9 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
             style = style.bg(bg);
         }
 
-        if i == app.file_state.file_selected {
-            let bg = if app.file_state.active_panel == FilePanel::Directory { Color::White } else { Color::Rgb(54, 58, 79) };
-            let fg = if app.file_state.active_panel == FilePanel::Directory { Color::Black } else { status_color };
+        if i == app.ui.selected_file_idx {
+            let bg = if app.ui.active_panel == FilePanel::Directory { Color::White } else { Color::Rgb(54, 58, 79) };
+            let fg = if app.ui.active_panel == FilePanel::Directory { Color::Black } else { status_color };
             style = style.bg(bg).fg(fg);
         }
         items.push(ListItem::new(Line::from(vec![Span::raw(indent), Span::raw(icon), Span::styled(name.to_string(), style)])).style(style));
@@ -756,18 +756,18 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
     let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(area);
     let mut stash_items = vec![];
-    for (i, stash) in app.stash_state.stashes.iter().enumerate() {
+    for (i, stash) in app.repo.stashes.iter().enumerate() {
         let mut style = Style::default().fg(Color::Rgb(205, 214, 244));
-        if i == app.stash_state.stash_selected { style = style.bg(Color::White).fg(Color::Black).add_modifier(Modifier::BOLD); }
+        if i == app.ui.selected_stash_idx { style = style.bg(Color::White).fg(Color::Black).add_modifier(Modifier::BOLD); }
         stash_items.push(ListItem::new(format!("{} [{}] - {}", stash.id, stash.branch, stash.message)).style(style));
     }
     let stash_list = List::new(stash_items).block(Block::default().title(" Stashes ").borders(Borders::ALL));
     f.render_widget(stash_list, chunks[0]);
 
     let detail_chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(chunks[1]);
-    let files_p = Paragraph::new(app.stash_state.stash_files.join("\n")).block(Block::default().title(" Files in Stash ").borders(Borders::ALL));
+    let files_p = Paragraph::new(app.repo.stash_files.join("\n")).block(Block::default().title(" Files in Stash ").borders(Borders::ALL));
     f.render_widget(files_p, detail_chunks[0]);
-    let diff_p = Paragraph::new(app.stash_state.stash_diff.as_str()).block(Block::default().title(" Diff Preview ").borders(Borders::ALL)).scroll((app.branch_state.info_scroll, 0));
+    let diff_p = Paragraph::new(app.repo.stash_diff.as_str()).block(Block::default().title(" Diff Preview ").borders(Borders::ALL)).scroll((app.ui.info_scroll, 0));
     f.render_widget(diff_p, detail_chunks[1]);
 }
 
@@ -790,15 +790,15 @@ pub fn render_settings(f: &mut Frame, app: &App) {
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.settings_state.selected { 
+        if i == app.ui.settings_state.selected { 
             style = style.bg(Color::Rgb(45, 45, 65)).add_modifier(Modifier::BOLD); 
         }
         
-        let text = if i == app.settings_state.selected {
-            if app.settings_state.editing {
-                if i == 4 { format!("> {}", "*".repeat(app.settings_state.input.len())) }
-                else { format!("> {}", app.settings_state.input) }
-            } else if app.settings_state.selecting {
+        let text = if i == app.ui.settings_state.selected {
+            if app.ui.settings_state.editing {
+                if i == 4 { format!("> {}", "*".repeat(app.ui.settings_state.input.len())) }
+                else { format!("> {}", app.ui.settings_state.input) }
+            } else if app.ui.settings_state.selecting {
                 format!("{} (Selecting...)", opt)
             } else {
                 opt.clone()
@@ -807,7 +807,7 @@ pub fn render_settings(f: &mut Frame, app: &App) {
             opt.clone()
         };
 
-        if i == app.settings_state.selected {
+        if i == app.ui.settings_state.selected {
             style = style.fg(Color::White);
         }
 
@@ -816,9 +816,9 @@ pub fn render_settings(f: &mut Frame, app: &App) {
 
     f.render_widget(List::new(items).block(Block::default().title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center)).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan))), inner);
     
-    if app.settings_state.selecting {
+    if app.ui.settings_state.selecting {
         let menu_width = 40;
-        let menu_height = app.settings_state.choices.len().min(10) as u16 + 2;
+        let menu_height = app.ui.settings_state.choices.len().min(10) as u16 + 2;
         
         let center_x = inner.x + (inner.width / 2);
         let center_y = inner.y + (inner.height / 2);
@@ -832,9 +832,9 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         f.render_widget(Clear, menu_area);
         
         let mut choice_items = vec![];
-        for (i, choice) in app.settings_state.choices.iter().enumerate() {
+        for (i, choice) in app.ui.settings_state.choices.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
-            if i == app.settings_state.choice_idx {
+            if i == app.ui.settings_state.choice_idx {
                 style = style.bg(Color::Rgb(80, 80, 100)).fg(Color::White).add_modifier(Modifier::BOLD);
             }
             choice_items.push(ListItem::new(format!(" {} ", choice)).style(style));
@@ -843,9 +843,9 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         f.render_widget(list, menu_area);
     }
 
-    let footer_msg = if app.settings_state.selecting {
+    let footer_msg = if app.ui.settings_state.selecting {
         "↑/↓: cycle options │ Enter: select │ Esc: cancel"
-    } else if app.settings_state.editing {
+    } else if app.ui.settings_state.editing {
         "Type your value │ Enter: save │ Esc: cancel"
     } else {
         "↑/↓: navigate │ Enter: edit/select │ Esc: cancel"
@@ -858,17 +858,16 @@ pub fn render_settings(f: &mut Frame, app: &App) {
 pub fn render_search(f: &mut Frame, app: &App) {
     let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Length(3), Constraint::Min(0)].as_ref()).split(f.area())[0];
     f.render_widget(Clear, area);
-    f.render_widget(Paragraph::new(format!("> {}", app.branch_state.search_query)).block(Block::default().title(" Search Branches ").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))), area);
+    f.render_widget(Paragraph::new(format!("> {}", app.ui.search_query)).block(Block::default().title(" Search Branches ").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))), area);
 }
 
 pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &PreviewState) {
-    let border_color = if app.file_state.active_panel == FilePanel::Preview { Color::Rgb(180, 190, 254) } else { Color::Rgb(74, 79, 106) };
+    let border_color = if app.ui.active_panel == FilePanel::Preview { Color::Rgb(180, 190, 254) } else { Color::Rgb(74, 79, 106) };
     let block = Block::default().title(format!(" Preview: {} (Tab: switch) ", state.file_path)).borders(Borders::ALL).border_style(Style::default().fg(border_color));
 
     let mut final_lines = Vec::new();
     let visible_rows = area.height.saturating_sub(2) as usize;
     let start_idx = state.scroll_y;
-    // Overscan by 5 lines to ensure smooth scrolling and prevent bottom-edge artifacts
     const OVERSCAN_LINES: usize = 5;
     let end_idx = (start_idx + visible_rows + OVERSCAN_LINES).min(state.highlighted_lines.len());
 
@@ -880,13 +879,13 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
         let is_selected = if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) { let (s, e) = if start <= end { (start, end) } else { (end, start) }; i >= s && i <= e } else { false };
         let is_cursor = i == state.cursor_y;
         let mut line_style = Style::default();
-        if is_cursor && app.file_state.active_panel == FilePanel::Preview { line_style = line_style.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
+        if is_cursor && app.ui.active_panel == FilePanel::Preview { line_style = line_style.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
         else if is_cursor { line_style = line_style.bg(Color::Rgb(40, 40, 60)); }
         else if is_selected { line_style = line_style.bg(Color::Rgb(30, 50, 80)); }
 
         for span in &h_line.spans {
             let mut s = span.style;
-            if is_cursor && app.file_state.active_panel == FilePanel::Preview { s = s.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
+            if is_cursor && app.ui.active_panel == FilePanel::Preview { s = s.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
             else if is_cursor { s = s.bg(Color::Rgb(40, 40, 60)); }
             else if is_selected { s = s.bg(Color::Rgb(30, 50, 80)); }
             spans.push(Span::styled(span.content.clone(), s));
@@ -897,28 +896,28 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
     f.render_widget(Paragraph::new(Text::from(final_lines)).block(block), area);
 }
 
-pub fn render_interactive_rebase(f: &mut ratatui::Frame, app: &mut crate::app::App) {
+pub fn render_interactive_rebase(f: &mut Frame, app: &mut App) {
     let area = crate::ui::components::centered_rect(80, 80, f.area());
-    f.render_widget(ratatui::widgets::Clear, area);
+    f.render_widget(Clear, area);
 
-    let block = ratatui::widgets::Block::default()
+    let block = Block::default()
         .title(" Interactive Rebase ")
-        .borders(ratatui::widgets::Borders::ALL)
-        .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(203, 166, 247)));
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)));
         
-    let items: Vec<ratatui::widgets::ListItem> = app.rebase_state.commits.iter().enumerate().map(|(i, commit)| {
+    let items: Vec<ListItem> = app.ui.rebase_state.commits.iter().enumerate().map(|(i, commit)| {
         let action_str = match commit.action {
-            crate::app::RebaseAction::Pick => "pick  ",
-            crate::app::RebaseAction::Reword => "reword",
-            crate::app::RebaseAction::Drop => "drop  ",
-            crate::app::RebaseAction::Squash => "squash",
+            crate::state::ui::RebaseAction::Pick => "pick  ",
+            crate::state::ui::RebaseAction::Reword => "reword",
+            crate::state::ui::RebaseAction::Drop => "drop  ",
+            crate::state::ui::RebaseAction::Squash => "squash",
         };
         
         let action_color = match commit.action {
-            crate::app::RebaseAction::Pick => ratatui::style::Color::DarkGray,
-            crate::app::RebaseAction::Reword => ratatui::style::Color::Cyan,
-            crate::app::RebaseAction::Drop => ratatui::style::Color::Red,
-            crate::app::RebaseAction::Squash => ratatui::style::Color::Yellow,
+            crate::state::ui::RebaseAction::Pick => Color::DarkGray,
+            crate::state::ui::RebaseAction::Reword => Color::Cyan,
+            crate::state::ui::RebaseAction::Drop => Color::Red,
+            crate::state::ui::RebaseAction::Squash => Color::Yellow,
         };
 
         let message = if let Some(new_msg) = &commit.new_message {
@@ -927,30 +926,30 @@ pub fn render_interactive_rebase(f: &mut ratatui::Frame, app: &mut crate::app::A
             commit.original_message.clone()
         };
 
-        let content = if app.rebase_state.editing && app.rebase_state.selected == i {
-            format!("{} {} {}", action_str, commit.hash, app.rebase_state.input)
+        let content = if app.ui.rebase_state.editing && app.ui.rebase_state.selected == i {
+            format!("{} {} {}", action_str, commit.hash, app.ui.rebase_state.input)
         } else {
             format!("{} {} {}", action_str, commit.hash, message)
         };
 
-        let mut style = ratatui::style::Style::default();
-        if i == app.rebase_state.selected {
-            style = style.bg(ratatui::style::Color::Rgb(49, 50, 68)).fg(ratatui::style::Color::White);
+        let mut style = Style::default();
+        if i == app.ui.rebase_state.selected {
+            style = style.bg(Color::Rgb(49, 50, 68)).fg(Color::White);
         } else {
             style = style.fg(action_color);
         }
 
-        ratatui::widgets::ListItem::new(content).style(style)
+        ListItem::new(content).style(style)
     }).collect();
 
-    let list = ratatui::widgets::List::new(items)
+    let list = List::new(items)
         .block(block)
-        .highlight_style(ratatui::style::Style::default().add_modifier(ratatui::style::Modifier::BOLD));
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD));
 
     f.render_widget(list, area);
 }
 
-fn render_transparent_ascii(buf: &mut ratatui::buffer::Buffer, ascii: &str, area: ratatui::layout::Rect, color: ratatui::style::Color) {
+fn render_transparent_ascii(buf: &mut ratatui::buffer::Buffer, ascii: &str, area: Rect, color: Color) {
     let lines: Vec<&str> = ascii.trim_matches('\n').lines().collect();
     if lines.is_empty() { return; }
     
@@ -975,13 +974,9 @@ fn render_transparent_ascii(buf: &mut ratatui::buffer::Buffer, ascii: &str, area
     }
 }
 
-pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
+pub fn render_main_menu(f: &mut Frame, app: &App) {
     let area = f.area();
     let buf = f.buffer_mut();
-    
-    // We already darkened the background globally in mod.rs
-    // But to be safe, if we need it here, we don't need to do it again.
-    // The modal overlay handles it.
     
     let ascii_logo = r#"
  ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
@@ -1014,32 +1009,31 @@ pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
  \__\_\\___/|___| |_|  
 "#;
 
-    let total_height = 8 + 2 + 6 + 5 + 5; // Logo + pad + options
+    let total_height = 8 + 2 + 6 + 5 + 5;
     let v_margin = area.height.saturating_sub(total_height) / 2;
 
-    let v_chunks = ratatui::layout::Layout::default()
-        .direction(ratatui::layout::Direction::Vertical)
+    let v_chunks = Layout::default()
+        .direction(Direction::Vertical)
         .constraints([
-            ratatui::layout::Constraint::Length(v_margin),
-            ratatui::layout::Constraint::Length(8),
-            ratatui::layout::Constraint::Length(2), // Padding
-            ratatui::layout::Constraint::Length(6),
-            ratatui::layout::Constraint::Length(5),
-            ratatui::layout::Constraint::Length(5),
-            ratatui::layout::Constraint::Min(0),
+            Constraint::Length(v_margin),
+            Constraint::Length(8),
+            Constraint::Length(2),
+            Constraint::Length(6),
+            Constraint::Length(5),
+            Constraint::Length(5),
+            Constraint::Min(0),
         ])
         .split(area);
 
-    // Render Logo transparently
-    render_transparent_ascii(buf, ascii_logo, v_chunks[1], ratatui::style::Color::Cyan);
+    render_transparent_ascii(buf, ascii_logo, v_chunks[1], Color::Cyan);
 
     let options_ascii = vec![opt_options, opt_help, opt_quit];
     for (i, opt) in options_ascii.iter().enumerate() {
-        let is_selected = i == app.main_menu_state.selected;
+        let is_selected = i == app.ui.main_menu_state.selected;
         let color = if is_selected {
-            ratatui::style::Color::White
+            Color::White
         } else {
-            ratatui::style::Color::Rgb(60, 60, 80) // Dim Gray
+            Color::Rgb(60, 60, 80)
         };
         
         render_transparent_ascii(buf, opt, v_chunks[3 + i], color);

@@ -1,78 +1,14 @@
-use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus, GutterStatus};
-use crate::ui::animations::SnapAnimation;
-use std::collections::{HashMap, HashSet};
-use std::time::Instant;
+use crate::models::{Branch, ConflictBlock, MergeStatus};
+use crate::state::{RepositoryState, UiState, AppMode, PrimaryMode, PreviewState};
+use crate::state::ui::RebaseAction;
+use std::collections::HashMap;
 use tokio::sync::mpsc;
 use syntect::parsing::SyntaxSet;
 use syntect::highlighting::ThemeSet;
 use ratatui::text::{Line, Span};
 use ratatui::style::{Color, Style};
 use std::sync::Arc;
-use crate::state::ui::ModalState;
 use crate::events::{Event, TaskEvent};
-
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub enum PrimaryMode {
-    Branches,
-    Files,
-}
-
-#[derive(PartialEq, Debug, Clone, Copy, Default)]
-pub enum FilePanel {
-    #[default]
-    Directory,
-    Preview,
-}
-
-#[derive(Clone, Debug)]
-pub struct PreviewState {
-    pub file_path: String,
-    pub lines: Vec<String>,
-    pub highlighted_lines: Vec<Line<'static>>,
-    pub cursor_y: usize,
-    pub scroll_y: usize,
-    pub selection_start: Option<usize>,
-    pub selection_end: Option<usize>,
-    pub line_diffs: HashMap<usize, GutterStatus>,
-}
-
-impl PartialEq for PreviewState {
-    fn eq(&self, other: &Self) -> bool {
-        self.file_path == other.file_path && 
-        self.cursor_y == other.cursor_y && 
-        self.scroll_y == other.scroll_y &&
-        self.selection_start == other.selection_start &&
-        self.selection_end == other.selection_end
-    }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum AppMode {
-    Normal,
-    Help,
-    Manage,
-    Filter,
-    Diff,
-    StashDetail,
-    Settings,
-    Search,
-    CodePreview(PreviewState),
-    ConfirmDelete(Vec<String>),
-    CreateBranch(String),
-    Commits,
-    CommitAction(String), // Option selected inside a commit
-    InteractiveRebase,
-    Shell(String),
-    QuickActions,
-    MainMenu,
-    Message(String),
-}
-
-#[derive(Default)]
-pub struct QuickActionsState {
-    pub selected: usize,
-    pub actions: Vec<String>,
-}
 
 pub struct MergeUpdate {
     pub branch_name: String,
@@ -93,38 +29,6 @@ pub struct FileStatusUpdate {
     pub statuses: HashMap<String, crate::git::files::FileStatus>,
 }
 
-pub struct FileState {
-    pub file_tree: Vec<crate::git::files::FileEntry>,
-    pub file_selected: usize,
-    pub git_file_statuses: HashMap<String, crate::git::files::FileStatus>,
-    pub sidebar_width: u16,
-    pub active_panel: FilePanel,
-    pub status_rx: mpsc::Receiver<FileStatusUpdate>,
-    pub open_paths: HashSet<String>,
-}
-
-impl FileState {
-    pub fn new(status_rx: mpsc::Receiver<FileStatusUpdate>, default_width: u16) -> Self {
-        Self {
-            file_tree: Vec::new(),
-            file_selected: 0,
-            git_file_statuses: HashMap::new(),
-            sidebar_width: default_width,
-            active_panel: FilePanel::Directory,
-            status_rx,
-            open_paths: HashSet::new(),
-        }
-    }
-}
-
-#[derive(Default)]
-pub struct StashState {
-    pub stashes: Vec<crate::git::stash::StashEntry>,
-    pub stash_selected: usize,
-    pub stash_files: Vec<String>,
-    pub stash_diff: String,
-}
-
 pub struct AIState {
     pub ai_worker: Option<crate::ai::AIWorker>,
     pub db: Option<crate::db::Database>,
@@ -135,81 +39,12 @@ pub struct AIState {
     pub conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
 }
 
-#[derive(Default)]
-pub struct SettingsState {
-    pub selected: usize,
-    pub editing: bool,
-    pub selecting: bool,
-    pub choice_idx: usize,
-    pub choices: Vec<String>,
-    pub input: String,
-}
-
-#[derive(Default)]
-pub struct CommitsState {
-    pub commits: Vec<crate::models::Commit>,
-    pub selected: usize,
-}
-
-#[derive(Default, Clone)]
-pub struct RebaseCommit {
-    pub hash: String,
-    pub original_message: String,
-    pub new_message: Option<String>,
-    pub action: RebaseAction,
-}
-
-#[derive(Default, Clone, PartialEq)]
-pub enum RebaseAction {
-    #[default]
-    Pick,
-    Reword,
-    Drop,
-    Squash,
-}
-
-#[derive(Default)]
-pub struct RebaseState {
-    pub commits: Vec<RebaseCommit>,
-    pub selected: usize,
-    pub editing: bool,
-    pub input: String,
-    pub ai_analyzing: bool,
-}
-
-#[derive(Default)]
-pub struct MainMenuState {
-    pub selected: usize,
-}
-
 pub struct App {
-    pub branch_state: BranchState,
-    pub file_state: FileState,
-    pub stash_state: StashState,
+    pub repo: RepositoryState,
+    pub ui: UiState,
     pub ai_state: AIState,
-    pub settings_state: SettingsState,
-    pub commits_state: CommitsState,
-    pub quick_actions_state: QuickActionsState,
-    pub rebase_state: RebaseState,
-    pub main_menu_state: MainMenuState,
 
-    pub current_branch: String,
-    pub primary_mode: PrimaryMode,
-    pub mode: AppMode,
-    pub modal_stack: Vec<ModalState>, // New Overlay system
-
-    // UI & System State
-    pub last_click_time: Instant,
-    pub last_click_row: Option<usize>,
-    pub needs_clear: bool,
-    pub alt_pressed: bool,
-    pub shift_pressed: bool,
-    pub show_terminal: bool,
     pub config: crate::utils::config::Config,
-
-    // Animations
-    pub snap_animation: Option<SnapAnimation>,
-    pub branch_screen_positions: Vec<(usize, u16)>, // (branch_index, screen_y)
 
     // Syntax Highlighting
     pub ps: Arc<SyntaxSet>,
@@ -221,25 +56,7 @@ pub struct App {
     pub trigger_tx: mpsc::Sender<()>,
     pub shared_primary_mode: Arc<std::sync::RwLock<PrimaryMode>>,
     pub fetched_models_rx: mpsc::Receiver<Vec<String>>,
-}
-
-#[derive(Default)]
-pub struct BranchState {
-    pub branches: Vec<Branch>,
-    pub selected: usize,
-    pub manage_selected: usize,
-    pub filter_selected: usize,
-    pub current_filter: Option<BranchStatus>,
-    pub list_start_index: usize,
-    pub filtered_indices: Vec<usize>,
-    pub bulk_selected: HashSet<String>,
-    pub branch_info: String,
-    pub info_scroll: u16,
-    pub search_query: String,
-    pub diff_files: Vec<String>,
-    pub diff_file_selected: usize,
-    pub diff_preview: Option<PreviewState>,
-    pub diff_panel: FilePanel,
+    pub file_status_rx: mpsc::Receiver<FileStatusUpdate>,
 }
 
 impl App {
@@ -267,12 +84,8 @@ impl App {
         let shared_primary_mode = Arc::new(std::sync::RwLock::new(primary_mode));
 
         let mut app = Self {
-            branch_state: BranchState {
-                branches,
-                ..Default::default()
-            },
-            file_state: FileState::new(file_status_rx, config.default_sidebar_width as u16),
-            stash_state: StashState::default(),
+            repo: RepositoryState::new(current_branch, branches),
+            ui: UiState::new(primary_mode, config.default_sidebar_width as u16),
             ai_state: AIState {
                 ai_worker: None,
                 db: None,
@@ -282,36 +95,7 @@ impl App {
                 conflict_resolution_rx,
                 conflict_trigger_tx,
             },
-            settings_state: SettingsState::default(),
-            commits_state: CommitsState::default(),
-            quick_actions_state: QuickActionsState {
-                selected: 0,
-                actions: vec![
-                    "git pull".to_string(),
-                    "git push".to_string(),
-                    "git fetch --all".to_string(),
-                    "git status".to_string(),
-                    "git remote -v".to_string(),
-                    "git branch -a".to_string(),
-                    "git commit --amend --no-edit".to_string(),
-                    "git log -n 5".to_string(),
-                ],
-            },
-            rebase_state: RebaseState::default(),
-            main_menu_state: MainMenuState::default(),
-            current_branch,
-            primary_mode,
-            mode: AppMode::Normal,
-            modal_stack: Vec::new(),
-            last_click_time: Instant::now(),
-            last_click_row: None,
-            needs_clear: false,
-            alt_pressed: false,
-            shift_pressed: false,
-            show_terminal: false,
             config,
-            snap_animation: None,
-            branch_screen_positions: Vec::new(),
             ps: Arc::new(SyntaxSet::load_defaults_newlines()),
             ts: Arc::new(ThemeSet::load_defaults()),
             event_tx: None,
@@ -319,9 +103,10 @@ impl App {
             trigger_tx,
             shared_primary_mode,
             fetched_models_rx,
+            file_status_rx,
         };
         
-        if app.primary_mode == PrimaryMode::Files {
+        if app.ui.primary_mode == PrimaryMode::Files {
             app.load_file_tree(repo_path); 
         }
         
@@ -330,25 +115,25 @@ impl App {
     }
 
     pub fn toggle_primary_mode(&mut self) {
-        self.primary_mode = match self.primary_mode {
+        self.ui.primary_mode = match self.ui.primary_mode {
             PrimaryMode::Branches => PrimaryMode::Files,
             PrimaryMode::Files => PrimaryMode::Branches,
         };
-        self.config.last_primary_mode = match self.primary_mode {
+        self.config.last_primary_mode = match self.ui.primary_mode {
             PrimaryMode::Branches => 0,
             PrimaryMode::Files => 1,
         };
         
         // Sync shared mode synchronously
         if let Ok(mut w) = self.shared_primary_mode.write() {
-            *w = self.primary_mode;
+            *w = self.ui.primary_mode;
         }
 
         crate::utils::config::save_config(&self.config);
     }
 
     pub fn refresh_branches(&mut self, path: &str) {
-        self.branch_state.branches = crate::git::build_branches(path);
+        self.repo.branches = crate::git::build_branches(path);
         self.refresh_filtered_branches();
         let _ = self.trigger_tx.try_send(());
     }
@@ -356,7 +141,7 @@ impl App {
     pub fn update_from_channel(&mut self, path: &str) {
         while let Ok(update) = self.rx.try_recv() {
             if let Some(branch) = self
-                .branch_state
+                .repo
                 .branches
                 .iter_mut()
                 .find(|b| b.name == update.branch_name)
@@ -366,13 +151,13 @@ impl App {
         }
         while let Ok(update) = self.ai_state.ai_rx.try_recv() {
             if update.analysis.starts_with("Commit Msg Suggestion:\n") {
-                if let AppMode::InteractiveRebase = self.mode {
+                if let AppMode::InteractiveRebase = self.ui.mode {
                     let msg = update.analysis.replace("Commit Msg Suggestion:\n", "").trim().to_string();
-                    if self.rebase_state.ai_analyzing {
-                        self.rebase_state.ai_analyzing = false;
-                        let i = self.rebase_state.selected;
-                        self.rebase_state.commits[i].new_message = Some(msg);
-                        self.rebase_state.commits[i].action = crate::app::RebaseAction::Reword;
+                    if self.ui.rebase_state.ai_analyzing {
+                        self.ui.rebase_state.ai_analyzing = false;
+                        let i = self.ui.rebase_state.selected;
+                        self.ui.rebase_state.commits[i].new_message = Some(msg);
+                        self.ui.rebase_state.commits[i].action = RebaseAction::Reword;
                     }
                 }
             } else {
@@ -382,21 +167,21 @@ impl App {
         while let Ok(update) = self.ai_state.conflict_resolution_rx.try_recv() {
             match crate::actions::commands::apply_resolution_to_file(path, &update.file_path, &update.original_block, &update.resolved_content) {
                 Ok(_) => {
-                    self.mode = AppMode::Message(format!("Fixed conflict in {}", update.file_path));
+                    self.ui.mode = AppMode::Message(format!("Fixed conflict in {}", update.file_path));
                 }
                 Err(e) => {
-                    self.mode = AppMode::Message(format!("Error fixing conflict: {}", e));
+                    self.ui.mode = AppMode::Message(format!("Error fixing conflict: {}", e));
                 }
             }
         }
-        while let Ok(update) = self.file_state.status_rx.try_recv() {
+        while let Ok(update) = self.file_status_rx.try_recv() {
             self.update_file_statuses(update.statuses, path);
         }
         while let Ok(models) = self.fetched_models_rx.try_recv() {
-            if self.settings_state.selecting && self.settings_state.selected == 3 {
-                self.settings_state.choices = models;
-                if self.settings_state.choices.is_empty() {
-                    self.settings_state.choices = vec!["No models found".to_string()];
+            if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
+                self.ui.settings_state.choices = models;
+                if self.ui.settings_state.choices.is_empty() {
+                    self.ui.settings_state.choices = vec!["No models found".to_string()];
                 }
             }
         }
@@ -405,13 +190,11 @@ impl App {
     pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>, repo_path: &str) {
         let mut tree_needs_refresh = false;
         
-        // Detect additions, deletions OR renames
-        if statuses.len() != self.file_state.git_file_statuses.len() {
+        if statuses.len() != self.repo.git_file_statuses.len() {
             tree_needs_refresh = true;
         } else {
-            // Check if any key in the new statuses is missing from our current knowledge
             for path in statuses.keys() {
-                if !self.file_state.git_file_statuses.contains_key(path) {
+                if !self.repo.git_file_statuses.contains_key(path) {
                     tree_needs_refresh = true;
                     break;
                 }
@@ -422,17 +205,16 @@ impl App {
             self.load_file_tree(repo_path);
         }
 
-        self.file_state.git_file_statuses = statuses;
-        for entry in self.file_state.file_tree.iter_mut() {
+        self.repo.git_file_statuses = statuses;
+        for entry in self.repo.file_tree.iter_mut() {
             let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
-            entry.status = self.file_state.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
+            entry.status = self.repo.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
         }
 
-        // If we are in code preview, check if the current file was modified
         let mut new_preview_data = None;
-        if let AppMode::CodePreview(ref mut state) = self.mode {
+        if let AppMode::CodePreview(ref mut state) = self.ui.mode {
             let current_path = state.file_path.clone();
-            if let Some(status) = self.file_state.git_file_statuses.get(&current_path)
+            if let Some(status) = self.repo.git_file_statuses.get(&current_path)
                 && *status == crate::git::files::FileStatus::Modified {
                     state.line_diffs = crate::git::get_line_diffs(repo_path, &current_path);
                     
@@ -446,7 +228,7 @@ impl App {
 
         if let Some((path, cy, sy)) = new_preview_data
             && let Some(mut np) = self.create_preview_state(repo_path, &path)
-            && let AppMode::CodePreview(ref mut state) = self.mode {
+            && let AppMode::CodePreview(ref mut state) = self.ui.mode {
                 let max_idx = np.lines.len().saturating_sub(1);
                 np.cursor_y = cy.min(max_idx);
                 np.scroll_y = sy.min(max_idx);
@@ -457,7 +239,7 @@ impl App {
     pub fn update(&mut self, event: Event) {
         match event {
             Event::Task(TaskEvent::HighlightingComplete(path, lines)) => {
-                if let AppMode::CodePreview(ref mut state) = self.mode {
+                if let AppMode::CodePreview(ref mut state) = self.ui.mode {
                     if state.file_path == path {
                         state.highlighted_lines = lines;
                     }
@@ -466,15 +248,13 @@ impl App {
             Event::Task(TaskEvent::AiAnalysisComplete(analysis)) => {
                 self.ai_state.ai_analysis = Some(analysis);
             }
-            Event::Task(TaskEvent::ConflictResolved { file_path: _, original_block: _, resolved_content: _ }) => {
-                // Handled via external path? Actually we don't have path here.
-                // Will need to handle it properly or pass repo_path to update.
+            Event::Task(TaskEvent::ConflictResolved { .. }) => {
             }
             Event::Task(TaskEvent::AiModelsFetched(models)) => {
-                if self.settings_state.selecting && self.settings_state.selected == 3 {
-                    self.settings_state.choices = models;
-                    if self.settings_state.choices.is_empty() {
-                        self.settings_state.choices = vec!["No models found".to_string()];
+                if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
+                    self.ui.settings_state.choices = models;
+                    if self.ui.settings_state.choices.is_empty() {
+                        self.ui.settings_state.choices = vec!["No models found".to_string()];
                     }
                 }
             }
@@ -483,11 +263,11 @@ impl App {
     }
 
     pub fn apply_snap_deletion(&mut self, path: &str) -> String {
-        if let Some(ref anim) = self.snap_animation {
+        if let Some(ref anim) = self.ui.snap_animation {
             let names: Vec<String> = anim.rows.iter().map(|r| r.branch_name.clone()).collect();
             let msg = crate::actions::bulk_delete_branches(path, &names);
             self.refresh_branches(path);
-            self.branch_state.bulk_selected.clear();
+            self.ui.bulk_selected.clear();
             msg
         } else {
             String::new()
@@ -495,18 +275,18 @@ impl App {
     }
 
     pub fn refresh_filtered_branches(&mut self) {
-        self.branch_state.filtered_indices = self.branch_state.branches
+        self.ui.filtered_indices = self.repo.branches
             .iter()
             .enumerate()
             .filter(|(_, b)| {
-                let status_match = if let Some(filter) = &self.branch_state.current_filter {
+                let status_match = if let Some(filter) = &self.ui.current_filter {
                     b.status.contains(filter)
                 } else {
                     true
                 };
                 
-                let search_match = if !self.branch_state.search_query.is_empty() {
-                    b.name.to_lowercase().contains(&self.branch_state.search_query.to_lowercase())
+                let search_match = if !self.ui.search_query.is_empty() {
+                    b.name.to_lowercase().contains(&self.ui.search_query.to_lowercase())
                 } else {
                     true
                 };
@@ -516,65 +296,65 @@ impl App {
             .map(|(i, _)| i)
             .collect();
 
-        let max = self.branch_state.filtered_indices.len().saturating_sub(1);
-        if self.branch_state.selected > max {
-            self.branch_state.selected = max;
+        let max = self.ui.filtered_indices.len().saturating_sub(1);
+        if self.ui.selected_branch_idx > max {
+            self.ui.selected_branch_idx = max;
         }
     }
 
     pub fn get_filtered_branches(&self) -> Vec<&Branch> {
-        self.branch_state
+        self.ui
             .filtered_indices
             .iter()
-            .map(|&i| &self.branch_state.branches[i])
+            .map(|&i| &self.repo.branches[i])
             .collect()
     }
 
     pub fn toggle_help(&mut self) {
-        if self.mode == AppMode::Help {
-            self.mode = AppMode::Normal;
+        if self.ui.mode == AppMode::Help {
+            self.ui.mode = AppMode::Normal;
         } else {
-            self.mode = AppMode::Help;
+            self.ui.mode = AppMode::Help;
         }
     }
 
     pub fn next(&mut self) {
-        match self.primary_mode {
+        match self.ui.primary_mode {
             PrimaryMode::Branches => {
-                let max = self.branch_state.filtered_indices.len().saturating_sub(1);
-                if self.branch_state.selected < max {
-                    self.branch_state.selected += 1;
+                let max = self.ui.filtered_indices.len().saturating_sub(1);
+                if self.ui.selected_branch_idx < max {
+                    self.ui.selected_branch_idx += 1;
                 }
             }
             PrimaryMode::Files => {
-                if self.file_state.file_selected < self.file_state.file_tree.len().saturating_sub(1)
+                if self.ui.selected_file_idx < self.repo.file_tree.len().saturating_sub(1)
                 {
-                    self.file_state.file_selected += 1;
+                    self.ui.selected_file_idx += 1;
                 }
             }
         }
     }
 
     pub fn previous(&mut self) {
-        match self.primary_mode {
+        match self.ui.primary_mode {
             PrimaryMode::Branches => {
-                if self.branch_state.selected > 0 {
-                    self.branch_state.selected -= 1;
+                if self.ui.selected_branch_idx > 0 {
+                    self.ui.selected_branch_idx -= 1;
                 }
             }
             PrimaryMode::Files => {
-                if self.file_state.file_selected > 0 {
-                    self.file_state.file_selected -= 1;
+                if self.ui.selected_file_idx > 0 {
+                    self.ui.selected_file_idx -= 1;
                 }
             }
         }
     }
 
     pub fn load_file_tree(&mut self, path: &str) {
-        self.file_state.git_file_statuses = crate::git::files::get_git_file_statuses(path);
+        self.repo.git_file_statuses = crate::git::files::get_git_file_statuses(path);
         let mut new_tree = Vec::new();
         self.build_tree_recursive(path, "", 0, &mut new_tree);
-        self.file_state.file_tree = new_tree;
+        self.repo.file_tree = new_tree;
     }
 
     fn build_tree_recursive(&self, root: &str, current_dir: &str, depth: usize, tree: &mut Vec<crate::git::files::FileEntry>) {
@@ -582,12 +362,12 @@ impl App {
             root,
             current_dir,
             depth,
-            &self.file_state.git_file_statuses,
+            &self.repo.git_file_statuses,
         );
 
         for mut entry in entries {
             let path_str = entry.path.to_string_lossy().to_string();
-            let is_open = self.file_state.open_paths.contains(&path_str);
+            let is_open = self.ui.open_paths.contains(&path_str);
             entry.is_open = is_open;
             
             tree.push(entry.clone());
@@ -599,49 +379,48 @@ impl App {
     }
 
     pub fn toggle_file_dir(&mut self, _path_str: &str) {
-        if self.file_state.file_selected >= self.file_state.file_tree.len() {
+        if self.ui.selected_file_idx >= self.repo.file_tree.len() {
             return;
         }
 
-        let entry = &self.file_state.file_tree[self.file_state.file_selected];
+        let entry = &self.repo.file_tree[self.ui.selected_file_idx];
         if !entry.is_dir { return; }
         
         let path = entry.path.to_string_lossy().to_string();
-        if self.file_state.open_paths.contains(&path) {
-            self.file_state.open_paths.remove(&path);
+        if self.ui.open_paths.contains(&path) {
+            self.ui.open_paths.remove(&path);
         } else {
-            self.file_state.open_paths.insert(path);
+            self.ui.open_paths.insert(path);
         }
         
-        // Rebuild tree to reflect change
         let repo_path = _path_str.to_string();
         let mut new_tree = Vec::new();
         self.build_tree_recursive(&repo_path, "", 0, &mut new_tree);
-        self.file_state.file_tree = new_tree;
+        self.repo.file_tree = new_tree;
     }
 
     pub fn load_stashes(&mut self, path: &str) {
-        self.stash_state.stashes = crate::git::stash::get_stashes(path);
-        self.stash_state.stash_selected = 0;
+        self.repo.stashes = crate::git::stash::get_stashes(path);
+        self.ui.selected_stash_idx = 0;
     }
 
     pub fn load_rebase_commits(&mut self, path: &str) {
         let commits = crate::git::get_unpushed_commits(path);
-        self.rebase_state.commits = commits.into_iter().map(|c| RebaseCommit {
+        self.ui.rebase_state.commits = commits.into_iter().map(|c| crate::state::ui::RebaseCommit {
             hash: c.hash,
             original_message: c.message,
             new_message: None,
             action: RebaseAction::Pick,
         }).collect();
-        self.rebase_state.selected = 0;
-        self.rebase_state.editing = false;
-        self.rebase_state.input.clear();
+        self.ui.rebase_state.selected = 0;
+        self.ui.rebase_state.editing = false;
+        self.ui.rebase_state.input.clear();
     }
 
     pub fn load_stash_detail(&mut self, path: &str) {
-        if let Some(stash) = self.stash_state.stashes.get(self.stash_state.stash_selected) {
-            self.stash_state.stash_files = crate::git::stash::get_stash_files(path, &stash.id);
-            self.stash_state.stash_diff = crate::git::stash::get_stash_diff(path, &stash.id);
+        if let Some(stash) = self.repo.stashes.get(self.ui.selected_stash_idx) {
+            self.repo.stash_files = crate::git::stash::get_stash_files(path, &stash.id);
+            self.repo.stash_diff = crate::git::stash::get_stash_diff(path, &stash.id);
         }
     }
 
@@ -665,15 +444,15 @@ impl App {
 
     pub fn toggle_selection(&mut self) {
         if let Some(&idx) = self
-            .branch_state
+            .ui
             .filtered_indices
-            .get(self.branch_state.selected)
+            .get(self.ui.selected_branch_idx)
         {
-            let name = self.branch_state.branches[idx].name.clone();
-            if self.branch_state.bulk_selected.contains(&name) {
-                self.branch_state.bulk_selected.remove(&name);
+            let name = self.repo.branches[idx].name.clone();
+            if self.ui.bulk_selected.contains(&name) {
+                self.ui.bulk_selected.remove(&name);
             } else {
-                self.branch_state.bulk_selected.insert(name);
+                self.ui.bulk_selected.insert(name);
             }
         }
     }
@@ -724,7 +503,6 @@ impl App {
                 self.ts.clone(),
             );
         } else {
-            // Fallback for tests or before tx is set
             let extension = std::path::Path::new(&state.file_path).extension().and_then(|s| s.to_str()).unwrap_or("");
             let syntax = self.ps.find_syntax_by_extension(extension)
                 .or_else(|| self.ps.find_syntax_for_file(&state.file_path).unwrap_or(None))
@@ -772,7 +550,6 @@ impl App {
 
             let spans = vec![Span::styled(line.to_string(), Style::default().fg(color))];
             
-            // If it's a hunk header, add some visual structure
             if line.starts_with("@@") {
                 state.highlighted_lines.push(Line::from(vec![Span::styled(" ".repeat(100), Style::default().bg(Color::Rgb(30, 30, 46)))]));
             }

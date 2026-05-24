@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
     let (file_status_tx, file_status_rx) = mpsc::channel::<app::FileStatusUpdate>(10);
     let (fetched_models_tx, fetched_models_rx) = mpsc::channel::<Vec<String>>(1);
     
-    let (event_tx, mut event_rx) = mpsc::channel::<Event>(100);
+    let (event_tx, mut event_rx) = mpsc::channel::<Event>(1000);
 
     let mut app = App::new(
         &path,
@@ -106,7 +106,7 @@ async fn main() -> Result<()> {
     let event_tx_clone = event_tx.clone();
     tokio::task::spawn_blocking(move || {
         loop {
-            if event::poll(std::time::Duration::from_millis(50)).unwrap_or(false) {
+            if event::poll(std::time::Duration::from_millis(10)).unwrap_or(false) {
                 if let Ok(crossterm_event) = event::read() {
                     match crossterm_event {
                         event::Event::Key(k) => { let _ = event_tx_clone.blocking_send(Event::Key(k)); }
@@ -145,17 +145,8 @@ async fn run_app(
     event_rx: &mut mpsc::Receiver<Event>,
 ) -> io::Result<()> {
     loop {
-        app.update_from_channel(path);
-
-        if app.needs_clear {
-            terminal.clear()?;
-            app.needs_clear = false;
-        }
-
-        terminal.draw(|f| ui::draw(f, app, path))?;
-
+        // 1. Process events
         while let Ok(event) = event_rx.try_recv() {
-            // First we give it to keyboard/mouse handlers
             match &event {
                 Event::Key(key) => {
                     if handlers::keyboard::handle_keyboard(app, *key, path) {
@@ -167,10 +158,21 @@ async fn run_app(
                 }
                 _ => {}
             }
-            // Then we update the app state
             app.update(event);
         }
+
+        // 2. Update state from background channels
+        app.update_from_channel(path);
+
+        // 3. Clear if needed
+        if app.ui.needs_clear {
+            terminal.clear()?;
+            app.ui.needs_clear = false;
+        }
+
+        // 4. Draw
+        terminal.draw(|f| ui::draw(f, app, path))?;
         
-        tokio::time::sleep(std::time::Duration::from_millis(16)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(8)).await;
     }
 }
