@@ -950,58 +950,98 @@ pub fn render_interactive_rebase(f: &mut ratatui::Frame, app: &mut crate::app::A
 }
 
 pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
-    // 1. Darken the background
     let area = f.area();
     let buf = f.buffer_mut();
     for x in area.left()..area.right() {
         for y in area.top()..area.bottom() {
             let cell = &mut buf[(x, y)];
-            cell.set_bg(ratatui::style::Color::Rgb(15, 15, 20)); // Very dark overlay
-            // We could also dim foreground, but setting a solid dark BG usually suffices
+            cell.set_bg(ratatui::style::Color::Rgb(15, 15, 20));
         }
     }
 
-    // 2. Draw the Modal
-    let modal_area = crate::ui::components::centered_rect(40, 40, area);
-    f.render_widget(ratatui::widgets::Clear, modal_area);
+    let ascii_logo = r#"
+ ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
+ ╚══██╔══╝██║    ██║██║██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
+    ██║   ██║ █╗ ██║██║██║  ███╗██║  ██║██████╔╝██║   ██║██████╔╝
+    ██║   ██║███╗██║██║██║   ██║██║  ██║██╔══██╗██║   ██║██╔═══╝ 
+    ██║   ╚███╔███╔╝██║╚██████╔╝██████╔╝██║  ██║╚██████╔╝██║     
+    ╚═╝    ╚══╝╚══╝ ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝     
+"#;
 
-    let logo_paragraph = ratatui::widgets::Paragraph::new(ASCII_LOGO.trim_matches('\n'))
+    let opt_options = r#"
+  ___  ____ _____ ___ ___  _  _ ___ 
+ / _ \|  _ \_   _|_ _/ _ \| \| / __|
+| (_) | |_) || |  | | (_) | .` \__ \
+ \___/| .__/ |_| |___\___/|_|\_|___/
+      |_|                           
+"#;
+
+    let opt_help = r#"
+ _  _ ___ _    ___ 
+| || | __| |  | _ \
+| __ | _|| |__|  _/
+|_||_|___|____|_|  
+"#;
+
+    let opt_quit = r#"
+  ___  _   _ ___ _____ 
+ / _ \| | | |_ _|_   _|
+| (_) | |_| || |  | |  
+ \__\_\\___/|___| |_|  
+"#;
+
+    let logo_paragraph = ratatui::widgets::Paragraph::new(ascii_logo.trim_matches('\n'))
         .style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan))
         .alignment(ratatui::layout::Alignment::Center);
 
-    let block = ratatui::widgets::Block::default()
-        .borders(ratatui::widgets::Borders::ALL)
-        .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan))
-        .style(ratatui::style::Style::default().bg(ratatui::style::Color::Rgb(25, 25, 35))); // Slightly lighter than background
-        
-    let inner_area = block.inner(modal_area);
-    f.render_widget(block, modal_area);
+    let total_height = 8 + 2 + 6 + 5 + 5; // Logo + pad + options
+    let v_margin = area.height.saturating_sub(total_height) / 2;
 
-    let inner_chunks = ratatui::layout::Layout::default()
+    let v_chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
         .constraints([
-            ratatui::layout::Constraint::Length(8), // Logo
+            ratatui::layout::Constraint::Length(v_margin),
+            ratatui::layout::Constraint::Length(8),
+            ratatui::layout::Constraint::Length(2), // Padding
+            ratatui::layout::Constraint::Length(6),
+            ratatui::layout::Constraint::Length(5),
+            ratatui::layout::Constraint::Length(5),
             ratatui::layout::Constraint::Min(0),
         ])
-        .split(inner_area);
+        .split(area);
 
-    f.render_widget(logo_paragraph, inner_chunks[0]);
+    f.render_widget(logo_paragraph, v_chunks[1]);
 
-    let options = vec![" Options ", " Help ", " Quit "];
-    let mut items = vec![];
-    for (i, opt) in options.iter().enumerate() {
-        let mut style = ratatui::style::Style::default().fg(ratatui::style::Color::Gray);
-        let mut txt = opt.to_string();
-        if i == app.main_menu_state.selected {
-            style = style.bg(ratatui::style::Color::Rgb(60, 60, 80)).fg(ratatui::style::Color::White).add_modifier(ratatui::style::Modifier::BOLD);
-            txt = format!("> {}", txt);
-        } else {
-            txt = format!("  {}", txt);
+    let options_ascii = vec![opt_options, opt_help, opt_quit];
+    for (i, opt) in options_ascii.iter().enumerate() {
+        let is_selected = i == app.main_menu_state.selected;
+        let mut style = ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(60, 60, 80)); // Dim Gray
+        
+        if is_selected {
+            style = ratatui::style::Style::default().fg(ratatui::style::Color::White).add_modifier(ratatui::style::Modifier::BOLD);
         }
-        items.push(ratatui::widgets::ListItem::new(txt).style(style));
+
+        let lines: Vec<ratatui::text::Line> = opt
+            .trim_matches('\n')
+            .lines()
+            .map(|l| ratatui::text::Line::from(l.to_string()))
+            .collect();
+            
+        let max_width = opt.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
+
+        let p = ratatui::widgets::Paragraph::new(lines)
+            .style(style)
+            .alignment(ratatui::layout::Alignment::Left);
+
+        let h_layout = ratatui::layout::Layout::default()
+            .direction(ratatui::layout::Direction::Horizontal)
+            .constraints([
+                ratatui::layout::Constraint::Min(0),
+                ratatui::layout::Constraint::Length(max_width),
+                ratatui::layout::Constraint::Min(0),
+            ])
+            .split(v_chunks[3 + i]);
+
+        f.render_widget(p, h_layout[1]);
     }
-
-    let list = ratatui::widgets::List::new(items);
-
-    f.render_widget(list, inner_chunks[1]);
 }
