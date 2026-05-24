@@ -950,36 +950,32 @@ pub fn render_interactive_rebase(f: &mut ratatui::Frame, app: &mut crate::app::A
 }
 
 pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
-    let area = crate::ui::components::centered_rect(35, 35, f.area());
-    f.render_widget(ratatui::widgets::Clear, area);
+    // 1. Darken the background
+    let area = f.area();
+    let buf = f.buffer_mut();
+    for x in area.left()..area.right() {
+        for y in area.top()..area.bottom() {
+            let cell = &mut buf[(x, y)];
+            cell.set_bg(ratatui::style::Color::Rgb(15, 15, 20)); // Very dark overlay
+            // We could also dim foreground, but setting a solid dark BG usually suffices
+        }
+    }
 
-    let ascii_logo = r#"
- ______         _           __               
-/_  __/        (_)___ _____/ /________  ____ 
- / / | | /| / / / __ `/ __  / ___/ __ \/ __ \
-/ /  | |/ |/ / / /_/ / /_/ / /  / /_/ / /_/ /
-/_/   |__/|__/_/\__, /\__,_/_/   \____/ .___/ 
-               /____/                /_/     
-"#;
+    // 2. Draw the Modal
+    let modal_area = crate::ui::components::centered_rect(40, 40, area);
+    f.render_widget(ratatui::widgets::Clear, modal_area);
 
-    let logo_paragraph = ratatui::widgets::Paragraph::new(ascii_logo)
+    let logo_paragraph = ratatui::widgets::Paragraph::new(ASCII_LOGO.trim_matches('\n'))
         .style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan))
         .alignment(ratatui::layout::Alignment::Center);
 
-    let _chunks = ratatui::layout::Layout::default()
-        .direction(ratatui::layout::Direction::Vertical)
-        .constraints([
-            ratatui::layout::Constraint::Length(8), // Logo
-            ratatui::layout::Constraint::Min(0),
-        ])
-        .split(area);
-
     let block = ratatui::widgets::Block::default()
         .borders(ratatui::widgets::Borders::ALL)
-        .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan));
+        .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan))
+        .style(ratatui::style::Style::default().bg(ratatui::style::Color::Rgb(25, 25, 35))); // Slightly lighter than background
         
-    let inner_area = block.inner(area);
-    f.render_widget(block, area);
+    let inner_area = block.inner(modal_area);
+    f.render_widget(block, modal_area);
 
     let inner_chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
@@ -989,16 +985,15 @@ pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
         ])
         .split(inner_area);
 
-
     f.render_widget(logo_paragraph, inner_chunks[0]);
 
     let options = vec![" Options ", " Help ", " Quit "];
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
-        let mut style = ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray);
+        let mut style = ratatui::style::Style::default().fg(ratatui::style::Color::Gray);
         let mut txt = opt.to_string();
         if i == app.main_menu_state.selected {
-            style = style.bg(ratatui::style::Color::Rgb(45, 45, 65)).fg(ratatui::style::Color::White).add_modifier(ratatui::style::Modifier::BOLD);
+            style = style.bg(ratatui::style::Color::Rgb(60, 60, 80)).fg(ratatui::style::Color::White).add_modifier(ratatui::style::Modifier::BOLD);
             txt = format!("> {}", txt);
         } else {
             txt = format!("  {}", txt);
