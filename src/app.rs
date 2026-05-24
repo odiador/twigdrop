@@ -27,7 +27,6 @@ pub struct App {
 }
 
 pub struct AIState {
-    pub ai_worker: Option<crate::ai::AIWorker>,
     pub db: Option<crate::db::Database>,
     pub ai_analysis: Option<String>,
 }
@@ -54,7 +53,6 @@ impl App {
             repo: RepositoryState::new(current_branch, branches),
             ui: UiState::new(primary_mode, config.default_sidebar_width as u16),
             ai_state: AIState {
-                ai_worker: None,
                 db: None,
                 ai_analysis: None,
             },
@@ -117,15 +115,25 @@ impl App {
             },
             Event::Task(task_event) => match task_event {
                 TaskEvent::HighlightingComplete(path, lines) => {
-                    if let AppMode::CodePreview(ref mut state) = self.ui.mode {
-                        if state.file_path == path {
-                            state.highlighted_lines = lines;
+                    let updated = self.ui.modal_stack.iter_mut().any(|modal| {
+                        if let AppMode::CodePreview(ref mut state) = modal.mode {
+                            if state.file_path == path {
+                                state.highlighted_lines = lines.clone();
+                                return true;
+                            }
                         }
+                        false
+                    });
+                    if !updated {
+                        if let AppMode::CodePreview(ref mut state) = self.ui.mode
+                            && state.file_path == path {
+                                state.highlighted_lines = lines;
+                            }
                     }
                 }
                 TaskEvent::AiAnalysisComplete(analysis) => {
                     if analysis.starts_with("Commit Msg Suggestion:\n") {
-                        if let AppMode::InteractiveRebase = self.ui.mode {
+                        if matches!(self.ui.current_mode(), AppMode::InteractiveRebase) {
                             let msg = analysis.replace("Commit Msg Suggestion:\n", "").trim().to_string();
                             if self.ui.rebase_state.ai_analyzing {
                                 self.ui.rebase_state.ai_analyzing = false;
@@ -140,7 +148,7 @@ impl App {
                 }
                 TaskEvent::ConflictResolved { file_path, original_block, resolved_content } => {
                     let _ = crate::actions::commands::apply_resolution_to_file(".", &file_path, &original_block, &resolved_content);
-                    self.ui.mode = AppMode::Message(format!("Fixed conflict in {}", file_path));
+                    self.ui.push_modal(AppMode::Message(format!("Fixed conflict in {}", file_path)));
                 }
                 TaskEvent::AiModelsFetched(models) => {
                     if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
@@ -151,7 +159,7 @@ impl App {
                     }
                 }
                 TaskEvent::TaskFailed(err) => {
-                    self.ui.mode = AppMode::Message(format!("Task Error: {}", err));
+                    self.ui.push_modal(AppMode::Message(format!("Task Error: {}", err)));
                 }
             },
             Event::Resize => {

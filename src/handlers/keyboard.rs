@@ -281,12 +281,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             return false;
         }
-        AppMode::Diff => {
-             if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
+        AppMode::Diff
+             if (key.code == KeyCode::Esc || key.code == KeyCode::Char('q')) => {
                  app.ui.pop_modal();
                  return false;
              }
-        }
         _ => {}
     }
 
@@ -554,11 +553,10 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char(' ') if app.ui.primary_mode == PrimaryMode::Branches => {
-            if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx) {
-                if !branch.name.starts_with('*') {
+            if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx)
+                && !branch.name.starts_with('*') {
                     app.toggle_selection();
                 }
-            }
             false
         }
         KeyCode::Char('D') if app.ui.shift_pressed && app.ui.primary_mode == PrimaryMode::Branches => {
@@ -617,8 +615,8 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('s') if app.ui.primary_mode == PrimaryMode::Files => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
-                if !entry.is_dir {
+            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx)
+                && !entry.is_dir {
                     let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
                     let result = if entry.status == crate::git::files::FileStatus::Staged {
                         crate::actions::commands::unstage_file(path, &rel_path)
@@ -636,7 +634,6 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         }
                     }
                 }
-            }
             false
         }
         KeyCode::Char('F') if app.ui.shift_pressed && *app.ui.current_mode() == AppMode::Diff => {
@@ -881,8 +878,8 @@ fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 
 fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
     if *app.ui.current_mode() == AppMode::Normal && app.ui.primary_mode == PrimaryMode::Branches {
-        if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx).cloned() {
-            if branch.name.starts_with('*') {
+        if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx).cloned()
+            && branch.name.starts_with('*') {
                 let branch_name = branch.name.clone();
                 app.repo.branch_info = git::get_branch_info(path, &branch_name);
                 app.ui.info_scroll = 0;
@@ -910,7 +907,6 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                 app.ui.push_modal(AppMode::Diff);
                 return false;
             }
-        }
         
         app.ui.push_modal(AppMode::Manage);
         app.ui.manage_selected = 0;

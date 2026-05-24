@@ -963,13 +963,11 @@ fn render_transparent_ascii(buf: &mut ratatui::buffer::Buffer, ascii: &str, area
         let y = start_y + row_idx as u16;
         if y >= area.bottom() { break; }
         
-        let mut x = start_x;
-        for ch in line.chars() {
+        for (x, ch) in (start_x..).zip(line.chars()) {
             if x >= area.right() { break; }
             if ch != ' ' {
                 buf[(x, y)].set_char(ch).set_fg(color);
             }
-            x += 1;
         }
     }
 }
@@ -1027,7 +1025,7 @@ pub fn render_main_menu(f: &mut Frame, app: &App) {
 
     render_transparent_ascii(buf, ascii_logo, v_chunks[1], Color::Cyan);
 
-    let options_ascii = vec![opt_options, opt_help, opt_quit];
+    let options_ascii = [opt_options, opt_help, opt_quit];
     for (i, opt) in options_ascii.iter().enumerate() {
         let is_selected = i == app.ui.main_menu_state.selected;
         let color = if is_selected {
