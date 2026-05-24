@@ -950,16 +950,39 @@ pub fn render_interactive_rebase(f: &mut ratatui::Frame, app: &mut crate::app::A
     f.render_widget(list, area);
 }
 
+fn render_transparent_ascii(buf: &mut ratatui::buffer::Buffer, ascii: &str, area: ratatui::layout::Rect, color: ratatui::style::Color) {
+    let lines: Vec<&str> = ascii.trim_matches('\n').lines().collect();
+    if lines.is_empty() { return; }
+    
+    let max_width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0) as u16;
+    let height = lines.len() as u16;
+    
+    let start_x = area.x + area.width.saturating_sub(max_width) / 2;
+    let start_y = area.y + area.height.saturating_sub(height) / 2;
+    
+    for (row_idx, line) in lines.iter().enumerate() {
+        let y = start_y + row_idx as u16;
+        if y >= area.bottom() { break; }
+        
+        let mut x = start_x;
+        for ch in line.chars() {
+            if x >= area.right() { break; }
+            if ch != ' ' {
+                buf[(x, y)].set_char(ch).set_fg(color);
+            }
+            x += 1;
+        }
+    }
+}
+
 pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
     let area = f.area();
     let buf = f.buffer_mut();
-    for x in area.left()..area.right() {
-        for y in area.top()..area.bottom() {
-            let cell = &mut buf[(x, y)];
-            cell.set_bg(ratatui::style::Color::Rgb(15, 15, 20));
-        }
-    }
-
+    
+    // We already darkened the background globally in mod.rs
+    // But to be safe, if we need it here, we don't need to do it again.
+    // The modal overlay handles it.
+    
     let ascii_logo = r#"
  ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
  ╚══██╔══╝██║    ██║██║██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
@@ -991,10 +1014,6 @@ pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
  \__\_\\___/|___| |_|  
 "#;
 
-    let logo_paragraph = ratatui::widgets::Paragraph::new(ascii_logo.trim_matches('\n'))
-        .style(ratatui::style::Style::default().fg(ratatui::style::Color::Cyan))
-        .alignment(ratatui::layout::Alignment::Center);
-
     let total_height = 8 + 2 + 6 + 5 + 5; // Logo + pad + options
     let v_margin = area.height.saturating_sub(total_height) / 2;
 
@@ -1011,38 +1030,18 @@ pub fn render_main_menu(f: &mut ratatui::Frame, app: &crate::app::App) {
         ])
         .split(area);
 
-    f.render_widget(logo_paragraph, v_chunks[1]);
+    // Render Logo transparently
+    render_transparent_ascii(buf, ascii_logo, v_chunks[1], ratatui::style::Color::Cyan);
 
     let options_ascii = vec![opt_options, opt_help, opt_quit];
     for (i, opt) in options_ascii.iter().enumerate() {
         let is_selected = i == app.main_menu_state.selected;
-        let mut style = ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(60, 60, 80)); // Dim Gray
+        let color = if is_selected {
+            ratatui::style::Color::White
+        } else {
+            ratatui::style::Color::Rgb(60, 60, 80) // Dim Gray
+        };
         
-        if is_selected {
-            style = ratatui::style::Style::default().fg(ratatui::style::Color::White).add_modifier(ratatui::style::Modifier::BOLD);
-        }
-
-        let lines: Vec<ratatui::text::Line> = opt
-            .trim_matches('\n')
-            .lines()
-            .map(|l| ratatui::text::Line::from(l.to_string()))
-            .collect();
-            
-        let max_width = opt.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
-
-        let p = ratatui::widgets::Paragraph::new(lines)
-            .style(style)
-            .alignment(ratatui::layout::Alignment::Left);
-
-        let h_layout = ratatui::layout::Layout::default()
-            .direction(ratatui::layout::Direction::Horizontal)
-            .constraints([
-                ratatui::layout::Constraint::Min(0),
-                ratatui::layout::Constraint::Length(max_width),
-                ratatui::layout::Constraint::Min(0),
-            ])
-            .split(v_chunks[3 + i]);
-
-        f.render_widget(p, h_layout[1]);
+        render_transparent_ascii(buf, opt, v_chunks[3 + i], color);
     }
 }

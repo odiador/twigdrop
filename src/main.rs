@@ -132,9 +132,10 @@ async fn main() -> Result<()> {
 
     if let Err(err) = res {
         eprintln!("{:?}", err);
+        std::process::exit(1);
     }
 
-    Ok(())
+    std::process::exit(0);
 }
 
 async fn run_app(
