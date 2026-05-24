@@ -116,7 +116,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         .header(Row::new(vec!["", "Branch", "Age", "Status", "Merge", "Type", "Last Commit"]).style(Style::default().fg(Color::Rgb(124, 128, 156)).add_modifier(Modifier::BOLD)).bottom_margin(1))
         .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(74, 79, 106))));
 
-    if app.ui.mode == AppMode::Diff {
+    if app.ui.current_mode() == &AppMode::Diff {
         let overlay_area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -682,7 +682,7 @@ pub fn render_message(f: &mut Frame, msg: &str) {
 }
 
 pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
-    let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = &app.ui.mode {
+    let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = app.ui.current_mode() {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
@@ -695,7 +695,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         (area, None)
     };
 
-    let sidebar_border_color = if app.ui.active_panel == FilePanel::Directory && matches!(app.ui.mode, AppMode::CodePreview(_)) {
+    let sidebar_border_color = if app.ui.active_panel == FilePanel::Directory && matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
         Color::Rgb(180, 190, 254)
     } else {
         Color::Rgb(74, 79, 106)
@@ -907,17 +907,17 @@ pub fn render_interactive_rebase(f: &mut Frame, app: &mut App) {
         
     let items: Vec<ListItem> = app.ui.rebase_state.commits.iter().enumerate().map(|(i, commit)| {
         let action_str = match commit.action {
-            crate::state::ui::RebaseAction::Pick => "pick  ",
-            crate::state::ui::RebaseAction::Reword => "reword",
-            crate::state::ui::RebaseAction::Drop => "drop  ",
-            crate::state::ui::RebaseAction::Squash => "squash",
+            RebaseAction::Pick => "pick  ",
+            RebaseAction::Reword => "reword",
+            RebaseAction::Drop => "drop  ",
+            RebaseAction::Squash => "squash",
         };
         
         let action_color = match commit.action {
-            crate::state::ui::RebaseAction::Pick => Color::DarkGray,
-            crate::state::ui::RebaseAction::Reword => Color::Cyan,
-            crate::state::ui::RebaseAction::Drop => Color::Red,
-            crate::state::ui::RebaseAction::Squash => Color::Yellow,
+            RebaseAction::Pick => Color::DarkGray,
+            RebaseAction::Reword => Color::Cyan,
+            RebaseAction::Drop => Color::Red,
+            RebaseAction::Squash => Color::Yellow,
         };
 
         let message = if let Some(new_msg) = &commit.new_message {

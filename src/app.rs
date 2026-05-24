@@ -1,43 +1,13 @@
-use crate::models::{Branch, ConflictBlock, MergeStatus};
+use crate::models::{Branch, ConflictBlock};
 use crate::state::{RepositoryState, UiState, AppMode, PrimaryMode, PreviewState};
 use crate::state::ui::RebaseAction;
-use std::collections::HashMap;
 use tokio::sync::mpsc;
 use syntect::parsing::SyntaxSet;
 use syntect::highlighting::ThemeSet;
 use ratatui::text::{Line, Span};
 use ratatui::style::{Color, Style};
 use std::sync::Arc;
-use crate::events::{Event, TaskEvent};
-
-pub struct MergeUpdate {
-    pub branch_name: String,
-    pub status: MergeStatus,
-}
-
-pub struct AIUpdate {
-    pub analysis: String,
-}
-
-pub struct ConflictResolutionUpdate {
-    pub file_path: String,
-    pub resolved_content: String,
-    pub original_block: String,
-}
-
-pub struct FileStatusUpdate {
-    pub statuses: HashMap<String, crate::git::files::FileStatus>,
-}
-
-pub struct AIState {
-    pub ai_worker: Option<crate::ai::AIWorker>,
-    pub db: Option<crate::db::Database>,
-    pub ai_analysis: Option<String>,
-    pub ai_rx: mpsc::Receiver<AIUpdate>,
-    pub ai_trigger_tx: mpsc::Sender<(String, String, String)>,
-    pub conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
-    pub conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
-}
+use crate::events::{Event, TaskEvent, GitEvent};
 
 pub struct App {
     pub repo: RepositoryState,
@@ -46,33 +16,30 @@ pub struct App {
 
     pub config: crate::utils::config::Config,
 
-    // Syntax Highlighting
     pub ps: Arc<SyntaxSet>,
     pub ts: Arc<ThemeSet>,
     pub event_tx: Option<mpsc::Sender<Event>>,
 
-    // Background updates
-    pub rx: mpsc::Receiver<MergeUpdate>,
-    pub trigger_tx: mpsc::Sender<()>,
     pub shared_primary_mode: Arc<std::sync::RwLock<PrimaryMode>>,
-    pub fetched_models_rx: mpsc::Receiver<Vec<String>>,
-    pub file_status_rx: mpsc::Receiver<FileStatusUpdate>,
+    pub trigger_tx: mpsc::Sender<()>,
+    pub ai_trigger_tx: mpsc::Sender<(String, String, String)>,
+    pub conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
+}
+
+pub struct AIState {
+    pub ai_worker: Option<crate::ai::AIWorker>,
+    pub db: Option<crate::db::Database>,
+    pub ai_analysis: Option<String>,
 }
 
 impl App {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repo_path: &str,
         branches: Vec<Branch>,
         current_branch: String,
-        rx: mpsc::Receiver<MergeUpdate>,
         trigger_tx: mpsc::Sender<()>,
-        ai_rx: mpsc::Receiver<AIUpdate>,
         ai_trigger_tx: mpsc::Sender<(String, String, String)>,
-        conflict_resolution_rx: mpsc::Receiver<ConflictResolutionUpdate>,
         conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
-        file_status_rx: mpsc::Receiver<FileStatusUpdate>,
-        fetched_models_rx: mpsc::Receiver<Vec<String>>,
     ) -> Self {
         let config = crate::utils::config::load_config();
         let primary_mode = if config.last_primary_mode == 1 {
@@ -90,20 +57,15 @@ impl App {
                 ai_worker: None,
                 db: None,
                 ai_analysis: None,
-                ai_rx,
-                ai_trigger_tx,
-                conflict_resolution_rx,
-                conflict_trigger_tx,
             },
             config,
             ps: Arc::new(SyntaxSet::load_defaults_newlines()),
             ts: Arc::new(ThemeSet::load_defaults()),
             event_tx: None,
-            rx,
             trigger_tx,
             shared_primary_mode,
-            fetched_models_rx,
-            file_status_rx,
+            ai_trigger_tx,
+            conflict_trigger_tx,
         };
         
         if app.ui.primary_mode == PrimaryMode::Files {
@@ -124,7 +86,6 @@ impl App {
             PrimaryMode::Files => 1,
         };
         
-        // Sync shared mode synchronously
         if let Ok(mut w) = self.shared_primary_mode.write() {
             *w = self.ui.primary_mode;
         }
@@ -138,125 +99,63 @@ impl App {
         let _ = self.trigger_tx.try_send(());
     }
 
-    pub fn update_from_channel(&mut self, path: &str) {
-        while let Ok(update) = self.rx.try_recv() {
-            if let Some(branch) = self
-                .repo
-                .branches
-                .iter_mut()
-                .find(|b| b.name == update.branch_name)
-            {
-                branch.merge_status = update.status;
-            }
-        }
-        while let Ok(update) = self.ai_state.ai_rx.try_recv() {
-            if update.analysis.starts_with("Commit Msg Suggestion:\n") {
-                if let AppMode::InteractiveRebase = self.ui.mode {
-                    let msg = update.analysis.replace("Commit Msg Suggestion:\n", "").trim().to_string();
-                    if self.ui.rebase_state.ai_analyzing {
-                        self.ui.rebase_state.ai_analyzing = false;
-                        let i = self.ui.rebase_state.selected;
-                        self.ui.rebase_state.commits[i].new_message = Some(msg);
-                        self.ui.rebase_state.commits[i].action = RebaseAction::Reword;
-                    }
-                }
-            } else {
-                self.ai_state.ai_analysis = Some(update.analysis);
-            }
-        }
-        while let Ok(update) = self.ai_state.conflict_resolution_rx.try_recv() {
-            match crate::actions::commands::apply_resolution_to_file(path, &update.file_path, &update.original_block, &update.resolved_content) {
-                Ok(_) => {
-                    self.ui.mode = AppMode::Message(format!("Fixed conflict in {}", update.file_path));
-                }
-                Err(e) => {
-                    self.ui.mode = AppMode::Message(format!("Error fixing conflict: {}", e));
-                }
-            }
-        }
-        while let Ok(update) = self.file_status_rx.try_recv() {
-            self.update_file_statuses(update.statuses, path);
-        }
-        while let Ok(models) = self.fetched_models_rx.try_recv() {
-            if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
-                self.ui.settings_state.choices = models;
-                if self.ui.settings_state.choices.is_empty() {
-                    self.ui.settings_state.choices = vec!["No models found".to_string()];
-                }
-            }
-        }
-    }
-
-    pub fn update_file_statuses(&mut self, statuses: HashMap<String, crate::git::files::FileStatus>, repo_path: &str) {
-        let mut tree_needs_refresh = false;
-        
-        if statuses.len() != self.repo.git_file_statuses.len() {
-            tree_needs_refresh = true;
-        } else {
-            for path in statuses.keys() {
-                if !self.repo.git_file_statuses.contains_key(path) {
-                    tree_needs_refresh = true;
-                    break;
-                }
-            }
-        }
-
-        if tree_needs_refresh {
-            self.load_file_tree(repo_path);
-        }
-
-        self.repo.git_file_statuses = statuses;
-        for entry in self.repo.file_tree.iter_mut() {
-            let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
-            entry.status = self.repo.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
-        }
-
-        let mut new_preview_data = None;
-        if let AppMode::CodePreview(ref mut state) = self.ui.mode {
-            let current_path = state.file_path.clone();
-            if let Some(status) = self.repo.git_file_statuses.get(&current_path)
-                && *status == crate::git::files::FileStatus::Modified {
-                    state.line_diffs = crate::git::get_line_diffs(repo_path, &current_path);
-                    
-                    let full_path = std::path::Path::new(repo_path).join(&current_path);
-                    if let Ok(metadata) = std::fs::metadata(&full_path)
-                        && metadata.modified().is_ok() {
-                            new_preview_data = Some((current_path, state.cursor_y, state.scroll_y));
-                    }
-            }
-        }
-
-        if let Some((path, cy, sy)) = new_preview_data
-            && let Some(mut np) = self.create_preview_state(repo_path, &path)
-            && let AppMode::CodePreview(ref mut state) = self.ui.mode {
-                let max_idx = np.lines.len().saturating_sub(1);
-                np.cursor_y = cy.min(max_idx);
-                np.scroll_y = sy.min(max_idx);
-                *state = np;
-        }
-    }
-
     pub fn update(&mut self, event: Event) {
         match event {
-            Event::Task(TaskEvent::HighlightingComplete(path, lines)) => {
-                if let AppMode::CodePreview(ref mut state) = self.ui.mode {
-                    if state.file_path == path {
-                        state.highlighted_lines = lines;
+            Event::Git(git_event) => match git_event {
+                GitEvent::MergeStatusUpdated { branch, status } => {
+                    if let Some(b) = self.repo.branches.iter_mut().find(|b| b.name == branch) {
+                        b.merge_status = status;
                     }
                 }
-            }
-            Event::Task(TaskEvent::AiAnalysisComplete(analysis)) => {
-                self.ai_state.ai_analysis = Some(analysis);
-            }
-            Event::Task(TaskEvent::ConflictResolved { .. }) => {
-            }
-            Event::Task(TaskEvent::AiModelsFetched(models)) => {
-                if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
-                    self.ui.settings_state.choices = models;
-                    if self.ui.settings_state.choices.is_empty() {
-                        self.ui.settings_state.choices = vec!["No models found".to_string()];
+                GitEvent::FileStatusesUpdated(statuses) => {
+                    self.repo.git_file_statuses = statuses;
+                    for entry in self.repo.file_tree.iter_mut() {
+                        let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
+                        entry.status = self.repo.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
                     }
                 }
+            },
+            Event::Task(task_event) => match task_event {
+                TaskEvent::HighlightingComplete(path, lines) => {
+                    if let AppMode::CodePreview(ref mut state) = self.ui.mode {
+                        if state.file_path == path {
+                            state.highlighted_lines = lines;
+                        }
+                    }
+                }
+                TaskEvent::AiAnalysisComplete(analysis) => {
+                    if analysis.starts_with("Commit Msg Suggestion:\n") {
+                        if let AppMode::InteractiveRebase = self.ui.mode {
+                            let msg = analysis.replace("Commit Msg Suggestion:\n", "").trim().to_string();
+                            if self.ui.rebase_state.ai_analyzing {
+                                self.ui.rebase_state.ai_analyzing = false;
+                                let i = self.ui.rebase_state.selected;
+                                self.ui.rebase_state.commits[i].new_message = Some(msg);
+                                self.ui.rebase_state.commits[i].action = RebaseAction::Reword;
+                            }
+                        }
+                    } else {
+                        self.ai_state.ai_analysis = Some(analysis);
+                    }
+                }
+                TaskEvent::ConflictResolved { file_path, original_block, resolved_content } => {
+                    let _ = crate::actions::commands::apply_resolution_to_file(".", &file_path, &original_block, &resolved_content);
+                    self.ui.mode = AppMode::Message(format!("Fixed conflict in {}", file_path));
+                }
+                TaskEvent::AiModelsFetched(models) => {
+                    if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
+                        self.ui.settings_state.choices = models;
+                        if self.ui.settings_state.choices.is_empty() {
+                            self.ui.settings_state.choices = vec!["No models found".to_string()];
+                        }
+                    }
+                }
+                TaskEvent::TaskFailed(err) => {
+                    self.ui.mode = AppMode::Message(format!("Task Error: {}", err));
+                }
+            },
+            Event::Resize => {
+                self.ui.needs_clear = true;
             }
             _ => {}
         }
@@ -308,14 +207,6 @@ impl App {
             .iter()
             .map(|&i| &self.repo.branches[i])
             .collect()
-    }
-
-    pub fn toggle_help(&mut self) {
-        if self.ui.mode == AppMode::Help {
-            self.ui.mode = AppMode::Normal;
-        } else {
-            self.ui.mode = AppMode::Help;
-        }
     }
 
     pub fn next(&mut self) {
@@ -433,13 +324,6 @@ impl App {
             .join("twigdrop.db");
 
         self.ai_state.db = crate::db::Database::new(db_path).ok();
-
-        let provider_type = std::env::var("AI_PROVIDER").unwrap_or_else(|_| "ollama".to_string());
-        let model = std::env::var("AI_MODEL").unwrap_or_else(|_| "llama3".to_string());
-        let api_key = std::env::var("OPENAI_API_KEY").ok();
-        let url = std::env::var("OLLAMA_URL").ok();
-
-        self.ai_state.ai_worker = crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
     }
 
     pub fn toggle_selection(&mut self) {

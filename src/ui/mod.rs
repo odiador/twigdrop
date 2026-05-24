@@ -147,9 +147,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     };
 
     // 4. Footer shortcuts
-    let footer_shortcuts = if let AppMode::CodePreview(_) = app.ui.mode {
+    let footer_shortcuts = if let AppMode::CodePreview(_) = app.ui.current_mode() {
         " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar "
-    } else if app.ui.mode == AppMode::Diff {
+    } else if *app.ui.current_mode() == AppMode::Diff {
         " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
     } else if app.ui.shift_pressed {
         match app.ui.primary_mode {
@@ -191,7 +191,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     f.render_widget(footer, footer_area);
 
     // Apply global darkening overlay for modals
-    let is_modal = match app.ui.mode {
+    let is_modal = match app.ui.current_mode() {
         AppMode::Normal | AppMode::CodePreview(_) | AppMode::Diff => false,
         _ => true,
     };
@@ -209,7 +209,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     }
 
     // 3. Modals and Overlays
-    match &app.ui.mode {
+    match app.ui.current_mode() {
         AppMode::Help => screens::render_help_content(f, f.area(), app),
         AppMode::StashDetail => screens::render_stash_detail(f, f.area(), app),
         AppMode::Manage => screens::render_manage(f, app),
