@@ -138,9 +138,14 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             KeyCode::Enter => {
                 let cmd = input.clone();
                 if !cmd.is_empty() {
-                    let msg = match crate::git::commands::run_git(path, &["-c", "alias.s=!", &cmd, "s"]) {
-                        Ok(m) => format!("$ {}\n{}", cmd, m),
-                        Err(e) => format!("Error executing {}: {}", cmd, e),
+                    let parts: Vec<&str> = cmd.split_whitespace().collect();
+                    let msg = if parts.is_empty() {
+                        "Empty command".to_string()
+                    } else {
+                        match crate::git::commands::run_git(path, &parts) {
+                            Ok(m) => format!("$ {}\n{}", cmd, m),
+                            Err(e) => format!("Error executing {}: {}", cmd, e),
+                        }
                     };
                     app.ui.mode = AppMode::Message(msg);
                 } else {

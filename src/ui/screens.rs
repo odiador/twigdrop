@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::state::ui::{AppMode, PrimaryMode, FilePanel, PreviewState};
+use crate::state::ui::{AppMode, PrimaryMode, FilePanel, PreviewState, RebaseAction};
 use crate::git::files::FileStatus;
 use crate::models::{BranchStatus, GutterStatus};
 use crate::ui::components::get_status_icons;

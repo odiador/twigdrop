@@ -210,12 +210,12 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
 
     // 3. Modals and Overlays
     match &app.ui.mode {
+        AppMode::Help => screens::render_help_content(f, f.area(), app),
+        AppMode::StashDetail => screens::render_stash_detail(f, f.area(), app),
         AppMode::Manage => screens::render_manage(f, app),
         AppMode::Filter => screens::render_filter(f, app),
         AppMode::MainMenu => screens::render_main_menu(f, app),
         AppMode::Message(msg) => screens::render_message(f, msg),
-        AppMode::Help => screens::render_help_content(f, chunks[0], app),
-        AppMode::StashDetail => screens::render_stash_detail(f, chunks[0], app),
         AppMode::Settings => screens::render_settings(f, app),
         AppMode::Search => screens::render_search(f, app),
         AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
