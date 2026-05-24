@@ -178,7 +178,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     } else if app.shift_pressed {
         match app.primary_mode {
             PrimaryMode::Branches => " S: Stash Mgr │ C: Unpushed Commits │ D: Delete ALL Selected │ h: Legend │ q: quit ",
-            PrimaryMode::Files => " S: Stash Mgr │ C: Unpushed Commits │ h: Legend │ q: back ",
+            PrimaryMode::Files => " S: Stash Mgr │ C: Unpushed Commits │ h: Legend │ q: quit ",
         }
     } else if app.alt_pressed {
         match app.primary_mode {
@@ -190,10 +190,10 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     } else {
         match app.primary_mode {
             PrimaryMode::Branches => {
-                " ↑/↓: move │ d: files │ F2: filter │ F3: search │ F4: create │ F5: prune │ F7: actions │ !: shell │ F8: bulk delete │ F9: manage │ F1: help │ q: quit "
+                " ↑/↓: move │ d: files │ f: filter │ /: search │ c: create │ p: prune │ :: actions │ !: shell │ Shift+D: bulk delete │ m: manage │ ?: help │ q: quit "
             }
             PrimaryMode::Files => {
-                " ↑/↓: move │ d: branches │ e: explorer │ v: IDE │ F5: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ F1: help "
+                " ↑/↓: move │ d: branches │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "
             }
         }
     };
