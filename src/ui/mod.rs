@@ -8,12 +8,13 @@ use ratatui::{
     style::Color,
 };
 
-use crate::app::{App, AppMode, PrimaryMode};
+use crate::app::App;
+use crate::state::ui::{AppMode, PrimaryMode};
 use crate::ui::animations::{SnapPhase, DENSITY_CHARS};
 
 pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     let area = f.area();
-    let main_constraints = if app.show_terminal {
+    let main_constraints = if app.ui.show_terminal {
         vec![Constraint::Min(3), Constraint::Percentage(30), Constraint::Length(1)]
     } else {
         vec![Constraint::Min(3), Constraint::Length(1)]
@@ -25,7 +26,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         .split(area);
 
     // 1. Regular Rendering (includes side-by-side preview if active)
-    match app.primary_mode {
+    match app.ui.primary_mode {
         PrimaryMode::Branches => {
             screens::render_main_list(f, chunks[0], app);
         }
@@ -36,15 +37,15 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
 
     // 2. Capture and Animate
     if app.config.enable_animations {
-        if let Some(ref mut anim) = app.snap_animation {
+        if let Some(ref mut anim) = app.ui.snap_animation {
             if !anim.captured {
                 let buf = f.buffer_mut();
                 for row in anim.rows.iter_mut() {
                     // Find screen Y for this branch
-                    if let Some(&(_, screen_y)) = app.branch_screen_positions.iter()
+                    if let Some(&(_, screen_y)) = app.ui.branch_screen_positions.iter()
                         .find(|&&(idx, _)| {
-                            if idx < app.branch_state.filtered_indices.len() {
-                                app.branch_state.branches[app.branch_state.filtered_indices[idx]].name == row.branch_name
+                            if idx < app.ui.filtered_indices.len() {
+                                app.repo.branches[app.ui.filtered_indices[idx]].name == row.branch_name
                             } else {
                                 false
                             }
@@ -72,7 +73,6 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
             // Apply Dissolve on Buffer
             let buf = f.buffer_mut();
             if anim.phase == SnapPhase::Flash {
-                // Flash effect: fill background with dark gray temporarily and text white
                 for x in 0..area.width {
                     for y in 0..area.height {
                         buf[(x, y)].set_bg(Color::Rgb(30, 30, 40));
@@ -85,14 +85,12 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
                 if let Some(y) = row.screen_y {
                     for cell in &row.cells {
                         if cell.dissolved {
-                            // Clear the cell from the main buffer
                             buf[(cell.x, y)].set_symbol(" ");
                         }
                     }
                 }
             }
 
-            // Render Particles
             for p in &anim.particles.particles {
                 if p.x >= 0.0 && p.x < area.width as f32 && p.y >= 0.0 && p.y < area.height as f32 {
                     let cell = &mut buf[(p.x as u16, p.y as u16)];
@@ -104,19 +102,18 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
             anim.tick();
             
             if anim.phase == SnapPhase::Done {
-                // Perform actual deletion after animation
                 let msg = app.apply_snap_deletion(path);
-                app.mode = AppMode::Message(msg);
-                app.snap_animation = None;
+                app.ui.mode = AppMode::Message(msg);
+                app.ui.snap_animation = None;
             }
         }
-    } else if app.snap_animation.is_some() {
+    } else if app.ui.snap_animation.is_some() {
         let msg = app.apply_snap_deletion(path);
-        app.mode = AppMode::Message(msg);
-        app.snap_animation = None;
+        app.ui.mode = AppMode::Message(msg);
+        app.ui.snap_animation = None;
     }
 
-    if app.show_terminal {
+    if app.ui.show_terminal {
         let terminal_block = ratatui::widgets::Block::default()
             .title(" Integrated TTY (Alt+j to toggle) ")
             .borders(ratatui::widgets::Borders::ALL)
@@ -127,47 +124,47 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         f.render_widget(terminal_placeholder, chunks[1]);
     }
 
-    let footer_area = if app.show_terminal { chunks[2] } else { chunks[1] };
+    let footer_area = if app.ui.show_terminal { chunks[2] } else { chunks[1] };
 
     // Status prefix
-    let status_prefix = match app.primary_mode {
+    let status_prefix = match app.ui.primary_mode {
         PrimaryMode::Branches => {
-            let filter_text = if let Some(f) = &app.branch_state.current_filter {
+            let filter_text = if let Some(f) = &app.ui.current_filter {
                 format!("sort: {:?}", f)
             } else {
                 "none".to_string()
             };
             format!(
                 " 🧹 twigdrop │ {} · {} branches · {} │",
-                app.current_branch,
-                app.branch_state.filtered_indices.len(),
+                app.repo.current_branch,
+                app.ui.filtered_indices.len(),
                 filter_text
             )
         }
         PrimaryMode::Files => {
-            format!(" 📂 Files │ {} │", app.current_branch)
+            format!(" 📂 Files │ {} │", app.repo.current_branch)
         }
     };
 
     // 4. Footer shortcuts
-    let footer_shortcuts = if let AppMode::CodePreview(_) = app.mode {
+    let footer_shortcuts = if let AppMode::CodePreview(_) = app.ui.mode {
         " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar "
-    } else if app.mode == AppMode::Diff {
+    } else if app.ui.mode == AppMode::Diff {
         " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
-    } else if app.shift_pressed {
-        match app.primary_mode {
+    } else if app.ui.shift_pressed {
+        match app.ui.primary_mode {
             PrimaryMode::Branches => " S: Stash Mgr │ C: Unpushed Commits │ D: Delete ALL Selected │ h: Legend │ q: quit ",
             PrimaryMode::Files => " S: Stash Mgr │ C: Unpushed Commits │ h: Legend │ q: quit ",
         }
-    } else if app.alt_pressed {
-        match app.primary_mode {
+    } else if app.ui.alt_pressed {
+        match app.ui.primary_mode {
             PrimaryMode::Branches => " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ Alt+j: TTY │ f: filter ",
             PrimaryMode::Files => {
                 " ↑/↓: move │ d: switch mode │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+t: External TTY │ Alt+j: TTY "
             }
         }
     } else {
-        match app.primary_mode {
+        match app.ui.primary_mode {
             PrimaryMode::Branches => {
                 " ↑/↓: move │ d: files │ f: filter │ /: search │ c: create │ p: prune │ :: actions │ !: shell │ Shift+D: bulk delete │ m: manage │ ?: help │ q: quit "
             }
@@ -194,7 +191,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     f.render_widget(footer, footer_area);
 
     // Apply global darkening overlay for modals
-    let is_modal = match app.mode {
+    let is_modal = match app.ui.mode {
         AppMode::Normal | AppMode::CodePreview(_) | AppMode::Diff => false,
         _ => true,
     };
@@ -212,7 +209,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     }
 
     // 3. Modals and Overlays
-    match &app.mode {
+    match &app.ui.mode {
         AppMode::Manage => screens::render_manage(f, app),
         AppMode::Filter => screens::render_filter(f, app),
         AppMode::MainMenu => screens::render_main_menu(f, app),
@@ -228,7 +225,6 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::InteractiveRebase => screens::render_interactive_rebase(f, app),
         AppMode::Shell(input) => screens::render_shell(f, input),
         AppMode::QuickActions => screens::render_quick_actions(f, app),
-        // CodePreview is handled inside render_directory_searcher for side-by-side
         _ => {}
     }
 }

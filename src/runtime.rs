@@ -1,5 +1,6 @@
 use tokio::sync::mpsc;
-use crate::app::{AIUpdate, ConflictResolutionUpdate, MergeUpdate, FileStatusUpdate, PrimaryMode};
+use crate::app::{AIUpdate, ConflictResolutionUpdate, MergeUpdate, FileStatusUpdate};
+use crate::state::ui::PrimaryMode;
 use crate::git;
 use crate::models::ConflictBlock;
 use std::sync::Arc;
