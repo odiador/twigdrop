@@ -1,13 +1,13 @@
+use crate::events::{Event, GitEvent, TaskEvent};
 use crate::models::{Branch, ConflictBlock};
-use crate::state::{RepositoryState, UiState, AppMode, PrimaryMode, PreviewState};
 use crate::state::ui::RebaseAction;
-use tokio::sync::mpsc;
-use syntect::parsing::SyntaxSet;
-use syntect::highlighting::ThemeSet;
-use ratatui::text::{Line, Span};
+use crate::state::{AppMode, PreviewState, PrimaryMode, RepositoryState, UiState};
 use ratatui::style::{Color, Style};
+use ratatui::text::{Line, Span};
 use std::sync::Arc;
-use crate::events::{Event, TaskEvent, GitEvent};
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
+use tokio::sync::mpsc;
 
 pub struct App {
     pub repo: RepositoryState,
@@ -65,11 +65,11 @@ impl App {
             ai_trigger_tx,
             conflict_trigger_tx,
         };
-        
+
         if app.ui.primary_mode == PrimaryMode::Files {
-            app.load_file_tree(repo_path); 
+            app.load_file_tree(repo_path);
         }
-        
+
         app.refresh_filtered_branches();
         app
     }
@@ -83,7 +83,7 @@ impl App {
             PrimaryMode::Branches => 0,
             PrimaryMode::Files => 1,
         };
-        
+
         if let Ok(mut w) = self.shared_primary_mode.write() {
             *w = self.ui.primary_mode;
         }
@@ -109,32 +109,40 @@ impl App {
                     self.repo.git_file_statuses = statuses;
                     for entry in self.repo.file_tree.iter_mut() {
                         let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
-                        entry.status = self.repo.git_file_statuses.get(&rel_path).cloned().unwrap_or(crate::git::files::FileStatus::Normal);
+                        entry.status = self
+                            .repo
+                            .git_file_statuses
+                            .get(&rel_path)
+                            .cloned()
+                            .unwrap_or(crate::git::files::FileStatus::Normal);
                     }
                 }
             },
             Event::Task(task_event) => match task_event {
                 TaskEvent::HighlightingComplete(path, lines) => {
                     let updated = self.ui.modal_stack.iter_mut().any(|modal| {
-                        if let AppMode::CodePreview(ref mut state) = modal.mode {
-                            if state.file_path == path {
-                                state.highlighted_lines = lines.clone();
-                                return true;
-                            }
+                        if let AppMode::CodePreview(ref mut state) = modal.mode
+                            && state.file_path == path
+                        {
+                            state.highlighted_lines = lines.clone();
+                            return true;
                         }
                         false
                     });
-                    if !updated {
-                        if let AppMode::CodePreview(ref mut state) = self.ui.mode
-                            && state.file_path == path {
-                                state.highlighted_lines = lines;
-                            }
+                    if !updated
+                        && let AppMode::CodePreview(ref mut state) = self.ui.mode
+                        && state.file_path == path
+                    {
+                        state.highlighted_lines = lines;
                     }
                 }
                 TaskEvent::AiAnalysisComplete(analysis) => {
                     if analysis.starts_with("Commit Msg Suggestion:\n") {
                         if matches!(self.ui.current_mode(), AppMode::InteractiveRebase) {
-                            let msg = analysis.replace("Commit Msg Suggestion:\n", "").trim().to_string();
+                            let msg = analysis
+                                .replace("Commit Msg Suggestion:\n", "")
+                                .trim()
+                                .to_string();
                             if self.ui.rebase_state.ai_analyzing {
                                 self.ui.rebase_state.ai_analyzing = false;
                                 let i = self.ui.rebase_state.selected;
@@ -146,9 +154,19 @@ impl App {
                         self.ai_state.ai_analysis = Some(analysis);
                     }
                 }
-                TaskEvent::ConflictResolved { file_path, original_block, resolved_content } => {
-                    let _ = crate::actions::commands::apply_resolution_to_file(".", &file_path, &original_block, &resolved_content);
-                    self.ui.push_modal(AppMode::Message(format!("Fixed conflict in {}", file_path)));
+                TaskEvent::ConflictResolved {
+                    file_path,
+                    original_block,
+                    resolved_content,
+                } => {
+                    let _ = crate::actions::commands::apply_resolution_to_file(
+                        ".",
+                        &file_path,
+                        &original_block,
+                        &resolved_content,
+                    );
+                    self.ui
+                        .push_modal(AppMode::Message(format!("Fixed conflict in {}", file_path)));
                 }
                 TaskEvent::AiModelsFetched(models) => {
                     if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
@@ -159,7 +177,8 @@ impl App {
                     }
                 }
                 TaskEvent::TaskFailed(err) => {
-                    self.ui.push_modal(AppMode::Message(format!("Task Error: {}", err)));
+                    self.ui
+                        .push_modal(AppMode::Message(format!("Task Error: {}", err)));
                 }
             },
             Event::Resize => {
@@ -182,7 +201,9 @@ impl App {
     }
 
     pub fn refresh_filtered_branches(&mut self) {
-        self.ui.filtered_indices = self.repo.branches
+        self.ui.filtered_indices = self
+            .repo
+            .branches
             .iter()
             .enumerate()
             .filter(|(_, b)| {
@@ -191,13 +212,15 @@ impl App {
                 } else {
                     true
                 };
-                
+
                 let search_match = if !self.ui.search_query.is_empty() {
-                    b.name.to_lowercase().contains(&self.ui.search_query.to_lowercase())
+                    b.name
+                        .to_lowercase()
+                        .contains(&self.ui.search_query.to_lowercase())
                 } else {
                     true
                 };
-                
+
                 status_match && search_match
             })
             .map(|(i, _)| i)
@@ -226,8 +249,7 @@ impl App {
                 }
             }
             PrimaryMode::Files => {
-                if self.ui.selected_file_idx < self.repo.file_tree.len().saturating_sub(1)
-                {
+                if self.ui.selected_file_idx < self.repo.file_tree.len().saturating_sub(1) {
                     self.ui.selected_file_idx += 1;
                 }
             }
@@ -256,7 +278,13 @@ impl App {
         self.repo.file_tree = new_tree;
     }
 
-    fn build_tree_recursive(&self, root: &str, current_dir: &str, depth: usize, tree: &mut Vec<crate::git::files::FileEntry>) {
+    fn build_tree_recursive(
+        &self,
+        root: &str,
+        current_dir: &str,
+        depth: usize,
+        tree: &mut Vec<crate::git::files::FileEntry>,
+    ) {
         let entries = crate::git::files::build_file_tree(
             root,
             current_dir,
@@ -268,9 +296,9 @@ impl App {
             let path_str = entry.path.to_string_lossy().to_string();
             let is_open = self.ui.open_paths.contains(&path_str);
             entry.is_open = is_open;
-            
+
             tree.push(entry.clone());
-            
+
             if entry.is_dir && is_open {
                 self.build_tree_recursive(root, &path_str, depth + 1, tree);
             }
@@ -283,15 +311,17 @@ impl App {
         }
 
         let entry = &self.repo.file_tree[self.ui.selected_file_idx];
-        if !entry.is_dir { return; }
-        
+        if !entry.is_dir {
+            return;
+        }
+
         let path = entry.path.to_string_lossy().to_string();
         if self.ui.open_paths.contains(&path) {
             self.ui.open_paths.remove(&path);
         } else {
             self.ui.open_paths.insert(path);
         }
-        
+
         let repo_path = _path_str.to_string();
         let mut new_tree = Vec::new();
         self.build_tree_recursive(&repo_path, "", 0, &mut new_tree);
@@ -305,12 +335,15 @@ impl App {
 
     pub fn load_rebase_commits(&mut self, path: &str) {
         let commits = crate::git::get_unpushed_commits(path);
-        self.ui.rebase_state.commits = commits.into_iter().map(|c| crate::state::ui::RebaseCommit {
-            hash: c.hash,
-            original_message: c.message,
-            new_message: None,
-            action: RebaseAction::Pick,
-        }).collect();
+        self.ui.rebase_state.commits = commits
+            .into_iter()
+            .map(|c| crate::state::ui::RebaseCommit {
+                hash: c.hash,
+                original_message: c.message,
+                new_message: None,
+                action: RebaseAction::Pick,
+            })
+            .collect();
         self.ui.rebase_state.selected = 0;
         self.ui.rebase_state.editing = false;
         self.ui.rebase_state.input.clear();
@@ -335,11 +368,7 @@ impl App {
     }
 
     pub fn toggle_selection(&mut self) {
-        if let Some(&idx) = self
-            .ui
-            .filtered_indices
-            .get(self.ui.selected_branch_idx)
-        {
+        if let Some(&idx) = self.ui.filtered_indices.get(self.ui.selected_branch_idx) {
             let name = self.repo.branches[idx].name.clone();
             if self.ui.bulk_selected.contains(&name) {
                 self.ui.bulk_selected.remove(&name);
@@ -351,22 +380,24 @@ impl App {
 
     pub fn create_preview_state(&self, repo_path: &str, rel_path: &str) -> Option<PreviewState> {
         let full_path = std::path::Path::new(repo_path).join(rel_path);
-        
+
         let file = std::fs::File::open(&full_path).ok()?;
         let reader = std::io::BufReader::new(file);
         use std::io::BufRead;
-        
+
         let mut lines = Vec::new();
         let max_lines = 5000;
         for (i, line) in reader.lines().enumerate() {
-            if i >= max_lines { break; }
+            if i >= max_lines {
+                break;
+            }
             if let Ok(l) = line {
                 lines.push(l);
             }
         }
 
         let line_diffs = crate::git::get_line_diffs(repo_path, rel_path);
-        
+
         let mut state = PreviewState {
             file_path: rel_path.to_string(),
             lines,
@@ -379,12 +410,14 @@ impl App {
         };
 
         self.update_preview_highlighting(&mut state);
-        
+
         Some(state)
     }
 
     pub fn update_preview_highlighting(&self, state: &mut PreviewState) {
-        if state.lines.is_empty() { return; }
+        if state.lines.is_empty() {
+            return;
+        }
 
         if let Some(tx) = &self.event_tx {
             crate::tasks::highlighting::spawn_highlight_task(
@@ -395,25 +428,40 @@ impl App {
                 self.ts.clone(),
             );
         } else {
-            let extension = std::path::Path::new(&state.file_path).extension().and_then(|s| s.to_str()).unwrap_or("");
-            let syntax = self.ps.find_syntax_by_extension(extension)
-                .or_else(|| self.ps.find_syntax_for_file(&state.file_path).unwrap_or(None))
+            let extension = std::path::Path::new(&state.file_path)
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            let syntax = self
+                .ps
+                .find_syntax_by_extension(extension)
+                .or_else(|| {
+                    self.ps
+                        .find_syntax_for_file(&state.file_path)
+                        .unwrap_or(None)
+                })
                 .unwrap_or_else(|| self.ps.find_syntax_plain_text());
 
             let theme = &self.ts.themes["base16-ocean.dark"];
             let mut h = syntect::easy::HighlightLines::new(syntax, theme);
-            
+
             state.highlighted_lines.clear();
             for line in &state.lines {
                 let line_with_ending = format!("{}\n", line);
-                let ranges = h.highlight_line(&line_with_ending, &self.ps).unwrap_or_default();
+                let ranges = h
+                    .highlight_line(&line_with_ending, &self.ps)
+                    .unwrap_or_default();
                 let mut spans = Vec::new();
 
                 for (style, text) in ranges {
-                    let color = Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
+                    let color =
+                        Color::Rgb(style.foreground.r, style.foreground.g, style.foreground.b);
                     let content = text.trim_end_matches(['\n', '\r']);
                     if !content.is_empty() || text.is_empty() {
-                        spans.push(Span::styled(content.to_string(), Style::default().fg(color)));
+                        spans.push(Span::styled(
+                            content.to_string(),
+                            Style::default().fg(color),
+                        ));
                     }
                 }
                 state.highlighted_lines.push(Line::from(spans));
@@ -441,9 +489,12 @@ impl App {
             };
 
             let spans = vec![Span::styled(line.to_string(), Style::default().fg(color))];
-            
+
             if line.starts_with("@@") {
-                state.highlighted_lines.push(Line::from(vec![Span::styled(" ".repeat(100), Style::default().bg(Color::Rgb(30, 30, 46)))]));
+                state.highlighted_lines.push(Line::from(vec![Span::styled(
+                    " ".repeat(100),
+                    Style::default().bg(Color::Rgb(30, 30, 46)),
+                )]));
             }
 
             state.highlighted_lines.push(Line::from(spans));
