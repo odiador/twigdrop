@@ -1,21 +1,25 @@
+pub mod animations;
 pub mod components;
 pub mod screens;
-pub mod animations;
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout},
     Frame,
+    layout::{Constraint, Direction, Layout},
     style::Color,
 };
 
 use crate::app::App;
 use crate::state::ui::{AppMode, PrimaryMode};
-use crate::ui::animations::{SnapPhase, DENSITY_CHARS};
+use crate::ui::animations::{DENSITY_CHARS, SnapPhase};
 
 pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     let area = f.area();
     let main_constraints = if app.ui.show_terminal {
-        vec![Constraint::Min(3), Constraint::Percentage(30), Constraint::Length(1)]
+        vec![
+            Constraint::Min(3),
+            Constraint::Percentage(30),
+            Constraint::Length(1),
+        ]
     } else {
         vec![Constraint::Min(3), Constraint::Length(1)]
     };
@@ -42,14 +46,15 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
                 let buf = f.buffer_mut();
                 for row in anim.rows.iter_mut() {
                     // Find screen Y for this branch
-                    if let Some(&(_, screen_y)) = app.ui.branch_screen_positions.iter()
-                        .find(|&&(idx, _)| {
+                    if let Some(&(_, screen_y)) =
+                        app.ui.branch_screen_positions.iter().find(|&&(idx, _)| {
                             if idx < app.ui.filtered_indices.len() {
-                                app.repo.branches[app.ui.filtered_indices[idx]].name == row.branch_name
+                                app.repo.branches[app.ui.filtered_indices[idx]].name
+                                    == row.branch_name
                             } else {
                                 false
                             }
-                        }) 
+                        })
                     {
                         row.screen_y = Some(screen_y);
                         // Capture cells at this Y
@@ -98,9 +103,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
                     cell.set_fg(p.color);
                 }
             }
-            
+
             anim.tick();
-            
+
             if anim.phase == SnapPhase::Done {
                 let msg = app.apply_snap_deletion(path);
                 app.ui.push_modal(AppMode::Message(msg));
@@ -117,14 +122,22 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         let terminal_block = ratatui::widgets::Block::default()
             .title(" Integrated TTY (Alt+j to toggle) ")
             .borders(ratatui::widgets::Borders::ALL)
-            .border_style(ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(74, 79, 106)));
-        let terminal_placeholder = ratatui::widgets::Paragraph::new("Terminal session placeholder...\n(Working on full PTY integration)")
-            .block(terminal_block)
-            .style(ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray));
+            .border_style(
+                ratatui::style::Style::default().fg(ratatui::style::Color::Rgb(74, 79, 106)),
+            );
+        let terminal_placeholder = ratatui::widgets::Paragraph::new(
+            "Terminal session placeholder...\n(Working on full PTY integration)",
+        )
+        .block(terminal_block)
+        .style(ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray));
         f.render_widget(terminal_placeholder, chunks[1]);
     }
 
-    let footer_area = if app.ui.show_terminal { chunks[2] } else { chunks[1] };
+    let footer_area = if app.ui.show_terminal {
+        chunks[2]
+    } else {
+        chunks[1]
+    };
 
     // Status prefix
     let status_prefix = match app.ui.primary_mode {
@@ -151,14 +164,22 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar "
     } else if *app.ui.current_mode() == AppMode::Diff {
         " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
+    } else if *app.ui.current_mode() == AppMode::Commits {
+        " ↑/k, ↓/j: navigate │ Enter: select │ Esc: close "
+    } else if *app.ui.current_mode() == AppMode::Switcher {
+        " ↑/k, ↓/j: navigate │ Enter: confirm │ Esc/q: cancel "
     } else if app.ui.shift_pressed {
         match app.ui.primary_mode {
-            PrimaryMode::Branches => " S: Stash Mgr │ C: Unpushed Commits │ D: Delete ALL Selected │ h: Legend │ q: quit ",
+            PrimaryMode::Branches => {
+                " S: Stash Mgr │ C: Unpushed Commits │ D: Delete ALL Selected │ h: Legend │ q: quit "
+            }
             PrimaryMode::Files => " S: Stash Mgr │ C: Unpushed Commits │ h: Legend │ q: quit ",
         }
     } else if app.ui.alt_pressed {
         match app.ui.primary_mode {
-            PrimaryMode::Branches => " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ Alt+j: TTY │ f: filter ",
+            PrimaryMode::Branches => {
+                " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ Alt+j: TTY │ f: filter "
+            }
             PrimaryMode::Files => {
                 " ↑/↓: move │ d: switch mode │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+t: External TTY │ Alt+j: TTY "
             }
@@ -166,10 +187,10 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     } else {
         match app.ui.primary_mode {
             PrimaryMode::Branches => {
-                " ↑/↓: move │ d: files │ f: filter │ /: search │ c: create │ p: prune │ :: actions │ !: shell │ Shift+D: bulk delete │ m: manage │ ?: help │ q: quit "
+                " ↑/↓: move │ Shift+Tab: app switcher │ d: files │ f: filter │ /: search │ c: create │ p: prune │ :: actions │ !: shell │ Shift+D: bulk delete │ m: manage │ ?: help │ q: quit "
             }
             PrimaryMode::Files => {
-                " ↑/↓: move │ d: branches │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "
+                " ↑/↓: move │ Shift+Tab: app switcher │ d: branches │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "
             }
         }
     };
@@ -225,6 +246,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::InteractiveRebase => screens::render_interactive_rebase(f, app),
         AppMode::Shell(input) => screens::render_shell(f, input),
         AppMode::QuickActions => screens::render_quick_actions(f, app),
+        AppMode::Switcher => screens::render_switcher(f, app),
         _ => {}
     }
 }

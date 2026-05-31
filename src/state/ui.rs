@@ -1,5 +1,5 @@
-use crate::ui::animations::SnapAnimation;
 use crate::models::{BranchStatus, GutterStatus};
+use crate::ui::animations::SnapAnimation;
 use std::collections::HashSet;
 use std::time::Instant;
 
@@ -42,6 +42,9 @@ pub enum AppMode {
     QuickActions,
     MainMenu,
     Message(String),
+    Switcher,
+    BranchesView,
+    FilesView,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -105,7 +108,7 @@ pub struct UiState {
     pub primary_mode: PrimaryMode,
     pub mode: AppMode,
     pub modal_stack: Vec<ModalState>,
-    
+
     // Selection and Navigation
     pub selected_branch_idx: usize,
     pub selected_file_idx: usize,
@@ -114,39 +117,43 @@ pub struct UiState {
     pub filter_selected: usize,
     pub diff_file_selected: usize,
     pub selected_commit_idx: usize,
-    
+
     // Scrolling
     pub info_scroll: u16,
     pub list_start_index: usize,
-    
+
     // Filtering and Searching
     pub current_filter: Option<BranchStatus>,
     pub search_query: String,
     pub filtered_indices: Vec<usize>,
     pub bulk_selected: HashSet<String>,
-    
+
     // UI State
     pub sidebar_width: u16,
     pub needs_clear: bool,
     pub show_terminal: bool,
     pub active_panel: FilePanel,
     pub diff_panel: FilePanel,
-    
+
     // Interaction State
     pub alt_pressed: bool,
     pub shift_pressed: bool,
     pub last_click_time: Instant,
     pub last_click_row: Option<usize>,
-    
+
     // Persistence for tree
     pub open_paths: HashSet<String>,
-    
+
     // Specific View States
     pub rebase_state: RebaseState,
     pub settings_state: SettingsState,
     pub main_menu_state: MainMenuState,
     pub quick_actions_state: QuickActionsState,
-    
+
+    // App Switcher
+    pub mode_history: Vec<AppMode>,
+    pub switcher_index: usize,
+
     // Animations
     pub snap_animation: Option<SnapAnimation>,
     pub branch_screen_positions: Vec<(usize, u16)>,
@@ -197,19 +204,61 @@ impl UiState {
                     "git log -n 5".to_string(),
                 ],
             },
+            mode_history: vec![
+                AppMode::BranchesView,
+                AppMode::FilesView,
+                AppMode::Commits,
+                AppMode::Diff,
+                AppMode::StashDetail,
+                AppMode::Search,
+                AppMode::Filter,
+                AppMode::Settings,
+                AppMode::QuickActions,
+            ],
+            switcher_index: 0,
             snap_animation: None,
             branch_screen_positions: Vec::new(),
         }
     }
 
-    pub fn push_modal(&mut self, mode: AppMode) {
-        self.modal_stack.push(ModalState {
+    pub fn track_history(&mut self, mode: AppMode) {
+        if matches!(
             mode,
-        });
+            AppMode::BranchesView
+                | AppMode::FilesView
+                | AppMode::Commits
+                | AppMode::Diff
+                | AppMode::StashDetail
+                | AppMode::Search
+                | AppMode::Filter
+                | AppMode::Settings
+                | AppMode::QuickActions
+        ) {
+            self.mode_history.retain(|m| m != &mode);
+            self.mode_history.insert(0, mode);
+        }
+    }
+
+    pub fn push_modal(&mut self, mode: AppMode) {
+        self.track_history(mode.clone());
+        self.modal_stack.push(ModalState { mode });
     }
 
     pub fn pop_modal(&mut self) -> Option<ModalState> {
         let popped = self.modal_stack.pop();
+
+        let new_current = self.current_mode().clone();
+        if new_current == AppMode::Normal {
+            let view = if self.primary_mode == PrimaryMode::Branches {
+                AppMode::BranchesView
+            } else {
+                AppMode::FilesView
+            };
+            self.track_history(view);
+        } else {
+            self.track_history(new_current);
+        }
+
         self.needs_clear = true;
         popped
     }

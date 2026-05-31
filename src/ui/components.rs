@@ -5,12 +5,19 @@ pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
     let mut icons = String::new();
     let mut color = Color::Rgb(161, 229, 193);
 
-    if status.contains(&BranchStatus::HasUniqueCommits) { color = Color::Rgb(245, 194, 231); }
-    else if status.contains(&BranchStatus::Gone) { color = Color::Rgb(140, 143, 161); }
-    else if status.contains(&BranchStatus::Ahead) { color = Color::Rgb(249, 226, 175); }
-    else if status.contains(&BranchStatus::Behind) { color = Color::Rgb(180, 190, 254); }
-    else if status.contains(&BranchStatus::Merged) || status.contains(&BranchStatus::Stashed) { color = Color::Rgb(161, 229, 193); }
-    else if status.contains(&BranchStatus::Local) { color = Color::Rgb(180, 190, 254); }
+    if status.contains(&BranchStatus::HasUniqueCommits) {
+        color = Color::Rgb(245, 194, 231);
+    } else if status.contains(&BranchStatus::Gone) {
+        color = Color::Rgb(140, 143, 161);
+    } else if status.contains(&BranchStatus::Ahead) {
+        color = Color::Rgb(249, 226, 175);
+    } else if status.contains(&BranchStatus::Behind) {
+        color = Color::Rgb(180, 190, 254);
+    } else if status.contains(&BranchStatus::Merged) || status.contains(&BranchStatus::Stashed) {
+        color = Color::Rgb(161, 229, 193);
+    } else if status.contains(&BranchStatus::Local) {
+        color = Color::Rgb(180, 190, 254);
+    }
 
     for s in status {
         match s {
@@ -39,16 +46,31 @@ pub fn get_merge_status_display(status: &MergeStatus) -> (String, Color) {
             let total_f = *total as f32;
             let safe_f = *safe as f32;
             let bar_len = 10;
-            let filled = if total_f > 0.0 { ((safe_f / total_f) * bar_len as f32).round() as usize } else { 0 };
+            let filled = if total_f > 0.0 {
+                ((safe_f / total_f) * bar_len as f32).round() as usize
+            } else {
+                0
+            };
             let mut bar = String::new();
-            for _ in 0..filled { bar.push('█'); }
-            for _ in filled..bar_len { bar.push('░'); }
-            (format!("{} {}/{}", bar, safe, total), Color::Rgb(249, 226, 175))
+            for _ in 0..filled {
+                bar.push('█');
+            }
+            for _ in filled..bar_len {
+                bar.push('░');
+            }
+            (
+                format!("{} {}/{}", bar, safe, total),
+                Color::Rgb(249, 226, 175),
+            )
         }
     }
 }
 
-pub fn centered_rect(percent_x: u16, percent_y: u16, r: ratatui::layout::Rect) -> ratatui::layout::Rect {
+pub fn centered_rect(
+    percent_x: u16,
+    percent_y: u16,
+    r: ratatui::layout::Rect,
+) -> ratatui::layout::Rect {
     let popup_layout = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
         .constraints([
