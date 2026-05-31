@@ -25,13 +25,13 @@ pub struct FileEntry {
 
 pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, FileStatus> {
     let mut map = std::collections::HashMap::new();
-    
+
     // Get the repository root to normalize paths correctly
     let repo_root = match run_git(path, &["rev-parse", "--show-toplevel"]) {
         Ok(out) => out.trim().to_string(),
         Err(_) => path.to_string(),
     };
-    
+
     // Normalize both paths to absolute canonical forms
     let abs_path = match std::fs::canonicalize(path) {
         Ok(p) => p,
@@ -41,7 +41,7 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
         Ok(p) => p,
         Err(_) => PathBuf::from(&repo_root),
     };
-    
+
     let stdout = match run_git(path, &["status", "--porcelain", "--ignored"]) {
         Ok(out) => out,
         Err(_) => return map,
@@ -53,7 +53,7 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
         }
         let status_code = &line[0..2];
         let mut raw_path = line[3..].to_string();
-        
+
         if status_code.starts_with('R') || status_code.starts_with('C') {
             if let Some(pos) = raw_path.find(" -> ") {
                 raw_path = raw_path[pos + 4..].trim_matches('"').to_string();
@@ -64,15 +64,17 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
 
         // Combine root + relative path to get absolute file path
         let full_file_path = abs_root.join(&raw_path);
-        
+
         // Strip the current view's path to get the relative path we use in the tree
         let final_rel_path = match full_file_path.strip_prefix(&abs_path) {
             Ok(p) => p.to_string_lossy().to_string(),
             Err(_) => continue, // Outside our view
         };
 
-        if final_rel_path.is_empty() { continue; }
-        
+        if final_rel_path.is_empty() {
+            continue;
+        }
+
         // Normalize backslashes for Windows if any (unlikely here but good practice)
         let final_rel_path = final_rel_path.replace('\\', "/");
 
@@ -81,7 +83,11 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
             _ => {
                 if status_code.contains('U') {
                     FileStatus::Conflict
-                } else if status_code.contains('M') || status_code.contains('R') || status_code.contains('C') || status_code.contains('T') {
+                } else if status_code.contains('M')
+                    || status_code.contains('R')
+                    || status_code.contains('C')
+                    || status_code.contains('T')
+                {
                     FileStatus::Modified
                 } else if status_code.contains('A') {
                     FileStatus::Added
@@ -99,7 +105,10 @@ pub fn get_git_file_statuses(path: &str) -> std::collections::HashMap<String, Fi
 
         // Determine if it's staged vs worktree change
         // In porcelain v1: XY where X is index, Y is worktree
-        let refined_status = if status == FileStatus::Untracked || status == FileStatus::Ignored || status == FileStatus::Conflict {
+        let refined_status = if status == FileStatus::Untracked
+            || status == FileStatus::Ignored
+            || status == FileStatus::Conflict
+        {
             status
         } else {
             let worktree_char = status_code.chars().nth(1).unwrap_or(' ');
@@ -208,16 +217,20 @@ pub fn build_file_tree(
             Ok(p) => p,
             Err(_) => PathBuf::from(path),
         };
-        
+
         let rel_path = match abs_item.strip_prefix(&abs_base) {
             Ok(p) => p.to_string_lossy().to_string(),
-            Err(_) => {
-                path.strip_prefix(base_path).unwrap_or(path).to_string_lossy().to_string()
-            }
+            Err(_) => path
+                .strip_prefix(base_path)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .to_string(),
         };
 
-        if rel_path.is_empty() { continue; }
-        
+        if rel_path.is_empty() {
+            continue;
+        }
+
         let rel_path = rel_path.replace('\\', "/");
 
         let is_dir = entry.file_type().map(|t| t.is_dir()).unwrap_or(false);

@@ -1,6 +1,6 @@
-use crate::models::{Branch, Commit};
-use crate::git::files::{FileStatus, FileEntry};
+use crate::git::files::{FileEntry, FileStatus};
 use crate::git::stash::StashEntry;
+use crate::models::{Branch, Commit};
 use crate::state::ui::PreviewState;
 use std::collections::HashMap;
 

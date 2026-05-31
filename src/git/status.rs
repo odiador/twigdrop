@@ -110,15 +110,23 @@ pub fn get_upstream_tracks(path: &str) -> std::collections::HashMap<String, Trac
             let track_str = parts[2].to_string();
             let mut ahead = 0;
             let mut behind = 0;
-            
+
             if track_str.contains("ahead")
-                && let Some(a) = track_str.split("ahead ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
-                    ahead = a.parse().unwrap_or(0);
-                }
+                && let Some(a) = track_str
+                    .split("ahead ")
+                    .nth(1)
+                    .and_then(|s| s.split(|c: char| !c.is_numeric()).next())
+            {
+                ahead = a.parse().unwrap_or(0);
+            }
             if track_str.contains("behind")
-                && let Some(b) = track_str.split("behind ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
-                    behind = b.parse().unwrap_or(0);
-                }
+                && let Some(b) = track_str
+                    .split("behind ")
+                    .nth(1)
+                    .and_then(|s| s.split(|c: char| !c.is_numeric()).next())
+            {
+                behind = b.parse().unwrap_or(0);
+            }
 
             map.insert(
                 parts[0].to_string(),
@@ -151,39 +159,54 @@ pub fn get_stashed_branches(path: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_track_parsing() {
         let track_str = "[ahead 1, behind 2]";
         let mut ahead = 0;
         let mut behind = 0;
-        
+
         if track_str.contains("ahead")
-            && let Some(a) = track_str.split("ahead ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
-                ahead = a.parse().unwrap_or(0);
-            }
+            && let Some(a) = track_str
+                .split("ahead ")
+                .nth(1)
+                .and_then(|s| s.split(|c: char| !c.is_numeric()).next())
+        {
+            ahead = a.parse().unwrap_or(0);
+        }
         if track_str.contains("behind")
-            && let Some(b) = track_str.split("behind ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
-                behind = b.parse().unwrap_or(0);
-            }
-        
+            && let Some(b) = track_str
+                .split("behind ")
+                .nth(1)
+                .and_then(|s| s.split(|c: char| !c.is_numeric()).next())
+        {
+            behind = b.parse().unwrap_or(0);
+        }
+
         assert_eq!(ahead, 1);
         assert_eq!(behind, 2);
 
         let track_str2 = "[behind 13]";
         let mut ahead2 = 0;
         let mut behind2 = 0;
-        
+
         if track_str2.contains("ahead")
-            && let Some(a) = track_str2.split("ahead ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
-                ahead2 = a.parse().unwrap_or(0);
-            }
+            && let Some(a) = track_str2
+                .split("ahead ")
+                .nth(1)
+                .and_then(|s| s.split(|c: char| !c.is_numeric()).next())
+        {
+            ahead2 = a.parse().unwrap_or(0);
+        }
         if track_str2.contains("behind")
-            && let Some(b) = track_str2.split("behind ").nth(1).and_then(|s| s.split(|c: char| !c.is_numeric()).next()) {
-                behind2 = b.parse().unwrap_or(0);
-            }
-        
+            && let Some(b) = track_str2
+                .split("behind ")
+                .nth(1)
+                .and_then(|s| s.split(|c: char| !c.is_numeric()).next())
+        {
+            behind2 = b.parse().unwrap_or(0);
+        }
+
         assert_eq!(ahead2, 0);
         assert_eq!(behind2, 13);
     }
