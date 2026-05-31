@@ -10,12 +10,12 @@ use crate::git::status::{
     get_branch_metadata, get_branches, get_merged_branches, get_stashed_branches,
     get_upstream_tracks, has_unique_commits,
 };
-use crate::models::{Branch, BranchStatus, ConflictBlock, MergeStatus, GutterStatus};
+use crate::models::{Branch, BranchStatus, ConflictBlock, GutterStatus, MergeStatus};
 use std::collections::HashMap;
 
 pub fn build_branches(path: &str) -> Vec<Branch> {
     let mut branches = vec![];
-    
+
     // Add Pseudo-branches for Local and Staged changes
     branches.push(Branch {
         name: "*Local Changes*".to_string(),
@@ -27,7 +27,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
         ahead_count: 0,
         behind_count: 0,
     });
-    
+
     branches.push(Branch {
         name: "*Staged Changes*".to_string(),
         status: vec![BranchStatus::Local],
@@ -56,7 +56,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
             if let Some(ti) = track_info {
                 ahead_count = ti.ahead;
                 behind_count = ti.behind;
-                
+
                 if !ti.has_upstream {
                     status.push(BranchStatus::Local);
                     status.push(BranchStatus::RemoteUntracked);
@@ -109,7 +109,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
             }
         })
         .collect();
-        
+
     branches.append(&mut git_branches);
     branches
 }
@@ -120,7 +120,7 @@ pub fn get_branch_info(path: &str, branch: &str) -> String {
     } else if branch == "*Staged Changes*" {
         return "Staged changes ready to be committed.".to_string();
     }
-    
+
     run_git(
         path,
         &["log", "-n", "3", "--stat", "-p", "--color=never", branch],
@@ -144,7 +144,7 @@ pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
             .filter(|s| !s.is_empty())
             .collect();
     }
-    
+
     // Diff against HEAD
     run_git(path, &["diff", "--name-only", "HEAD", branch])
         .unwrap_or_default()
@@ -162,25 +162,55 @@ pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
         return run_git(path, &["diff", "--cached", "--", file])
             .unwrap_or_else(|e| format!("Error loading diff: {}", e));
     }
-    
+
     run_git(path, &["diff", "HEAD", branch, "--", file])
         .unwrap_or_else(|e| format!("Error loading diff: {}", e))
 }
 
+pub fn get_branch_commits(path: &str, branch: &str) -> Vec<crate::models::Commit> {
+    let range = if branch == "*Local Changes*" || branch == "*Staged Changes*" {
+        "HEAD"
+    } else {
+        branch
+    };
+
+    let out = run_git(path, &["log", range, "--format=%h|%s|%cr|%an"]).unwrap_or_default();
+
+    out.lines()
+        .map(|line| {
+            let parts: Vec<&str> = line.splitn(4, '|').collect();
+            if parts.len() == 4 {
+                crate::models::Commit {
+                    hash: parts[0].to_string(),
+                    message: parts[1].to_string(),
+                    date: parts[2].to_string(),
+                    author: parts[3].to_string(),
+                }
+            } else {
+                crate::models::Commit {
+                    hash: "".to_string(),
+                    message: line.to_string(),
+                    date: "".to_string(),
+                    author: "".to_string(),
+                }
+            }
+        })
+        .filter(|c| !c.hash.is_empty())
+        .collect()
+}
+
 pub fn get_unpushed_commits(path: &str) -> Vec<crate::models::Commit> {
     // Determine the upstream tracking branch or use origin/HEAD
-    let upstream = run_git(path, &["rev-parse", "--abbrev-ref", "@{u}"]).unwrap_or_else(|_| "".to_string());
-    
+    let upstream =
+        run_git(path, &["rev-parse", "--abbrev-ref", "@{u}"]).unwrap_or_else(|_| "".to_string());
+
     let range = if upstream.trim().is_empty() {
         "HEAD".to_string() // If no upstream, all commits are unpushed technically, or we could just show last 10
     } else {
         format!("{}..HEAD", upstream.trim())
     };
 
-    let out = run_git(
-        path,
-        &["log", &range, "--format=%h|%s|%cr|%an"],
-    ).unwrap_or_default();
+    let out = run_git(path, &["log", &range, "--format=%h|%s|%cr|%an"]).unwrap_or_default();
 
     out.lines()
         .map(|line| {
@@ -261,7 +291,13 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
 
         match run_git_with_status(
             path,
-            &["merge-tree", "--write-tree", &format!("--merge-base={}", parent), &current_tree, commit],
+            &[
+                "merge-tree",
+                "--write-tree",
+                &format!("--merge-base={}", parent),
+                &current_tree,
+                commit,
+            ],
         ) {
             Ok((output, 0)) => {
                 current_tree = output.trim().to_string();
@@ -289,13 +325,24 @@ fn get_conflicts_from_merge(path: &str, base: &str, our: &str, their: &str) -> V
     let mut conflicts = vec![];
 
     // Use merge-tree with --write-tree to get the OID with markers
-    let out = match run_git(path, &["merge-tree", "--write-tree", &format!("--merge-base={}", base), our, their]) {
+    let out = match run_git(
+        path,
+        &[
+            "merge-tree",
+            "--write-tree",
+            &format!("--merge-base={}", base),
+            our,
+            their,
+        ],
+    ) {
         Ok(o) => o,
         Err(_) => return vec![],
     };
 
     let tree_oid = out.lines().next().unwrap_or_default().trim();
-    if tree_oid.is_empty() { return vec![]; }
+    if tree_oid.is_empty() {
+        return vec![];
+    }
 
     // Parse conflicted files from the output (skip first line which is tree OID)
     for line in out.lines().skip(1) {
@@ -303,14 +350,14 @@ fn get_conflicts_from_merge(path: &str, base: &str, our: &str, their: &str) -> V
             let parts: Vec<&str> = line.split_whitespace().collect();
             // Format: <mode> <object> <stage> <filename>
             if parts.len() >= 4 && parts[2] == "1" { // stage 1 is base? No, 2/3 are ours/theirs.
-                 // Actually, any entry here is a conflict.
+                // Actually, any entry here is a conflict.
             }
         }
     }
-    
-    // Simplest: just run the old trivial merge for parsing markers if needed, 
+
+    // Simplest: just run the old trivial merge for parsing markers if needed,
     // but the user wants "Structured Diff blocks".
-    
+
     // Let's stick to the current naive parser but fix the command.
     let out = match run_git(path, &["merge-tree", "--trivial-merge", base, our, their]) {
         Ok(o) => o,
@@ -355,19 +402,39 @@ pub fn get_line_diffs(path: &str, file_path: &str) -> HashMap<usize, GutterStatu
         Ok(o) => o,
         Err(_) => return diffs,
     };
-    
+
     for line in out.lines() {
         if line.starts_with("@@") {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 3 {
                 let old_part = parts[1]; // -10,1
                 let new_part = parts[2]; // +11,2
-                
-                let old_info: Vec<usize> = old_part.trim_start_matches('-').split(',').map(|s| s.parse().unwrap_or(0)).collect();
-                let new_info: Vec<usize> = new_part.trim_start_matches('+').split(',').map(|s| s.parse().unwrap_or(0)).collect();
-                
-                let old_count = if old_info.len() > 1 { old_info[1] } else if !old_info.is_empty() { 1 } else { 0 };
-                let new_count = if new_info.len() > 1 { new_info[1] } else if !new_info.is_empty() { 1 } else { 0 };
+
+                let old_info: Vec<usize> = old_part
+                    .trim_start_matches('-')
+                    .split(',')
+                    .map(|s| s.parse().unwrap_or(0))
+                    .collect();
+                let new_info: Vec<usize> = new_part
+                    .trim_start_matches('+')
+                    .split(',')
+                    .map(|s| s.parse().unwrap_or(0))
+                    .collect();
+
+                let old_count = if old_info.len() > 1 {
+                    old_info[1]
+                } else if !old_info.is_empty() {
+                    1
+                } else {
+                    0
+                };
+                let new_count = if new_info.len() > 1 {
+                    new_info[1]
+                } else if !new_info.is_empty() {
+                    1
+                } else {
+                    0
+                };
                 let new_start = if !new_info.is_empty() { new_info[0] } else { 0 };
 
                 if new_start > 0 {
