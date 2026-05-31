@@ -9,11 +9,11 @@ pub struct Database {
 impl Database {
     pub fn new(path: PathBuf) -> Result<Self> {
         let conn = Connection::open(path)?;
-        
+
         // Activación del modo WAL para optimizar lecturas concurrentes
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
-        
+
         let db = Self { conn };
         db.init()?;
         Ok(db)

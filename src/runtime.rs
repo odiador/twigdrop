@@ -1,9 +1,9 @@
-use tokio::sync::mpsc;
 use crate::events::{Event, GitEvent, TaskEvent};
-use crate::state::ui::PrimaryMode;
 use crate::git;
 use crate::models::ConflictBlock;
+use crate::state::ui::PrimaryMode;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 pub struct Runtime {
     pub repo_path: String,
@@ -16,7 +16,11 @@ impl Runtime {
         }
     }
 
-    pub fn spawn_merge_analyzer(&self, mut trigger_rx: mpsc::Receiver<()>, event_tx: mpsc::Sender<Event>) {
+    pub fn spawn_merge_analyzer(
+        &self,
+        mut trigger_rx: mpsc::Receiver<()>,
+        event_tx: mpsc::Sender<Event>,
+    ) {
         let path = self.repo_path.clone();
         tokio::spawn(async move {
             while trigger_rx.recv().await.is_some() {
@@ -30,17 +34,23 @@ impl Runtime {
                     let cb = current_branch.clone();
                     tokio::spawn(async move {
                         let status = git::analyze_merge_status(&p, &b, &cb);
-                        let _ = tx_clone.send(Event::Git(GitEvent::MergeStatusUpdated {
-                            branch: b,
-                            status,
-                        })).await;
+                        let _ = tx_clone
+                            .send(Event::Git(GitEvent::MergeStatusUpdated {
+                                branch: b,
+                                status,
+                            }))
+                            .await;
                     });
                 }
             }
         });
     }
 
-    pub fn spawn_file_status_poller(&self, event_tx: mpsc::Sender<Event>, app_mode_rx: Arc<std::sync::RwLock<PrimaryMode>>) {
+    pub fn spawn_file_status_poller(
+        &self,
+        event_tx: mpsc::Sender<Event>,
+        app_mode_rx: Arc<std::sync::RwLock<PrimaryMode>>,
+    ) {
         let path = self.repo_path.clone();
         tokio::spawn(async move {
             loop {
@@ -51,7 +61,9 @@ impl Runtime {
 
                 if mode == PrimaryMode::Files {
                     let statuses = git::files::get_git_file_statuses(&path);
-                    let _ = event_tx.send(Event::Git(GitEvent::FileStatusesUpdated(statuses))).await;
+                    let _ = event_tx
+                        .send(Event::Git(GitEvent::FileStatusesUpdated(statuses)))
+                        .await;
                 }
 
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -64,22 +76,28 @@ impl Runtime {
         mut ai_trigger_rx: mpsc::Receiver<(String, String, String)>,
         mut conflict_trigger_rx: mpsc::Receiver<(String, ConflictBlock)>,
         event_tx: mpsc::Sender<Event>,
-    ) {        
+    ) {
         tokio::spawn(async move {
             let mut last_ollama_url = String::new();
             loop {
                 let config = crate::utils::config::load_config();
                 let provider_cfg = config.current_provider().clone();
-                
+
                 if config.ai_provider == "ollama" && provider_cfg.url != last_ollama_url {
                     last_ollama_url = provider_cfg.url.clone();
                     let models = crate::utils::config::fetch_ollama_models(&last_ollama_url).await;
-                    let _ = event_tx.send(Event::Task(TaskEvent::AiModelsFetched(models))).await;
+                    let _ = event_tx
+                        .send(Event::Task(TaskEvent::AiModelsFetched(models)))
+                        .await;
                 }
 
                 let provider_type = config.ai_provider.clone();
                 let model = provider_cfg.model.clone();
-                let api_key = if provider_cfg.api_key.is_empty() { None } else { Some(crate::utils::config::deobfuscate(&provider_cfg.api_key)) };
+                let api_key = if provider_cfg.api_key.is_empty() {
+                    None
+                } else {
+                    Some(crate::utils::config::deobfuscate(&provider_cfg.api_key))
+                };
                 let url = Some(provider_cfg.url.clone());
 
                 let worker = crate::ai::AIWorker::new(&provider_type, &model, api_key, url).ok();
@@ -91,7 +109,7 @@ impl Runtime {
                                 let hash = payload;
                                 let diff = git::commands::run_git(&repo_path, &["show", &hash]).unwrap_or_default();
                                 let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete("Generating commit message with AI...".to_string()))).await;
-                                
+
                                 if let Ok(s) = w.inner.summarize_diff(&diff).await {
                                     let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(format!("Commit Msg Suggestion:\n{}", s)))).await;
                                 } else {
@@ -99,7 +117,7 @@ impl Runtime {
                                 }
                             } else {
                                 let branch_name = payload;
-                                
+
                                 // Restore DB caching
                                 let db_path = crate::utils::config::get_config_path()
                                     .unwrap_or_else(|| std::path::PathBuf::from(".git"))
@@ -107,7 +125,7 @@ impl Runtime {
                                     .unwrap_or(&std::path::PathBuf::from("."))
                                     .join("twigdrop.db");
                                 let db = crate::db::Database::new(db_path).ok();
-                                
+
                                 let current_hash = match git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
                                     Ok(h) => h.trim().to_string(),
                                     Err(_) => "".to_string(),

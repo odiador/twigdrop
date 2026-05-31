@@ -6,28 +6,31 @@ mod events;
 mod git;
 mod handlers;
 mod models;
+mod runtime;
 mod state;
 mod tasks;
 mod ui;
 mod utils;
-mod runtime;
 
 use anyhow::Result;
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags, PushKeyboardEnhancementFlags},
+        event::{
+            self, DisableMouseCapture, EnableMouseCapture, KeyboardEnhancementFlags,
+            PushKeyboardEnhancementFlags,
+        },
         execute,
-        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
-    Terminal,
 };
 use std::{env, io};
 use tokio::sync::mpsc;
 
 use app::App;
-use runtime::Runtime;
 use events::Event;
+use runtime::Runtime;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -47,7 +50,8 @@ async fn main() -> Result<()> {
 
     let (trigger_tx, trigger_rx) = mpsc::channel::<()>(1);
     let (ai_trigger_tx, ai_trigger_rx) = mpsc::channel::<(String, String, String)>(10);
-    let (conflict_trigger_tx, conflict_trigger_rx) = mpsc::channel::<(String, models::ConflictBlock)>(10);
+    let (conflict_trigger_tx, conflict_trigger_rx) =
+        mpsc::channel::<(String, models::ConflictBlock)>(10);
 
     let (event_tx, mut event_rx) = mpsc::channel::<Event>(1000);
 
@@ -63,7 +67,7 @@ async fn main() -> Result<()> {
     app.event_tx = Some(event_tx.clone());
 
     let runtime = Runtime::new(&path);
-    
+
     runtime.spawn_file_status_poller(event_tx.clone(), app.shared_primary_mode.clone());
     runtime.spawn_merge_analyzer(trigger_rx, event_tx.clone());
     runtime.spawn_ai_worker(ai_trigger_rx, conflict_trigger_rx, event_tx.clone());
@@ -76,7 +80,10 @@ async fn main() -> Result<()> {
         stdout,
         EnterAlternateScreen,
         EnableMouseCapture,
-        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        PushKeyboardEnhancementFlags(
+            KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                | KeyboardEnhancementFlags::REPORT_EVENT_TYPES
+        )
     )?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
@@ -85,14 +92,21 @@ async fn main() -> Result<()> {
     tokio::task::spawn_blocking(move || {
         loop {
             if event::poll(std::time::Duration::from_millis(10)).unwrap_or(false)
-                && let Ok(crossterm_event) = event::read() {
-                    match crossterm_event {
-                        event::Event::Key(k) => { let _ = event_tx_clone.blocking_send(Event::Key(k)); }
-                        event::Event::Mouse(m) => { let _ = event_tx_clone.blocking_send(Event::Mouse(m)); }
-                        event::Event::Resize(_, _) => { let _ = event_tx_clone.blocking_send(Event::Resize); }
-                        _ => {}
+                && let Ok(crossterm_event) = event::read()
+            {
+                match crossterm_event {
+                    event::Event::Key(k) => {
+                        let _ = event_tx_clone.blocking_send(Event::Key(k));
                     }
+                    event::Event::Mouse(m) => {
+                        let _ = event_tx_clone.blocking_send(Event::Mouse(m));
+                    }
+                    event::Event::Resize(_, _) => {
+                        let _ = event_tx_clone.blocking_send(Event::Resize);
+                    }
+                    _ => {}
                 }
+            }
         }
     });
 
@@ -124,10 +138,9 @@ async fn run_app(
     loop {
         while let Ok(event) = event_rx.try_recv() {
             match &event {
-                Event::Key(key)
-                    if handlers::keyboard::handle_keyboard(app, *key, path) => {
-                        return Ok(());
-                    }
+                Event::Key(key) if handlers::keyboard::handle_keyboard(app, *key, path) => {
+                    return Ok(());
+                }
                 Event::Mouse(mouse) => {
                     handlers::mouse::handle_mouse(app, *mouse, path);
                 }
@@ -142,7 +155,7 @@ async fn run_app(
         }
 
         terminal.draw(|f| ui::draw(f, app, path))?;
-        
+
         tokio::time::sleep(std::time::Duration::from_millis(8)).await;
     }
 }
