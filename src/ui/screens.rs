@@ -1,15 +1,15 @@
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Cell, Clear, List, ListItem, Paragraph, Row, Table},
-    Frame,
 };
 
 use crate::app::App;
-use crate::state::ui::{AppMode, PrimaryMode, FilePanel, PreviewState, RebaseAction};
 use crate::git::files::FileStatus;
 use crate::models::{BranchStatus, GutterStatus};
+use crate::state::ui::{AppMode, FilePanel, PreviewState, PrimaryMode, RebaseAction};
 use crate::ui::components::get_status_icons;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
@@ -34,7 +34,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         }
     }
     app.ui.list_start_index = start;
-    
+
     let mut rows: Vec<Row> = vec![];
     app.ui.branch_screen_positions.clear();
 
@@ -51,7 +51,9 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         let selected = branch_idx == app.ui.selected_branch_idx;
         let is_current = b.name == app.repo.current_branch;
 
-        app.ui.branch_screen_positions.push((actual_idx, area.y + 3 + i as u16));
+        app.ui
+            .branch_screen_positions
+            .push((actual_idx, area.y + 3 + i as u16));
 
         let (icons, color) = get_status_icons(&b.status);
         let (merge_text, merge_color) =
@@ -68,11 +70,23 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         if b.behind_count > 0 {
             diff_counts.push_str(&format!("↓{} ", b.behind_count));
         }
-        let diff_counts_str = if diff_counts.is_empty() { String::new() } else { format!(" [{}]", diff_counts.trim_end()) };
+        let diff_counts_str = if diff_counts.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", diff_counts.trim_end())
+        };
 
         let branch_name = format!("{}{}{}", b.name, current_tag, diff_counts_str);
-        let status_str = if b.status.contains(&BranchStatus::Merged) { "merged" } else { "unmerged" };
-        let type_str = if b.status.contains(&BranchStatus::RemoteTracked) { "remote" } else { "local" };
+        let status_str = if b.status.contains(&BranchStatus::Merged) {
+            "merged"
+        } else {
+            "unmerged"
+        };
+        let type_str = if b.status.contains(&BranchStatus::RemoteTracked) {
+            "remote"
+        } else {
+            "local"
+        };
         let author_str = format!("{} {}", b.commit_date, b.author);
 
         let mut row_style = Style::default().fg(Color::Rgb(205, 214, 244));
@@ -87,14 +101,29 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         }
 
         let cells = vec![
-            Cell::from(checkbox).style(if selected { Style::default().fg(Color::Black) } else { Style::default().fg(Color::Rgb(124, 128, 156)) }),
+            Cell::from(checkbox).style(if selected {
+                Style::default().fg(Color::Black)
+            } else {
+                Style::default().fg(Color::Rgb(124, 128, 156))
+            }),
             Cell::from(Line::from(vec![
-                Span::styled(format!("{:<4} ", icons), if selected { Style::default().fg(Color::Black) } else { Style::default().fg(color) }),
+                Span::styled(
+                    format!("{:<4} ", icons),
+                    if selected {
+                        Style::default().fg(Color::Black)
+                    } else {
+                        Style::default().fg(color)
+                    },
+                ),
                 Span::styled(branch_name, branch_style),
             ])),
             Cell::from(b.age.clone()),
             Cell::from(status_str),
-            Cell::from(merge_text).style(if selected { Style::default().fg(Color::Black) } else { Style::default().fg(merge_color) }),
+            Cell::from(merge_text).style(if selected {
+                Style::default().fg(Color::Black)
+            } else {
+                Style::default().fg(merge_color)
+            }),
             Cell::from(type_str),
             Cell::from(author_str),
         ];
@@ -113,26 +142,52 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     ];
 
     let table = Table::new(rows, widths)
-        .header(Row::new(vec!["", "Branch", "Age", "Status", "Merge", "Type", "Last Commit"]).style(Style::default().fg(Color::Rgb(124, 128, 156)).add_modifier(Modifier::BOLD)).bottom_margin(1))
-        .block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Rgb(74, 79, 106))));
+        .header(
+            Row::new(vec![
+                "",
+                "Branch",
+                "Age",
+                "Status",
+                "Merge",
+                "Type",
+                "Last Commit",
+            ])
+            .style(
+                Style::default()
+                    .fg(Color::Rgb(124, 128, 156))
+                    .add_modifier(Modifier::BOLD),
+            )
+            .bottom_margin(1),
+        )
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Rgb(74, 79, 106))),
+        );
 
     if app.ui.current_mode() == &AppMode::Diff {
         let overlay_area = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(5),
-                Constraint::Percentage(90),
-                Constraint::Percentage(5),
-            ].as_ref())
+            .constraints(
+                [
+                    Constraint::Percentage(5),
+                    Constraint::Percentage(90),
+                    Constraint::Percentage(5),
+                ]
+                .as_ref(),
+            )
             .split(area)[1];
-            
+
         let inner_area = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(5),
-                Constraint::Percentage(90),
-                Constraint::Percentage(5),
-            ].as_ref())
+            .constraints(
+                [
+                    Constraint::Percentage(5),
+                    Constraint::Percentage(90),
+                    Constraint::Percentage(5),
+                ]
+                .as_ref(),
+            )
             .split(overlay_area)[1];
 
         f.render_widget(Clear, inner_area);
@@ -152,14 +207,27 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         for (i, file) in app.repo.diff_files.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
             if i == app.ui.diff_file_selected {
-                let bg = if app.ui.diff_panel == FilePanel::Directory { Color::White } else { Color::Rgb(45, 45, 65) };
-                let fg = if app.ui.diff_panel == FilePanel::Directory { Color::Black } else { Color::White };
+                let bg = if app.ui.diff_panel == FilePanel::Directory {
+                    Color::White
+                } else {
+                    Color::Rgb(45, 45, 65)
+                };
+                let fg = if app.ui.diff_panel == FilePanel::Directory {
+                    Color::Black
+                } else {
+                    Color::White
+                };
                 style = style.bg(bg).fg(fg).add_modifier(Modifier::BOLD);
             }
             file_items.push(ListItem::new(file.clone()).style(style));
         }
         let list_title = format!(" Changed Files ({}) ", app.repo.diff_files.len());
-        let files_list = List::new(file_items).block(Block::default().title(list_title).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+        let files_list = List::new(file_items).block(
+            Block::default()
+                .title(list_title)
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        );
         f.render_widget(files_list, left_chunks[0]);
 
         // 2. AI Analysis separate
@@ -167,13 +235,22 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         if let Some(ai) = &app.ai_state.ai_analysis {
             info_text = ai.clone();
         }
-        let ai_block = Block::default().title(" AI Intelligence ").borders(Borders::ALL).border_style(Style::default().fg(Color::Magenta));
-        let ai_p = Paragraph::new(info_text).block(ai_block).wrap(ratatui::widgets::Wrap { trim: true });
+        let ai_block = Block::default()
+            .title(" AI Intelligence ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Magenta));
+        let ai_p = Paragraph::new(info_text)
+            .block(ai_block)
+            .wrap(ratatui::widgets::Wrap { trim: true });
         f.render_widget(ai_p, left_chunks[1]);
 
         // 3. File Preview (The Diff)
         if let Some(state) = &app.repo.diff_preview {
-            let border_color = if app.ui.diff_panel == FilePanel::Preview { Color::Green } else { Color::Rgb(74, 79, 106) };
+            let border_color = if app.ui.diff_panel == FilePanel::Preview {
+                Color::Green
+            } else {
+                Color::Rgb(74, 79, 106)
+            };
             let mut final_lines = Vec::new();
             let visible_rows = main_chunks[1].height.saturating_sub(2) as usize;
             let start_idx = state.scroll_y;
@@ -186,12 +263,21 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
                 }
                 final_lines.push(state.highlighted_lines[i].clone().style(line_style));
             }
-            
+
             let preview_title = format!(" Diff: {} (Tab: switch) ", state.file_path);
-            let diff_preview = Paragraph::new(Text::from(final_lines)).block(Block::default().title(preview_title).borders(Borders::ALL).border_style(Style::default().fg(border_color)));
+            let diff_preview = Paragraph::new(Text::from(final_lines)).block(
+                Block::default()
+                    .title(preview_title)
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(border_color)),
+            );
             f.render_widget(diff_preview, main_chunks[1]);
         } else {
-            let fallback_diff = Paragraph::new("Select a file to see diff").block(Block::default().title(" Diff Preview ").borders(Borders::ALL));
+            let fallback_diff = Paragraph::new("Select a file to see diff").block(
+                Block::default()
+                    .title(" Diff Preview ")
+                    .borders(Borders::ALL),
+            );
             f.render_widget(fallback_diff, main_chunks[1]);
         }
     } else {
@@ -200,11 +286,42 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 }
 
 pub fn render_filter(f: &mut Frame, app: &App) {
-    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)].as_ref()).split(f.area())[1];
-    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)].as_ref()).split(area)[1];
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ]
+            .as_ref(),
+        )
+        .split(f.area())[1];
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(30),
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+            ]
+            .as_ref(),
+        )
+        .split(area)[1];
     f.render_widget(Clear, inner);
 
-    let options = ["0. All", "1. Merged (✓)", "2. Local Only (L)", "3. Stashed (S)", "4. Gone (⨯)", "5. Ahead (↑)", "6. Behind (↓)", "7. Unique Commits (▲)", "8. Remote Tracked (R)", "9. Remote Untracked (U)"];
+    let options = [
+        "0. All",
+        "1. Merged (✓)",
+        "2. Local Only (L)",
+        "3. Stashed (S)",
+        "4. Gone (⨯)",
+        "5. Ahead (↑)",
+        "6. Behind (↓)",
+        "7. Unique Commits (▲)",
+        "8. Remote Tracked (R)",
+        "9. Remote Untracked (U)",
+    ];
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
@@ -235,11 +352,14 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(8), // Logo
-            Constraint::Min(10),   // Content
-            Constraint::Length(1), // Footer
-        ].as_ref())
+        .constraints(
+            [
+                Constraint::Length(8), // Logo
+                Constraint::Min(10),   // Content
+                Constraint::Length(1), // Footer
+            ]
+            .as_ref(),
+        )
         .split(area);
 
     let logo = Paragraph::new(ASCII_LOGO.trim_matches('\n'))
@@ -308,6 +428,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         "",
         "Global Shortcuts:",
         "  d              : Switch between Branches and Files mode",
+        "  Shift+Tab      : Open App Switcher",
         "  Esc            : Open Main Menu (Settings, Help, Quit)",
         "  !              : Open Shell Command Prompt",
         "  :              : Open Git Quick Actions Palette",
@@ -338,13 +459,16 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
 
     f.render_widget(p, help_inner);
 
-    let footer_text = vec![
-        Line::from(vec![
-            Span::raw("Made by: "),
-            Span::styled("odiador", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-            Span::raw(" ❤️ for the community"),
-        ]),
-    ];
+    let footer_text = vec![Line::from(vec![
+        Span::raw("Made by: "),
+        Span::styled(
+            "odiador",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(" ❤️ for the community"),
+    ])];
     let footer_p = Paragraph::new(footer_text).alignment(Alignment::Center);
     f.render_widget(footer_p, chunks[2]);
 }
@@ -392,53 +516,122 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
         Line::from(""),
         Line::from(vec![
             Span::raw("The following branch(es) have "),
-            Span::styled("unique commits", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "unique commits",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw(" not found in remote:"),
-        ]).alignment(Alignment::Center),
+        ])
+        .alignment(Alignment::Center),
         Line::from(""),
-        Line::from(Span::styled(branch_list, Style::default().fg(Color::Cyan))).alignment(Alignment::Center),
+        Line::from(Span::styled(branch_list, Style::default().fg(Color::Cyan)))
+            .alignment(Alignment::Center),
         Line::from(""),
-        Line::from("Deleting these branches will result in PERMANENT data loss.").alignment(Alignment::Center),
+        Line::from("Deleting these branches will result in PERMANENT data loss.")
+            .alignment(Alignment::Center),
         Line::from(""),
         Line::from(vec![
             Span::raw("Are you absolutely sure? ("),
-            Span::styled("y", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "y",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
             Span::raw("/"),
-            Span::styled("n", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "n",
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            ),
             Span::raw(")"),
-        ]).alignment(Alignment::Center),
+        ])
+        .alignment(Alignment::Center),
     ];
 
-    let p = Paragraph::new(text).block(block).alignment(Alignment::Center);
+    let p = Paragraph::new(text)
+        .block(block)
+        .alignment(Alignment::Center);
     f.render_widget(p, inner);
 }
 
 pub fn render_commits(f: &mut Frame, app: &App) {
-    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)].as_ref()).split(f.area())[1];
-    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(20), Constraint::Percentage(60), Constraint::Percentage(20)].as_ref()).split(area)[1];
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ]
+            .as_ref(),
+        )
+        .split(f.area())[1];
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
+                Constraint::Percentage(20),
+            ]
+            .as_ref(),
+        )
+        .split(area)[1];
     f.render_widget(Clear, inner);
 
     let mut items = vec![];
     if app.repo.commits.is_empty() {
-        items.push(ListItem::new("No unpushed commits found.").style(Style::default().fg(Color::Gray)));
+        items.push(
+            ListItem::new("No unpushed commits found.").style(Style::default().fg(Color::Gray)),
+        );
     } else {
         for (i, commit) in app.repo.commits.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
             if i == app.ui.selected_commit_idx {
-                style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+                style = style
+                    .bg(Color::Rgb(45, 45, 65))
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD);
             }
             let text = format!("{} | {} | {}", commit.hash, commit.date, commit.message);
             items.push(ListItem::new(text).style(style));
         }
     }
 
-    let list = List::new(items).block(Block::default().title(" Unpushed Commits (Enter to Manage) ").borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan)));
+    let list = List::new(items).block(
+        Block::default()
+            .title(" Unpushed Commits (Enter to Manage) ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
     f.render_widget(list, inner);
 }
 
 pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
-    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(30), Constraint::Percentage(40), Constraint::Percentage(30)].as_ref()).split(f.area())[1];
-    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)].as_ref()).split(area)[1];
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(30),
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+            ]
+            .as_ref(),
+        )
+        .split(f.area())[1];
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(25),
+                Constraint::Percentage(50),
+                Constraint::Percentage(25),
+            ]
+            .as_ref(),
+        )
+        .split(area)[1];
     f.render_widget(Clear, inner);
 
     let options = [
@@ -450,10 +643,14 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.settings_state.selected {
-            style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+            style = style
+                .bg(Color::Rgb(45, 45, 65))
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD);
         }
-        
-        let text = if i == app.ui.settings_state.selected && app.ui.settings_state.editing && i == 0 {
+
+        let text = if i == app.ui.settings_state.selected && app.ui.settings_state.editing && i == 0
+        {
             format!("> {}", app.ui.settings_state.input)
         } else {
             opt.to_string()
@@ -462,27 +659,38 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
         items.push(ListItem::new(text).style(style));
     }
 
-    let list = List::new(items).block(Block::default().title(format!(" Manage Commit: {} ", hash)).borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)));
+    let list = List::new(items).block(
+        Block::default()
+            .title(format!(" Manage Commit: {} ", hash))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow)),
+    );
     f.render_widget(list, inner);
 }
 
 pub fn render_shell(f: &mut Frame, input: &str) {
     let area = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(40),
-            Constraint::Length(3),
-            Constraint::Percentage(40),
-        ].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(40),
+                Constraint::Length(3),
+                Constraint::Percentage(40),
+            ]
+            .as_ref(),
+        )
         .split(f.area())[1];
 
     let inner = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(10),
-            Constraint::Percentage(80),
-            Constraint::Percentage(10),
-        ].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(10),
+                Constraint::Percentage(80),
+                Constraint::Percentage(10),
+            ]
+            .as_ref(),
+        )
         .split(area)[1];
 
     f.render_widget(Clear, inner);
@@ -491,7 +699,7 @@ pub fn render_shell(f: &mut Frame, input: &str) {
         .title(" Execute Shell Command ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow));
-    
+
     let p = Paragraph::new(format!("$ {}", input))
         .block(block)
         .alignment(Alignment::Left);
@@ -501,20 +709,26 @@ pub fn render_shell(f: &mut Frame, input: &str) {
 pub fn render_quick_actions(f: &mut Frame, app: &App) {
     let area = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(50),
-            Constraint::Percentage(25),
-        ].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(25),
+                Constraint::Percentage(50),
+                Constraint::Percentage(25),
+            ]
+            .as_ref(),
+        )
         .split(f.area())[1];
 
     let inner = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(30),
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-        ].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(30),
+                Constraint::Percentage(40),
+                Constraint::Percentage(30),
+            ]
+            .as_ref(),
+        )
         .split(area)[1];
 
     f.render_widget(Clear, inner);
@@ -523,16 +737,20 @@ pub fn render_quick_actions(f: &mut Frame, app: &App) {
     for (i, action) in app.ui.quick_actions_state.actions.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.quick_actions_state.selected {
-            style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+            style = style
+                .bg(Color::Rgb(45, 45, 65))
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD);
         }
         items.push(ListItem::new(format!(" {} ", action)).style(style));
     }
 
-    let list = List::new(items)
-        .block(Block::default()
+    let list = List::new(items).block(
+        Block::default()
             .title(" Git Quick Actions ")
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan)));
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
     f.render_widget(list, inner);
 }
 
@@ -567,10 +785,13 @@ pub fn render_create_branch(f: &mut Frame, input: &str) {
         .title(Line::from(" Create New Branch ").alignment(Alignment::Left))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
-    
-    let p = Paragraph::new(format!("\nName: {}\n\n(Enter to create, Esc to cancel)", input))
-        .block(block)
-        .alignment(Alignment::Center);
+
+    let p = Paragraph::new(format!(
+        "\nName: {}\n\n(Enter to create, Esc to cancel)",
+        input
+    ))
+    .block(block)
+    .alignment(Alignment::Center);
     f.render_widget(p, inner);
 }
 
@@ -614,12 +835,17 @@ pub fn render_manage(f: &mut Frame, app: &App) {
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.manage_selected {
-            style = style.fg(Color::Cyan).bg(Color::Rgb(40, 40, 40)).add_modifier(Modifier::BOLD);
+            style = style
+                .fg(Color::Cyan)
+                .bg(Color::Rgb(40, 40, 40))
+                .add_modifier(Modifier::BOLD);
         }
         if i == 2 {
             style = style.fg(Color::Red);
             if i == app.ui.manage_selected {
-                style = style.bg(Color::Rgb(40, 40, 40)).add_modifier(Modifier::BOLD);
+                style = style
+                    .bg(Color::Rgb(40, 40, 40))
+                    .add_modifier(Modifier::BOLD);
             }
         }
         items.push(ListItem::new(*opt).style(style));
@@ -685,17 +911,22 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
     let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = app.ui.current_mode() {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(app.ui.sidebar_width),
-                Constraint::Min(0),
-            ].as_ref())
+            .constraints(
+                [
+                    Constraint::Percentage(app.ui.sidebar_width),
+                    Constraint::Min(0),
+                ]
+                .as_ref(),
+            )
             .split(area);
         (chunks[0], Some((chunks[1], state)))
     } else {
         (area, None)
     };
 
-    let sidebar_border_color = if app.ui.active_panel == FilePanel::Directory && matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
+    let sidebar_border_color = if app.ui.active_panel == FilePanel::Directory
+        && matches!(app.ui.current_mode(), AppMode::CodePreview(_))
+    {
         Color::Rgb(180, 190, 254)
     } else {
         Color::Rgb(74, 79, 106)
@@ -709,7 +940,15 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
     let mut items = vec![];
     for (i, entry) in app.repo.file_tree.iter().enumerate() {
         let indent = "  ".repeat(entry.depth);
-        let icon = if entry.is_dir { if entry.is_open { "▼ 📂 " } else { "▶ 📁 " } } else { "  📄 " };
+        let icon = if entry.is_dir {
+            if entry.is_open {
+                "▼ 📂 "
+            } else {
+                "▶ 📁 "
+            }
+        } else {
+            "  📄 "
+        };
         let name = entry.path.file_name().unwrap_or_default().to_string_lossy();
         let status_color = match entry.status {
             FileStatus::Modified => Color::Rgb(249, 226, 175),
@@ -723,7 +962,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         };
 
         let mut style = Style::default().fg(status_color);
-        
+
         let status_bg = match entry.status {
             FileStatus::Modified => Some(Color::Rgb(35, 48, 65)),
             FileStatus::Added => Some(Color::Rgb(35, 60, 48)),
@@ -737,11 +976,26 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         }
 
         if i == app.ui.selected_file_idx {
-            let bg = if app.ui.active_panel == FilePanel::Directory { Color::White } else { Color::Rgb(54, 58, 79) };
-            let fg = if app.ui.active_panel == FilePanel::Directory { Color::Black } else { status_color };
+            let bg = if app.ui.active_panel == FilePanel::Directory {
+                Color::White
+            } else {
+                Color::Rgb(54, 58, 79)
+            };
+            let fg = if app.ui.active_panel == FilePanel::Directory {
+                Color::Black
+            } else {
+                status_color
+            };
             style = style.bg(bg).fg(fg);
         }
-        items.push(ListItem::new(Line::from(vec![Span::raw(indent), Span::raw(icon), Span::styled(name.to_string(), style)])).style(style));
+        items.push(
+            ListItem::new(Line::from(vec![
+                Span::raw(indent),
+                Span::raw(icon),
+                Span::styled(name.to_string(), style),
+            ]))
+            .style(style),
+        );
     }
 
     let list = List::new(items).block(block);
@@ -754,50 +1008,131 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
 
 pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
-    let chunks = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(area);
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+        .split(area);
     let mut stash_items = vec![];
     for (i, stash) in app.repo.stashes.iter().enumerate() {
         let mut style = Style::default().fg(Color::Rgb(205, 214, 244));
-        if i == app.ui.selected_stash_idx { style = style.bg(Color::White).fg(Color::Black).add_modifier(Modifier::BOLD); }
-        stash_items.push(ListItem::new(format!("{} [{}] - {}", stash.id, stash.branch, stash.message)).style(style));
+        if i == app.ui.selected_stash_idx {
+            style = style
+                .bg(Color::White)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD);
+        }
+        stash_items.push(
+            ListItem::new(format!(
+                "{} [{}] - {}",
+                stash.id, stash.branch, stash.message
+            ))
+            .style(style),
+        );
     }
-    let stash_list = List::new(stash_items).block(Block::default().title(" Stashes ").borders(Borders::ALL));
+    let stash_list =
+        List::new(stash_items).block(Block::default().title(" Stashes ").borders(Borders::ALL));
     f.render_widget(stash_list, chunks[0]);
 
-    let detail_chunks = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref()).split(chunks[1]);
-    let files_p = Paragraph::new(app.repo.stash_files.join("\n")).block(Block::default().title(" Files in Stash ").borders(Borders::ALL));
+    let detail_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+        .split(chunks[1]);
+    let files_p = Paragraph::new(app.repo.stash_files.join("\n")).block(
+        Block::default()
+            .title(" Files in Stash ")
+            .borders(Borders::ALL),
+    );
     f.render_widget(files_p, detail_chunks[0]);
-    let diff_p = Paragraph::new(app.repo.stash_diff.as_str()).block(Block::default().title(" Diff Preview ").borders(Borders::ALL)).scroll((app.ui.info_scroll, 0));
+    let diff_p = Paragraph::new(app.repo.stash_diff.as_str())
+        .block(
+            Block::default()
+                .title(" Diff Preview ")
+                .borders(Borders::ALL),
+        )
+        .scroll((app.ui.info_scroll, 0));
     f.render_widget(diff_p, detail_chunks[1]);
 }
 
 pub fn render_settings(f: &mut Frame, app: &App) {
-    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Percentage(15), Constraint::Percentage(70), Constraint::Percentage(15)].as_ref()).split(f.area())[1];
-    let inner = Layout::default().direction(Direction::Horizontal).constraints([Constraint::Percentage(15), Constraint::Percentage(70), Constraint::Percentage(15)].as_ref()).split(area)[1];
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ]
+            .as_ref(),
+        )
+        .split(f.area())[1];
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Percentage(15),
+                Constraint::Percentage(70),
+                Constraint::Percentage(15),
+            ]
+            .as_ref(),
+        )
+        .split(area)[1];
     f.render_widget(Clear, inner);
 
     let options = [
-        format!("[ Editor ] Primary IDE          : {}", app.config.ide_command),
-        format!("[ Editor ] Alternative IDE      : {}", app.config.alternative_ide_command),
-        format!("[ AI ]     AI Provider          : {}", app.config.ai_provider),
-        format!("[ AI ]     AI Model             : {}", app.config.current_provider().model),
-        format!("[ AI ]     OpenAI API Key       : {}", if app.config.current_provider().api_key.is_empty() { "None".to_string() } else { "****".to_string() }),
-        format!("[ AI ]     Ollama URL           : {}", app.config.current_provider().url),
-        format!("[ UI ]     Enable Animations    : {}", app.config.enable_animations),
-        format!("[ UI ]     Default Sidebar Width: {}", app.config.default_sidebar_width),
-        "           [ Save and Exit ]".to_string()
+        format!(
+            "[ Editor ] Primary IDE          : {}",
+            app.config.ide_command
+        ),
+        format!(
+            "[ Editor ] Alternative IDE      : {}",
+            app.config.alternative_ide_command
+        ),
+        format!(
+            "[ AI ]     AI Provider          : {}",
+            app.config.ai_provider
+        ),
+        format!(
+            "[ AI ]     AI Model             : {}",
+            app.config.current_provider().model
+        ),
+        format!(
+            "[ AI ]     OpenAI API Key       : {}",
+            if app.config.current_provider().api_key.is_empty() {
+                "None".to_string()
+            } else {
+                "****".to_string()
+            }
+        ),
+        format!(
+            "[ AI ]     Ollama URL           : {}",
+            app.config.current_provider().url
+        ),
+        format!(
+            "[ UI ]     Enable Animations    : {}",
+            app.config.enable_animations
+        ),
+        format!(
+            "[ UI ]     Default Sidebar Width: {}",
+            app.config.default_sidebar_width
+        ),
+        "           [ Save and Exit ]".to_string(),
     ];
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
-        if i == app.ui.settings_state.selected { 
-            style = style.bg(Color::Rgb(45, 45, 65)).add_modifier(Modifier::BOLD); 
+        if i == app.ui.settings_state.selected {
+            style = style
+                .bg(Color::Rgb(45, 45, 65))
+                .add_modifier(Modifier::BOLD);
         }
-        
+
         let text = if i == app.ui.settings_state.selected {
             if app.ui.settings_state.editing {
-                if i == 4 { format!("> {}", "*".repeat(app.ui.settings_state.input.len())) }
-                else { format!("> {}", app.ui.settings_state.input) }
+                if i == 4 {
+                    format!("> {}", "*".repeat(app.ui.settings_state.input.len()))
+                } else {
+                    format!("> {}", app.ui.settings_state.input)
+                }
             } else if app.ui.settings_state.selecting {
                 format!("{} (Selecting...)", opt)
             } else {
@@ -814,15 +1149,23 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         items.push(ListItem::new(text).style(style));
     }
 
-    f.render_widget(List::new(items).block(Block::default().title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center)).borders(Borders::ALL).border_style(Style::default().fg(Color::Cyan))), inner);
-    
+    f.render_widget(
+        List::new(items).block(
+            Block::default()
+                .title(Line::from(" [ Twigdrop Settings ] ").alignment(Alignment::Center))
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Cyan)),
+        ),
+        inner,
+    );
+
     if app.ui.settings_state.selecting {
         let menu_width = 40;
         let menu_height = app.ui.settings_state.choices.len().min(10) as u16 + 2;
-        
+
         let center_x = inner.x + (inner.width / 2);
         let center_y = inner.y + (inner.height / 2);
-        
+
         let menu_area = Rect::new(
             center_x.saturating_sub(menu_width / 2),
             center_y.saturating_sub(menu_height / 2),
@@ -830,16 +1173,24 @@ pub fn render_settings(f: &mut Frame, app: &App) {
             menu_height,
         );
         f.render_widget(Clear, menu_area);
-        
+
         let mut choice_items = vec![];
         for (i, choice) in app.ui.settings_state.choices.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
             if i == app.ui.settings_state.choice_idx {
-                style = style.bg(Color::Rgb(80, 80, 100)).fg(Color::White).add_modifier(Modifier::BOLD);
+                style = style
+                    .bg(Color::Rgb(80, 80, 100))
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD);
             }
             choice_items.push(ListItem::new(format!(" {} ", choice)).style(style));
         }
-        let list = List::new(choice_items).block(Block::default().borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow)).title(" Select Option "));
+        let list = List::new(choice_items).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow))
+                .title(" Select Option "),
+        );
         f.render_widget(list, menu_area);
     }
 
@@ -852,18 +1203,41 @@ pub fn render_settings(f: &mut Frame, app: &App) {
     };
 
     let help_area = Rect::new(inner.x, inner.y + inner.height - 2, inner.width, 1);
-    f.render_widget(Paragraph::new(footer_msg).alignment(Alignment::Center).style(Style::default().fg(Color::DarkGray)), help_area);
+    f.render_widget(
+        Paragraph::new(footer_msg)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::DarkGray)),
+        help_area,
+    );
 }
 
 pub fn render_search(f: &mut Frame, app: &App) {
-    let area = Layout::default().direction(Direction::Vertical).constraints([Constraint::Length(3), Constraint::Min(0)].as_ref()).split(f.area())[0];
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .split(f.area())[0];
     f.render_widget(Clear, area);
-    f.render_widget(Paragraph::new(format!("> {}", app.ui.search_query)).block(Block::default().title(" Search Branches ").borders(Borders::ALL).border_style(Style::default().fg(Color::Yellow))), area);
+    f.render_widget(
+        Paragraph::new(format!("> {}", app.ui.search_query)).block(
+            Block::default()
+                .title(" Search Branches ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow)),
+        ),
+        area,
+    );
 }
 
 pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &PreviewState) {
-    let border_color = if app.ui.active_panel == FilePanel::Preview { Color::Rgb(180, 190, 254) } else { Color::Rgb(74, 79, 106) };
-    let block = Block::default().title(format!(" Preview: {} (Tab: switch) ", state.file_path)).borders(Borders::ALL).border_style(Style::default().fg(border_color));
+    let border_color = if app.ui.active_panel == FilePanel::Preview {
+        Color::Rgb(180, 190, 254)
+    } else {
+        Color::Rgb(74, 79, 106)
+    };
+    let block = Block::default()
+        .title(format!(" Preview: {} (Tab: switch) ", state.file_path))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color));
 
     let mut final_lines = Vec::new();
     let visible_rows = area.height.saturating_sub(2) as usize;
@@ -873,21 +1247,47 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
 
     for i in start_idx..end_idx {
         let h_line = &state.highlighted_lines[i];
-        let mut spans = vec![Span::styled(format!("{:>3} ", i + 1), Style::default().fg(Color::DarkGray))];
-        spans.push(match state.line_diffs.get(&i) { Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(Color::Green)), Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Blue)), Some(GutterStatus::Deleted) => Span::styled("~ ", Style::default().fg(Color::Red)), None => Span::raw("  ") });
+        let mut spans = vec![Span::styled(
+            format!("{:>3} ", i + 1),
+            Style::default().fg(Color::DarkGray),
+        )];
+        spans.push(match state.line_diffs.get(&i) {
+            Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(Color::Green)),
+            Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Blue)),
+            Some(GutterStatus::Deleted) => Span::styled("~ ", Style::default().fg(Color::Red)),
+            None => Span::raw("  "),
+        });
 
-        let is_selected = if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) { let (s, e) = if start <= end { (start, end) } else { (end, start) }; i >= s && i <= e } else { false };
+        let is_selected =
+            if let (Some(start), Some(end)) = (state.selection_start, state.selection_end) {
+                let (s, e) = if start <= end {
+                    (start, end)
+                } else {
+                    (end, start)
+                };
+                i >= s && i <= e
+            } else {
+                false
+            };
         let is_cursor = i == state.cursor_y;
         let mut line_style = Style::default();
-        if is_cursor && app.ui.active_panel == FilePanel::Preview { line_style = line_style.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
-        else if is_cursor { line_style = line_style.bg(Color::Rgb(40, 40, 60)); }
-        else if is_selected { line_style = line_style.bg(Color::Rgb(30, 50, 80)); }
+        if is_cursor && app.ui.active_panel == FilePanel::Preview {
+            line_style = line_style.bg(Color::Rgb(255, 255, 0)).fg(Color::Black);
+        } else if is_cursor {
+            line_style = line_style.bg(Color::Rgb(40, 40, 60));
+        } else if is_selected {
+            line_style = line_style.bg(Color::Rgb(30, 50, 80));
+        }
 
         for span in &h_line.spans {
             let mut s = span.style;
-            if is_cursor && app.ui.active_panel == FilePanel::Preview { s = s.bg(Color::Rgb(255, 255, 0)).fg(Color::Black); }
-            else if is_cursor { s = s.bg(Color::Rgb(40, 40, 60)); }
-            else if is_selected { s = s.bg(Color::Rgb(30, 50, 80)); }
+            if is_cursor && app.ui.active_panel == FilePanel::Preview {
+                s = s.bg(Color::Rgb(255, 255, 0)).fg(Color::Black);
+            } else if is_cursor {
+                s = s.bg(Color::Rgb(40, 40, 60));
+            } else if is_selected {
+                s = s.bg(Color::Rgb(30, 50, 80));
+            }
             spans.push(Span::styled(span.content.clone(), s));
         }
         final_lines.push(Line::from(spans).style(line_style));
@@ -904,43 +1304,53 @@ pub fn render_interactive_rebase(f: &mut Frame, app: &mut App) {
         .title(" Interactive Rebase ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Rgb(203, 166, 247)));
-        
-    let items: Vec<ListItem> = app.ui.rebase_state.commits.iter().enumerate().map(|(i, commit)| {
-        let action_str = match commit.action {
-            RebaseAction::Pick => "pick  ",
-            RebaseAction::Reword => "reword",
-            RebaseAction::Drop => "drop  ",
-            RebaseAction::Squash => "squash",
-        };
-        
-        let action_color = match commit.action {
-            RebaseAction::Pick => Color::DarkGray,
-            RebaseAction::Reword => Color::Cyan,
-            RebaseAction::Drop => Color::Red,
-            RebaseAction::Squash => Color::Yellow,
-        };
 
-        let message = if let Some(new_msg) = &commit.new_message {
-            new_msg.clone()
-        } else {
-            commit.original_message.clone()
-        };
+    let items: Vec<ListItem> = app
+        .ui
+        .rebase_state
+        .commits
+        .iter()
+        .enumerate()
+        .map(|(i, commit)| {
+            let action_str = match commit.action {
+                RebaseAction::Pick => "pick  ",
+                RebaseAction::Reword => "reword",
+                RebaseAction::Drop => "drop  ",
+                RebaseAction::Squash => "squash",
+            };
 
-        let content = if app.ui.rebase_state.editing && app.ui.rebase_state.selected == i {
-            format!("{} {} {}", action_str, commit.hash, app.ui.rebase_state.input)
-        } else {
-            format!("{} {} {}", action_str, commit.hash, message)
-        };
+            let action_color = match commit.action {
+                RebaseAction::Pick => Color::DarkGray,
+                RebaseAction::Reword => Color::Cyan,
+                RebaseAction::Drop => Color::Red,
+                RebaseAction::Squash => Color::Yellow,
+            };
 
-        let mut style = Style::default();
-        if i == app.ui.rebase_state.selected {
-            style = style.bg(Color::Rgb(49, 50, 68)).fg(Color::White);
-        } else {
-            style = style.fg(action_color);
-        }
+            let message = if let Some(new_msg) = &commit.new_message {
+                new_msg.clone()
+            } else {
+                commit.original_message.clone()
+            };
 
-        ListItem::new(content).style(style)
-    }).collect();
+            let content = if app.ui.rebase_state.editing && app.ui.rebase_state.selected == i {
+                format!(
+                    "{} {} {}",
+                    action_str, commit.hash, app.ui.rebase_state.input
+                )
+            } else {
+                format!("{} {} {}", action_str, commit.hash, message)
+            };
+
+            let mut style = Style::default();
+            if i == app.ui.rebase_state.selected {
+                style = style.bg(Color::Rgb(49, 50, 68)).fg(Color::White);
+            } else {
+                style = style.fg(action_color);
+            }
+
+            ListItem::new(content).style(style)
+        })
+        .collect();
 
     let list = List::new(items)
         .block(block)
@@ -949,22 +1359,33 @@ pub fn render_interactive_rebase(f: &mut Frame, app: &mut App) {
     f.render_widget(list, area);
 }
 
-fn render_transparent_ascii(buf: &mut ratatui::buffer::Buffer, ascii: &str, area: Rect, color: Color) {
+fn render_transparent_ascii(
+    buf: &mut ratatui::buffer::Buffer,
+    ascii: &str,
+    area: Rect,
+    color: Color,
+) {
     let lines: Vec<&str> = ascii.trim_matches('\n').lines().collect();
-    if lines.is_empty() { return; }
-    
+    if lines.is_empty() {
+        return;
+    }
+
     let max_width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0) as u16;
     let height = lines.len() as u16;
-    
+
     let start_x = area.x + area.width.saturating_sub(max_width) / 2;
     let start_y = area.y + area.height.saturating_sub(height) / 2;
-    
+
     for (row_idx, line) in lines.iter().enumerate() {
         let y = start_y + row_idx as u16;
-        if y >= area.bottom() { break; }
-        
+        if y >= area.bottom() {
+            break;
+        }
+
         for (x, ch) in (start_x..).zip(line.chars()) {
-            if x >= area.right() { break; }
+            if x >= area.right() {
+                break;
+            }
             if ch != ' ' {
                 buf[(x, y)].set_char(ch).set_fg(color);
             }
@@ -975,7 +1396,7 @@ fn render_transparent_ascii(buf: &mut ratatui::buffer::Buffer, ascii: &str, area
 pub fn render_main_menu(f: &mut Frame, app: &App) {
     let area = f.area();
     let buf = f.buffer_mut();
-    
+
     let ascii_logo = r#"
  ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
  ╚══██╔══╝██║    ██║██║██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
@@ -1033,7 +1454,82 @@ pub fn render_main_menu(f: &mut Frame, app: &App) {
         } else {
             Color::Rgb(60, 60, 80)
         };
-        
+
         render_transparent_ascii(buf, opt, v_chunks[3 + i], color);
+    }
+}
+
+pub fn render_switcher(f: &mut Frame, app: &App) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(25),
+            Constraint::Percentage(50),
+            Constraint::Percentage(25),
+        ])
+        .split(f.area());
+
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(30),
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+        ])
+        .split(area[1])[1];
+
+    f.render_widget(Clear, inner);
+
+    let mut items = Vec::new();
+    for (i, mode) in app.ui.mode_history.iter().enumerate() {
+        let text = format_mode(mode);
+        let mut style = Style::default().fg(Color::Gray);
+
+        if i == app.ui.switcher_index {
+            style = style
+                .bg(Color::Rgb(45, 45, 65))
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD);
+        }
+        items.push(ListItem::new(text).style(style));
+    }
+
+    if items.is_empty() {
+        items.push(ListItem::new("  No history  ").style(Style::default().fg(Color::Gray)));
+    }
+
+    let list = List::new(items).block(
+        Block::default()
+            .title(ratatui::text::Line::from(" App Switcher ").alignment(Alignment::Center))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan)),
+    );
+
+    f.render_widget(list, inner);
+}
+
+pub fn format_mode(mode: &AppMode) -> String {
+    match mode {
+        AppMode::BranchesView => "Branches".to_string(),
+        AppMode::FilesView => "Files (Directories)".to_string(),
+        AppMode::Normal => "Main Views".to_string(),
+        AppMode::Help => "Help".to_string(),
+        AppMode::Manage => "Manage Branch".to_string(),
+        AppMode::Filter => "Filters".to_string(),
+        AppMode::StashDetail => "Stash Details".to_string(),
+        AppMode::Settings => "Settings".to_string(),
+        AppMode::Search => "Search".to_string(),
+        AppMode::Diff => "Diff".to_string(),
+        AppMode::CodePreview(state) => format!("Preview: {}", state.file_path),
+        AppMode::ConfirmDelete(_) => "Confirm Delete".to_string(),
+        AppMode::CreateBranch(_) => "Create Branch".to_string(),
+        AppMode::Commits => "Commits".to_string(),
+        AppMode::CommitAction(_) => "Commit Actions".to_string(),
+        AppMode::InteractiveRebase => "Interactive Rebase".to_string(),
+        AppMode::Shell(_) => "Shell".to_string(),
+        AppMode::QuickActions => "Quick Actions".to_string(),
+        AppMode::MainMenu => "Main Menu".to_string(),
+        AppMode::Message(_) => "Message".to_string(),
+        AppMode::Switcher => "App Switcher".to_string(),
     }
 }

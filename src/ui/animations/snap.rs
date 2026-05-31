@@ -1,6 +1,6 @@
-use std::time::{Duration, Instant};
-use ratatui::style::Color;
 use super::particles::ParticleSystem;
+use ratatui::style::Color;
+use std::time::{Duration, Instant};
 
 const FLASH_DURATION: Duration = Duration::from_millis(200);
 const SETTLE_DURATION: Duration = Duration::from_millis(500);
@@ -42,12 +42,15 @@ impl SnapAnimation {
             phase: SnapPhase::Flash,
             start_time: Instant::now(),
             captured: false,
-            rows: branch_names.into_iter().map(|name| SnapRow {
-                branch_name: name,
-                screen_y: None,
-                cells: Vec::new(),
-                progress: 0.0,
-            }).collect(),
+            rows: branch_names
+                .into_iter()
+                .map(|name| SnapRow {
+                    branch_name: name,
+                    screen_y: None,
+                    cells: Vec::new(),
+                    progress: 0.0,
+                })
+                .collect(),
             particles: ParticleSystem::new(),
         }
     }
@@ -67,23 +70,24 @@ impl SnapAnimation {
                     if row.progress < 1.0 {
                         row.progress += 0.05;
                         all_done = false;
-                        
+
                         // Dissolve more cells
                         let to_dissolve = (row.cells.len() as f32 * row.progress) as usize;
                         for i in 0..to_dissolve.min(row.cells.len()) {
                             if !row.cells[i].dissolved {
                                 row.cells[i].dissolved = true;
                                 if let Some(y) = row.screen_y
-                                    && fastrand::f32() < 0.4 {
-                                        self.particles.spawn(row.cells[i].x, y, row.cells[i].color);
+                                    && fastrand::f32() < 0.4
+                                {
+                                    self.particles.spawn(row.cells[i].x, y, row.cells[i].color);
                                 }
                             }
                         }
                     }
                 }
-                
+
                 self.particles.tick();
-                
+
                 if all_done && self.particles.particles.is_empty() {
                     self.phase = SnapPhase::Settle;
                     self.start_time = Instant::now();

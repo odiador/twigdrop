@@ -24,30 +24,42 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         let mut providers = std::collections::HashMap::new();
-        
-        providers.insert("ollama".to_string(), ProviderConfig {
-            model: "llama3".to_string(),
-            api_key: String::new(),
-            url: "http://localhost:11434".to_string(),
-        });
 
-        providers.insert("openai".to_string(), ProviderConfig {
-            model: "gpt-4o".to_string(),
-            api_key: String::new(),
-            url: "https://api.openai.com/v1".to_string(),
-        });
+        providers.insert(
+            "ollama".to_string(),
+            ProviderConfig {
+                model: "llama3".to_string(),
+                api_key: String::new(),
+                url: "http://localhost:11434".to_string(),
+            },
+        );
 
-        providers.insert("anthropic".to_string(), ProviderConfig {
-            model: "claude-3-5-sonnet-latest".to_string(),
-            api_key: String::new(),
-            url: "https://api.anthropic.com".to_string(),
-        });
+        providers.insert(
+            "openai".to_string(),
+            ProviderConfig {
+                model: "gpt-4o".to_string(),
+                api_key: String::new(),
+                url: "https://api.openai.com/v1".to_string(),
+            },
+        );
 
-        providers.insert("google".to_string(), ProviderConfig {
-            model: "gemini-1.5-pro".to_string(),
-            api_key: String::new(),
-            url: "https://generativelanguage.googleapis.com".to_string(),
-        });
+        providers.insert(
+            "anthropic".to_string(),
+            ProviderConfig {
+                model: "claude-3-5-sonnet-latest".to_string(),
+                api_key: String::new(),
+                url: "https://api.anthropic.com".to_string(),
+            },
+        );
+
+        providers.insert(
+            "google".to_string(),
+            ProviderConfig {
+                model: "gemini-1.5-pro".to_string(),
+                api_key: String::new(),
+                url: "https://generativelanguage.googleapis.com".to_string(),
+            },
+        );
 
         Self {
             ide_command: "code".to_string(),
@@ -63,16 +75,21 @@ impl Default for Config {
 
 impl Config {
     pub fn current_provider(&self) -> &ProviderConfig {
-        self.providers.get(&self.ai_provider).expect("Provider map must contain the current ai_provider")
+        self.providers
+            .get(&self.ai_provider)
+            .expect("Provider map must contain the current ai_provider")
     }
 
     pub fn current_provider_mut(&mut self) -> &mut ProviderConfig {
         if !self.providers.contains_key(&self.ai_provider) {
-            self.providers.insert(self.ai_provider.clone(), ProviderConfig {
-                model: String::new(),
-                api_key: String::new(),
-                url: String::new(),
-            });
+            self.providers.insert(
+                self.ai_provider.clone(),
+                ProviderConfig {
+                    model: String::new(),
+                    api_key: String::new(),
+                    url: String::new(),
+                },
+            );
         }
         self.providers.get_mut(&self.ai_provider).unwrap()
     }
@@ -107,24 +124,30 @@ pub fn deobfuscate(data: &str) -> String {
 pub const PROVIDER_ARCHETYPES: &[&str] = &["ollama", "openai", "anthropic", "google", "cohere"];
 
 pub const OPENAI_MODELS: &[&str] = &["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"];
-pub const ANTHROPIC_MODELS: &[&str] = &["claude-3-5-sonnet-latest", "claude-3-opus-latest", "claude-3-haiku-20240307"];
+pub const ANTHROPIC_MODELS: &[&str] = &[
+    "claude-3-5-sonnet-latest",
+    "claude-3-opus-latest",
+    "claude-3-haiku-20240307",
+];
 pub const GOOGLE_MODELS: &[&str] = &["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.0-pro"];
 
 pub async fn fetch_ollama_models(url: &str) -> Vec<String> {
     let client = reqwest::Client::new();
     let res = client.get(format!("{}/api/tags", url)).send().await;
-    
+
     match res {
         Ok(response) => {
             if let Ok(json) = response.json::<serde_json::Value>().await
-                && let Some(models) = json["models"].as_array() {
-                    return models.iter()
-                        .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
-                        .collect();
+                && let Some(models) = json["models"].as_array()
+            {
+                return models
+                    .iter()
+                    .filter_map(|m| m["name"].as_str().map(|s| s.to_string()))
+                    .collect();
             }
             Vec::new()
         }
-        Err(_) => Vec::new()
+        Err(_) => Vec::new(),
     }
 }
 

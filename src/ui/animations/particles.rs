@@ -47,10 +47,10 @@ impl Particle {
 
         self.x += self.vx;
         self.y += self.vy;
-        
+
         // Gravity
         self.vy += 0.02;
-        
+
         // Jitter
         self.vx += (fastrand::f32() - 0.5) * 0.1;
 

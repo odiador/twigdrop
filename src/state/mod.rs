@@ -1,6 +1,6 @@
 pub mod domain;
-pub mod ui;
 pub mod tasks;
+pub mod ui;
 
 pub use domain::RepositoryState;
-pub use ui::{UiState, AppMode, PrimaryMode, PreviewState};
+pub use ui::{AppMode, PreviewState, PrimaryMode, UiState};
