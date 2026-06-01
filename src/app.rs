@@ -41,10 +41,10 @@ impl App {
         conflict_trigger_tx: mpsc::Sender<(String, ConflictBlock)>,
     ) -> Self {
         let config = crate::utils::config::load_config();
-        let primary_mode = if config.last_primary_mode == 1 {
-            PrimaryMode::Files
-        } else {
-            PrimaryMode::Branches
+        let primary_mode = match config.last_primary_mode {
+            1 => PrimaryMode::Files,
+            2 => PrimaryMode::Commits,
+            _ => PrimaryMode::Branches,
         };
 
         let shared_primary_mode = Arc::new(std::sync::RwLock::new(primary_mode));
@@ -68,6 +68,8 @@ impl App {
 
         if app.ui.primary_mode == PrimaryMode::Files {
             app.load_file_tree(repo_path);
+        } else if app.ui.primary_mode == PrimaryMode::Commits {
+            app.repo.commit_tree = crate::git::commands::get_commit_tree(repo_path);
         }
 
         app.refresh_filtered_branches();
@@ -77,11 +79,13 @@ impl App {
     pub fn toggle_primary_mode(&mut self) {
         self.ui.primary_mode = match self.ui.primary_mode {
             PrimaryMode::Branches => PrimaryMode::Files,
-            PrimaryMode::Files => PrimaryMode::Branches,
+            PrimaryMode::Files => PrimaryMode::Commits,
+            PrimaryMode::Commits => PrimaryMode::Branches,
         };
         self.config.last_primary_mode = match self.ui.primary_mode {
             PrimaryMode::Branches => 0,
             PrimaryMode::Files => 1,
+            PrimaryMode::Commits => 2,
         };
 
         if let Ok(mut w) = self.shared_primary_mode.write() {
@@ -253,6 +257,11 @@ impl App {
                     self.ui.selected_file_idx += 1;
                 }
             }
+            PrimaryMode::Commits => {
+                if self.ui.selected_commit_idx < self.repo.commit_tree.len().saturating_sub(1) {
+                    self.ui.selected_commit_idx += 1;
+                }
+            }
         }
     }
 
@@ -266,6 +275,11 @@ impl App {
             PrimaryMode::Files => {
                 if self.ui.selected_file_idx > 0 {
                     self.ui.selected_file_idx -= 1;
+                }
+            }
+            PrimaryMode::Commits => {
+                if self.ui.selected_commit_idx > 0 {
+                    self.ui.selected_commit_idx -= 1;
                 }
             }
         }

@@ -66,6 +66,11 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             match app.ui.primary_mode {
                 PrimaryMode::Branches => handle_list_click(app, row),
                 PrimaryMode::Files => handle_directory_click(app, row, path, col),
+                PrimaryMode::Commits => {
+                    if row > 0 {
+                        app.ui.selected_commit_idx = row - 1;
+                    }
+                }
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {

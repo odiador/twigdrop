@@ -1,6 +1,6 @@
 use crate::git::files::{FileEntry, FileStatus};
 use crate::git::stash::StashEntry;
-use crate::models::{Branch, Commit};
+use crate::models::{Branch, CommitTreeItem};
 use crate::state::ui::PreviewState;
 use std::collections::HashMap;
 
@@ -15,7 +15,7 @@ pub struct RepositoryState {
     pub branch_info: String,
     pub diff_files: Vec<String>,
     pub diff_preview: Option<PreviewState>,
-    pub commits: Vec<Commit>,
+    pub commit_tree: Vec<CommitTreeItem>,
 }
 
 impl RepositoryState {
@@ -31,7 +31,7 @@ impl RepositoryState {
             branch_info: String::new(),
             diff_files: Vec::new(),
             diff_preview: None,
-            commits: Vec::new(),
+            commit_tree: Vec::new(),
         }
     }
 }

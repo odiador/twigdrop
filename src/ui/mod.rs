@@ -37,6 +37,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         PrimaryMode::Files => {
             screens::render_directory_searcher(f, chunks[0], app);
         }
+        PrimaryMode::Commits => {
+            screens::render_commits(f, chunks[0], app);
+        }
     }
 
     // 2. Capture and Animate
@@ -157,6 +160,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         PrimaryMode::Files => {
             format!(" 📂 Files │ {} │", app.repo.current_branch)
         }
+        PrimaryMode::Commits => {
+            format!(" 🌳 Commits │ {} │", app.repo.current_branch)
+        }
     };
 
     // 4. Footer shortcuts
@@ -164,7 +170,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar "
     } else if *app.ui.current_mode() == AppMode::Diff {
         " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
-    } else if *app.ui.current_mode() == AppMode::Commits {
+    } else if *app.ui.current_mode() == AppMode::CommitsView {
         " ↑/k, ↓/j: navigate │ Enter: select │ Esc: close "
     } else if *app.ui.current_mode() == AppMode::Switcher {
         " ↑/k, ↓/j: navigate │ Enter: confirm │ Esc/q: cancel "
@@ -174,6 +180,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
                 " S: Stash Mgr │ C: Unpushed Commits │ D: Delete ALL Selected │ h: Legend │ q: quit "
             }
             PrimaryMode::Files => " S: Stash Mgr │ C: Unpushed Commits │ h: Legend │ q: quit ",
+            PrimaryMode::Commits => " S: Stash Mgr │ h: Legend │ q: quit ",
         }
     } else if app.ui.alt_pressed {
         match app.ui.primary_mode {
@@ -183,6 +190,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
             PrimaryMode::Files => {
                 " ↑/↓: move │ d: switch mode │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+t: External TTY │ Alt+j: TTY "
             }
+            PrimaryMode::Commits => {
+                " ↑/↓: move │ d: switch mode │ Alt+t: External TTY │ Alt+j: TTY "
+            }
         }
     } else {
         match app.ui.primary_mode {
@@ -190,7 +200,10 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
                 " ↑/↓: move │ Shift+Tab: app switcher │ d: files │ f: filter │ /: search │ c: create │ p: prune │ :: actions │ !: shell │ Shift+D: bulk delete │ m: manage │ ?: help │ q: quit "
             }
             PrimaryMode::Files => {
-                " ↑/↓: move │ Shift+Tab: app switcher │ d: branches │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "
+                " ↑/↓: move │ Shift+Tab: app switcher │ d: commits │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "
+            }
+            PrimaryMode::Commits => {
+                " ↑/↓: move │ Shift+Tab: app switcher │ d: branches │ Enter: actions │ !: shell │ ?: help │ q: quit "
             }
         }
     };
@@ -214,7 +227,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     // Apply global darkening overlay for modals
     let is_modal = !matches!(
         app.ui.current_mode(),
-        AppMode::Normal | AppMode::CodePreview(_) | AppMode::Diff
+        AppMode::Normal | AppMode::CodePreview(_) | AppMode::Diff | AppMode::BranchesView | AppMode::FilesView | AppMode::CommitsView
     );
 
     if is_modal {
@@ -241,7 +254,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::Search => screens::render_search(f, app),
         AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
         AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
-        AppMode::Commits => screens::render_commits(f, app),
+        AppMode::DatePicker(state) => screens::render_date_picker(f, app, state),
         AppMode::CommitAction(hash) => screens::render_commit_action(f, app, hash),
         AppMode::InteractiveRebase => screens::render_interactive_rebase(f, app),
         AppMode::Shell(input) => screens::render_shell(f, input),

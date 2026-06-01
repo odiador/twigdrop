@@ -167,6 +167,7 @@ pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
         .unwrap_or_else(|e| format!("Error loading diff: {}", e))
 }
 
+#[allow(dead_code)]
 pub fn get_branch_commits(path: &str, branch: &str) -> Vec<crate::models::Commit> {
     let range = if branch == "*Local Changes*" || branch == "*Staged Changes*" {
         "HEAD"

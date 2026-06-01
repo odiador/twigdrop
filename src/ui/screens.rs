@@ -9,7 +9,7 @@ use ratatui::{
 use crate::app::App;
 use crate::git::files::FileStatus;
 use crate::models::{BranchStatus, GutterStatus};
-use crate::state::ui::{AppMode, FilePanel, PreviewState, PrimaryMode, RebaseAction};
+use crate::state::ui::{AppMode, DatePickerField, DatePickerState, FilePanel, PreviewState, PrimaryMode, RebaseAction};
 use crate::ui::components::get_status_icons;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
@@ -556,57 +556,56 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
     f.render_widget(p, inner);
 }
 
-pub fn render_commits(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
-    f.render_widget(Clear, inner);
-
+pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
     let mut items = vec![];
-    if app.repo.commits.is_empty() {
+    if app.repo.commit_tree.is_empty() {
         items.push(
-            ListItem::new("No unpushed commits found.").style(Style::default().fg(Color::Gray)),
+            ListItem::new(" No commits found in history. Ensure this is a git repository with commits. ")
+                .style(Style::default().fg(Color::Yellow)),
         );
     } else {
-        for (i, commit) in app.repo.commits.iter().enumerate() {
-            let mut style = Style::default().fg(Color::Gray);
-            if i == app.ui.selected_commit_idx {
-                style = style
-                    .bg(Color::Rgb(45, 45, 65))
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD);
+        for (i, commit) in app.repo.commit_tree.iter().enumerate() {
+            let is_selected = i == app.ui.selected_commit_idx;
+            let mut graph_spans = Vec::new();
+
+            for ch in commit.graph.chars() {
+                let color = match ch {
+                    '*' => Color::Magenta,
+                    '|' | '/' | '\\' | '_' => Color::Rgb(100, 100, 120), // Darker gray for lines
+                    _ => Color::Gray,
+                };
+                graph_spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
             }
-            let text = format!("{} | {} | {}", commit.hash, commit.date, commit.message);
-            items.push(ListItem::new(text).style(style));
+
+            let mut commit_spans = vec![
+                Span::styled(format!(" {} ", commit.hash), Style::default().fg(Color::Yellow)),
+                Span::styled(format!(" {} ", commit.date), Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!(" [{}] ", commit.author),
+                    Style::default().fg(Color::Rgb(180, 180, 200)),
+                ),
+                Span::styled(commit.message.clone(), Style::default().fg(Color::White)),
+            ];
+
+            let mut all_spans = graph_spans;
+            all_spans.append(&mut commit_spans);
+
+            let mut line_style = Style::default();
+            if is_selected {
+                line_style = line_style.bg(Color::Rgb(45, 45, 65));
+            }
+
+            items.push(ListItem::new(Line::from(all_spans)).style(line_style));
         }
     }
 
     let list = List::new(items).block(
         Block::default()
-            .title(" Unpushed Commits (Enter to Manage) ")
+            .title(" Git Commit Tree (All Branches) ")
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan)),
     );
-    f.render_widget(list, inner);
+    f.render_widget(list, area);
 }
 
 pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
@@ -1511,7 +1510,8 @@ pub fn render_switcher(f: &mut Frame, app: &App) {
 pub fn format_mode(mode: &AppMode) -> String {
     match mode {
         AppMode::BranchesView => "Branches".to_string(),
-        AppMode::FilesView => "Files (Directories)".to_string(),
+        AppMode::FilesView => "Files".to_string(),
+        AppMode::CommitsView => "Commit Tree".to_string(),
         AppMode::Normal => "Main Views".to_string(),
         AppMode::Help => "Help".to_string(),
         AppMode::Manage => "Manage Branch".to_string(),
@@ -1523,7 +1523,6 @@ pub fn format_mode(mode: &AppMode) -> String {
         AppMode::CodePreview(state) => format!("Preview: {}", state.file_path),
         AppMode::ConfirmDelete(_) => "Confirm Delete".to_string(),
         AppMode::CreateBranch(_) => "Create Branch".to_string(),
-        AppMode::Commits => "Commits".to_string(),
         AppMode::CommitAction(_) => "Commit Actions".to_string(),
         AppMode::InteractiveRebase => "Interactive Rebase".to_string(),
         AppMode::Shell(_) => "Shell".to_string(),
@@ -1531,5 +1530,137 @@ pub fn format_mode(mode: &AppMode) -> String {
         AppMode::MainMenu => "Main Menu".to_string(),
         AppMode::Message(_) => "Message".to_string(),
         AppMode::Switcher => "App Switcher".to_string(),
+        AppMode::DatePicker(_) => "Date Picker".to_string(),
+    }
+}
+
+pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(30),
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+        ])
+        .split(f.area())[1];
+
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(20),
+            Constraint::Percentage(60),
+            Constraint::Percentage(20),
+        ])
+        .split(area)[1];
+
+    f.render_widget(Clear, inner);
+
+    let block = Block::default()
+        .title(" Select Date & Time (Enter to Save) ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+    
+    f.render_widget(block, inner);
+
+    let picker_area = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+            Constraint::Percentage(20),
+        ])
+        .margin(1)
+        .split(inner);
+
+    let fields = [
+        ("Year", DatePickerField::Year),
+        ("Month", DatePickerField::Month),
+        ("Day", DatePickerField::Day),
+        ("Hour", DatePickerField::Hour),
+        ("Min", DatePickerField::Minute),
+    ];
+
+    for (i, (label, field)) in fields.iter().enumerate() {
+        let is_focused = state.active_field == *field;
+        let col_area = picker_area[i];
+
+        // Column Label
+        let label_area = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Min(0)])
+            .split(col_area);
+        
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                *label,
+                Style::default().fg(if is_focused { Color::Cyan } else { Color::DarkGray })
+                    .add_modifier(Modifier::BOLD)
+            )).alignment(Alignment::Center),
+            label_area[0]
+        );
+
+        // Wheel (Previous, Current, Next)
+        let wheel_items = match field {
+            DatePickerField::Year => vec![
+                (state.year - 1).to_string(),
+                state.year.to_string(),
+                (state.year + 1).to_string(),
+            ],
+            DatePickerField::Month => vec![
+                get_month_name(if state.month == 1 { 12 } else { state.month - 1 }).to_string(),
+                get_month_name(state.month).to_string(),
+                get_month_name(if state.month == 12 { 1 } else { state.month + 1 }).to_string(),
+            ],
+            DatePickerField::Day => {
+                let max_days = crate::utils::days_in_month(state.month, state.year);
+                vec![
+                    (if state.day == 1 { max_days } else { state.day - 1 }).to_string(),
+                    state.day.to_string(),
+                    (if state.day == max_days { 1 } else { state.day + 1 }).to_string(),
+                ]
+            }
+            DatePickerField::Hour => vec![
+                format!("{:02}", if state.hour == 0 { 23 } else { state.hour - 1 }),
+                format!("{:02}", state.hour),
+                format!("{:02}", (state.hour + 1) % 24),
+            ],
+            DatePickerField::Minute => vec![
+                format!("{:02}", if state.minute == 0 { 59 } else { state.minute - 1 }),
+                format!("{:02}", state.minute),
+                format!("{:02}", (state.minute + 1) % 60),
+            ],
+        };
+
+        let mut spans = vec![];
+        for (idx, val) in wheel_items.iter().enumerate() {
+            let mut style = Style::default().fg(Color::DarkGray);
+            let mut text = val.clone();
+            
+            if idx == 1 {
+                style = style.fg(Color::White).add_modifier(Modifier::BOLD);
+                if is_focused {
+                    style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::Cyan);
+                    text = format!(" {} ◄", text);
+                } else {
+                    text = format!(" {}  ", text);
+                }
+            } else {
+                text = format!(" {}  ", text);
+            }
+            spans.push(ListItem::new(Line::from(Span::styled(text, style)).alignment(Alignment::Center)));
+        }
+
+        let list = List::new(spans);
+        f.render_widget(list, label_area[1]);
+    }
+}
+
+fn get_month_name(m: u32) -> &'static str {
+    match m {
+        1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr", 5 => "May", 6 => "Jun",
+        7 => "Jul", 8 => "Aug", 9 => "Sep", 10 => "Oct", 11 => "Nov", 12 => "Dec",
+        _ => "???"
     }
 }
