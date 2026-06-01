@@ -1,5 +1,4 @@
 pub mod domain;
-pub mod tasks;
 pub mod ui;
 
 pub use domain::RepositoryState;

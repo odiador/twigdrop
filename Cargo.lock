@@ -8558,6 +8558,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "async-trait",
+ "chrono",
  "crossterm",
  "directories",
  "dotenv",

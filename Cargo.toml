@@ -23,3 +23,4 @@ rig = "0.37.0"
 fastrand = "2.4.1"
 syntect = "5.3.0"
 arboard = "3.6.1"
+chrono = { version = "0.4.44", features = ["clock"] }

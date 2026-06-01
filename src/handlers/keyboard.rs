@@ -1,8 +1,117 @@
 use crate::actions::{apply_stash, prune_branches};
 use crate::app::App;
 use crate::git;
-use crate::state::ui::{AppMode, FilePanel, PreviewState, PrimaryMode, RebaseAction};
+use crate::state::ui::{AppMode, DatePickerField, DatePickerState, FilePanel, PreviewState, PrimaryMode, RebaseAction};
+
+fn handle_date_picker_keyboard(
+    app: &mut App,
+    key: KeyEvent,
+    state: &mut DatePickerState,
+    path: &str,
+) -> bool {
+    match key.code {
+        KeyCode::Left | KeyCode::BackTab => {
+            state.active_field = match state.active_field {
+                DatePickerField::Year => DatePickerField::Minute,
+                DatePickerField::Month => DatePickerField::Year,
+                DatePickerField::Day => DatePickerField::Month,
+                DatePickerField::Hour => DatePickerField::Day,
+                DatePickerField::Minute => DatePickerField::Hour,
+            };
+        }
+        KeyCode::Right | KeyCode::Tab => {
+            state.active_field = match state.active_field {
+                DatePickerField::Year => DatePickerField::Month,
+                DatePickerField::Month => DatePickerField::Day,
+                DatePickerField::Day => DatePickerField::Hour,
+                DatePickerField::Hour => DatePickerField::Minute,
+                DatePickerField::Minute => DatePickerField::Year,
+            };
+        }
+        KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('k') => match state.active_field {
+            DatePickerField::Year => state.year += 1,
+            DatePickerField::Month => {
+                state.month = (state.month % 12) + 1;
+                let max_days = crate::utils::days_in_month(state.month, state.year);
+                if state.day > max_days {
+                    state.day = max_days;
+                }
+            }
+            DatePickerField::Day => {
+                let max_days = crate::utils::days_in_month(state.month, state.year);
+                state.day = (state.day % max_days) + 1;
+            }
+            DatePickerField::Hour => state.hour = (state.hour + 1) % 24,
+            DatePickerField::Minute => state.minute = (state.minute + 1) % 60,
+        },
+        KeyCode::Down | KeyCode::Char('-') | KeyCode::Char('j') => match state.active_field {
+            DatePickerField::Year => state.year -= 1,
+            DatePickerField::Month => {
+                state.month = if state.month == 1 { 12 } else { state.month - 1 };
+                let max_days = crate::utils::days_in_month(state.month, state.year);
+                if state.day > max_days {
+                    state.day = max_days;
+                }
+            }
+            DatePickerField::Day => {
+                let max_days = crate::utils::days_in_month(state.month, state.year);
+                state.day = if state.day == 1 { max_days } else { state.day - 1 };
+            }
+            DatePickerField::Hour => state.hour = if state.hour == 0 { 23 } else { state.hour - 1 },
+            DatePickerField::Minute => {
+                state.minute = if state.minute == 0 { 59 } else { state.minute - 1 }
+            }
+        },
+        KeyCode::Enter => {
+            let new_date = format!(
+                "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+                state.year, state.month, state.day, state.hour, state.minute, state.second
+            );
+
+            // Assume we are editing a commit date
+            if let Some(AppMode::CommitAction(hash)) =
+                app.ui.modal_stack.iter().rev().nth(1).map(|m| &m.mode)
+            {
+                let short_hash = hash.clone();
+                // Resolve short hash to full hash for accurate comparison during rebase
+                let full_hash = crate::git::commands::run_git(path, &["rev-parse", &short_hash])
+                    .unwrap_or(short_hash.clone());
+
+                let exec_cmd = format!(
+                    "if [ \"$(git rev-parse HEAD)\" = \"{}\" ]; then GIT_COMMITTER_DATE=\"{}\" git commit --amend --no-edit --date=\"{}\"; fi",
+                    full_hash, new_date, new_date
+                );
+
+                let msg = match crate::git::commands::run_git(
+                    path,
+                    &["rebase", &format!("{}^", short_hash), "--exec", &exec_cmd],
+                ) {
+                    Ok(m) => {
+                        // Refresh the tree to show the new date and updated hashes
+                        app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
+                        format!("Date updated to {}.\n{}", new_date, m)
+                    }
+                    Err(e) => format!("Failed to update date: {}", e),
+                };
+                app.ui.pop_modal(); // pop picker
+                app.ui.pop_modal(); // pop commit action
+                app.ui.push_modal(AppMode::Message(msg));
+            } else {
+                app.ui.pop_modal();
+            }
+            return false;
+        }
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.ui.pop_modal();
+            return false;
+        }
+        _ => {}
+    }
+    false
+}
 use crate::ui::animations::SnapAnimation;
+use chrono::Datelike;
+use chrono::Timelike;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
@@ -13,13 +122,13 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     if key.code == KeyCode::Char('q') && key.kind == KeyEventKind::Press {
         let is_editing = match app.ui.current_mode() {
             AppMode::Settings => app.ui.settings_state.editing || app.ui.settings_state.selecting,
-            AppMode::Search | AppMode::CreateBranch(_) | AppMode::Shell(_) => true,
+            AppMode::Search | AppMode::CreateBranch(_) | AppMode::Shell(_) | AppMode::DatePicker(_) => true,
             AppMode::InteractiveRebase => app.ui.rebase_state.editing,
             AppMode::CommitAction(_) => app.ui.settings_state.editing,
             _ => false,
         };
         if !is_editing && app.ui.modal_stack.is_empty() {
-            std::process::exit(0);
+            return true;
         }
     }
 
@@ -61,6 +170,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         AppMode::FilesView => {
                             app.ui.primary_mode = PrimaryMode::Files;
                             app.ui.track_history(AppMode::FilesView);
+                        }
+                        AppMode::CommitsView => {
+                            app.ui.primary_mode = PrimaryMode::Commits;
+                            app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
+                            app.ui.selected_commit_idx = 0;
+                            app.ui.track_history(AppMode::CommitsView);
                         }
                         AppMode::Normal => {}
                         _ => {
@@ -105,62 +220,40 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             return false;
         }
-        AppMode::Commits => {
+        AppMode::CommitsView => {
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') if app.ui.selected_commit_idx > 0 => {
                     app.ui.selected_commit_idx -= 1;
                 }
                 KeyCode::Down | KeyCode::Char('j')
-                    if app.ui.selected_commit_idx < app.repo.commits.len().saturating_sub(1) =>
+                    if app.ui.selected_commit_idx < app.repo.commit_tree.len().saturating_sub(1) =>
                 {
                     app.ui.selected_commit_idx += 1;
                 }
                 KeyCode::Enter => {
-                    if let Some(commit) = app.repo.commits.get(app.ui.selected_commit_idx) {
+                    if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx)
+                        && !commit.hash.is_empty()
+                    {
                         app.ui
                             .push_modal(AppMode::CommitAction(commit.hash.clone()));
                         app.ui.settings_state.selected = 0;
                     }
                 }
                 KeyCode::Esc | KeyCode::Char('q') => {
-                    app.ui.pop_modal();
+                    app.ui.primary_mode = PrimaryMode::Branches; // Return to branches when escaping full view if needed
                 }
                 _ => {}
             }
             return false;
         }
-        AppMode::CommitAction(hash) => {
-            if app.ui.settings_state.editing {
-                match key.code {
-                    KeyCode::Enter => {
-                        let new_date = app.ui.settings_state.input.clone();
-                        app.ui.settings_state.editing = false;
-                        let exec_cmd =
-                            format!("git commit --amend --no-edit --date=\"{}\"", new_date);
-                        let msg = match crate::git::commands::run_git(
-                            path,
-                            &["rebase", &format!("{}^", hash), "--exec", &exec_cmd],
-                        ) {
-                            Ok(m) => format!("Date updated to {}.\n{}", new_date, m),
-                            Err(e) => format!("Failed to update date: {}", e),
-                        };
-                        app.ui.pop_modal();
-                        app.ui.push_modal(AppMode::Message(msg));
-                    }
-                    KeyCode::Esc => {
-                        app.ui.settings_state.editing = false;
-                    }
-                    KeyCode::Char(c) => {
-                        app.ui.settings_state.input.push(c);
-                    }
-                    KeyCode::Backspace => {
-                        app.ui.settings_state.input.pop();
-                    }
-                    _ => {}
-                }
-                return false;
+        AppMode::DatePicker(mut state) => {
+            let res = handle_date_picker_keyboard(app, key, &mut state, path);
+            if let AppMode::DatePicker(current_state) = app.ui.current_mode_mut() {
+                *current_state = state;
             }
-
+            return res;
+        }
+        AppMode::CommitAction(hash) => {
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') if app.ui.settings_state.selected > 0 => {
                     app.ui.settings_state.selected -= 1;
@@ -170,8 +263,23 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 }
                 KeyCode::Enter => {
                     if app.ui.settings_state.selected == 0 {
-                        app.ui.settings_state.editing = true;
-                        app.ui.settings_state.input = "now".to_string();
+                        // Fetch the original commit date
+                        let date_str = crate::git::commands::run_git(path, &["log", "-1", "--format=%cI", &hash])
+                            .unwrap_or_else(|_| "".to_string());
+                        
+                        let datetime = chrono::DateTime::parse_from_rfc3339(date_str.trim())
+                            .map(|dt| dt.with_timezone(&chrono::Local))
+                            .unwrap_or_else(|_| chrono::Local::now());
+
+                        app.ui.push_modal(AppMode::DatePicker(DatePickerState {
+                            year: datetime.year(),
+                            month: datetime.month(),
+                            day: datetime.day(),
+                            hour: datetime.hour(),
+                            minute: datetime.minute(),
+                            second: datetime.second(),
+                            active_field: DatePickerField::Day,
+                        }));
                     } else if app.ui.settings_state.selected == 1 {
                         let _ = crate::git::commands::run_git(path, &["commit", "--fixup", &hash]);
                         let _ = crate::git::commands::run_git(
@@ -182,6 +290,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                                 "rebase",
                                 "-i",
                                 "--autosquash",
+                                "--autostash",
                                 &format!("{}^", hash),
                             ],
                         );
@@ -244,7 +353,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         app.ui.settings_state.editing = false;
                     }
                     1 => app.ui.push_modal(AppMode::Help),
-                    2 => std::process::exit(0),
+                    2 => return true,
                     _ => {}
                 },
                 KeyCode::Esc | KeyCode::Char('q') => {
@@ -439,7 +548,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.refresh_filtered_branches();
                 app.ui.selected_branch_idx = 0;
             } else {
-                std::process::exit(0);
+                return true;
             }
             false
         }
@@ -725,9 +834,10 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('C') if app.ui.shift_pressed => {
-            app.repo.commits = crate::git::get_unpushed_commits(path);
+            app.ui.primary_mode = PrimaryMode::Commits;
+            app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
             app.ui.selected_commit_idx = 0;
-            app.ui.push_modal(AppMode::Commits);
+            app.ui.track_history(AppMode::CommitsView);
             false
         }
         KeyCode::Char('R') if app.ui.shift_pressed => {
@@ -1132,10 +1242,11 @@ fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     5 => {
-                        app.repo.commits = crate::git::get_branch_commits(path, &b.name);
+                        app.ui.primary_mode = PrimaryMode::Commits;
+                        app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
                         app.ui.selected_commit_idx = 0;
                         app.ui.pop_modal();
-                        app.ui.push_modal(AppMode::Commits);
+                        app.ui.track_history(AppMode::CommitsView);
                     }
                     6 => {
                         app.ui.pop_modal();
@@ -1156,44 +1267,59 @@ fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 }
 
 fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
-    if *app.ui.current_mode() == AppMode::Normal && app.ui.primary_mode == PrimaryMode::Branches {
-        if let Some(branch) = app
-            .get_filtered_branches()
-            .get(app.ui.selected_branch_idx)
-            .cloned()
-            && branch.name.starts_with('*')
-        {
-            let branch_name = branch.name.clone();
-            app.repo.branch_info = git::get_branch_info(path, &branch_name);
-            app.ui.info_scroll = 0;
+    if *app.ui.current_mode() == AppMode::Normal {
+        match app.ui.primary_mode {
+            PrimaryMode::Branches => {
+                if let Some(branch) = app
+                    .get_filtered_branches()
+                    .get(app.ui.selected_branch_idx)
+                    .cloned()
+                    && branch.name.starts_with('*')
+                {
+                    let branch_name = branch.name.clone();
+                    app.repo.branch_info = git::get_branch_info(path, &branch_name);
+                    app.ui.info_scroll = 0;
 
-            app.repo.diff_files = git::get_branch_diff_files(path, &branch_name);
-            app.ui.diff_file_selected = 0;
-            app.repo.diff_preview = None;
-            if !app.repo.diff_files.is_empty() {
-                let first_file = app.repo.diff_files[0].clone();
-                let diff_content = git::get_branch_file_diff(path, &branch_name, &first_file);
-                let mut preview = PreviewState {
-                    file_path: first_file,
-                    lines: diff_content.lines().map(|s| s.to_string()).collect(),
-                    highlighted_lines: vec![],
-                    cursor_y: 0,
-                    scroll_y: 0,
-                    selection_start: None,
-                    selection_end: None,
-                    line_diffs: std::collections::HashMap::new(),
-                };
-                app.update_diff_highlighting(&mut preview);
-                app.repo.diff_preview = Some(preview);
+                    app.repo.diff_files = git::get_branch_diff_files(path, &branch_name);
+                    app.ui.diff_file_selected = 0;
+                    app.repo.diff_preview = None;
+                    if !app.repo.diff_files.is_empty() {
+                        let first_file = app.repo.diff_files[0].clone();
+                        let diff_content = git::get_branch_file_diff(path, &branch_name, &first_file);
+                        let mut preview = PreviewState {
+                            file_path: first_file,
+                            lines: diff_content.lines().map(|s| s.to_string()).collect(),
+                            highlighted_lines: vec![],
+                            cursor_y: 0,
+                            scroll_y: 0,
+                            selection_start: None,
+                            selection_end: None,
+                            line_diffs: std::collections::HashMap::new(),
+                        };
+                        app.update_diff_highlighting(&mut preview);
+                        app.repo.diff_preview = Some(preview);
+                    }
+
+                    app.ui.push_modal(AppMode::Diff);
+                    return false;
+                }
+
+                app.ui.push_modal(AppMode::Manage);
+                app.ui.manage_selected = 0;
+                return false;
             }
-
-            app.ui.push_modal(AppMode::Diff);
-            return false;
+            PrimaryMode::Files => return false, // Handled in the caller
+            PrimaryMode::Commits => {
+                if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx)
+                    && !commit.hash.is_empty()
+                {
+                    app.ui
+                        .push_modal(AppMode::CommitAction(commit.hash.clone()));
+                    app.ui.settings_state.selected = 0;
+                }
+                return false;
+            }
         }
-
-        app.ui.push_modal(AppMode::Manage);
-        app.ui.manage_selected = 0;
-        return false;
     }
     false
 }
@@ -1229,4 +1355,3 @@ fn handle_filter_keyboard(app: &mut App, _key: KeyEvent) -> bool {
     }
     false
 }
-

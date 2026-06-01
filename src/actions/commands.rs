@@ -167,6 +167,7 @@ pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
                 &format!("sequence.editor={}", editor_script_path.display()),
                 "rebase",
                 "-i",
+                "--autostash",
                 &format!("{}^", first_commit.hash),
             ],
         );

@@ -23,6 +23,26 @@ pub enum FilePanel {
 }
 
 #[derive(PartialEq, Debug, Clone)]
+pub enum DatePickerField {
+    Year,
+    Month,
+    Day,
+    Hour,
+    Minute,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub struct DatePickerState {
+    pub year: i32,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
+    pub active_field: DatePickerField,
+}
+
+#[derive(PartialEq, Debug, Clone)]
 pub enum AppMode {
     Normal,
     Help,
@@ -35,7 +55,6 @@ pub enum AppMode {
     CodePreview(PreviewState),
     ConfirmDelete(Vec<String>),
     CreateBranch(String),
-    Commits,
     CommitAction(String),
     InteractiveRebase,
     Shell(String),
@@ -45,12 +64,15 @@ pub enum AppMode {
     Switcher,
     BranchesView,
     FilesView,
+    CommitsView,
+    DatePicker(DatePickerState),
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
     Branches,
     Files,
+    Commits,
 }
 
 #[derive(Default, Clone)]
@@ -207,7 +229,7 @@ impl UiState {
             mode_history: vec![
                 AppMode::BranchesView,
                 AppMode::FilesView,
-                AppMode::Commits,
+                AppMode::CommitsView,
                 AppMode::Diff,
                 AppMode::StashDetail,
                 AppMode::Search,
@@ -226,7 +248,7 @@ impl UiState {
             mode,
             AppMode::BranchesView
                 | AppMode::FilesView
-                | AppMode::Commits
+                | AppMode::CommitsView
                 | AppMode::Diff
                 | AppMode::StashDetail
                 | AppMode::Search
@@ -249,10 +271,10 @@ impl UiState {
 
         let new_current = self.current_mode().clone();
         if new_current == AppMode::Normal {
-            let view = if self.primary_mode == PrimaryMode::Branches {
-                AppMode::BranchesView
-            } else {
-                AppMode::FilesView
+            let view = match self.primary_mode {
+                PrimaryMode::Branches => AppMode::BranchesView,
+                PrimaryMode::Files => AppMode::FilesView,
+                PrimaryMode::Commits => AppMode::CommitsView,
             };
             self.track_history(view);
         } else {

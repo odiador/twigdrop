@@ -54,3 +54,12 @@ pub struct Commit {
     pub date: String,
     pub author: String,
 }
+
+#[derive(Debug, Clone)]
+pub struct CommitTreeItem {
+    pub graph: String,
+    pub hash: String,
+    pub date: String,
+    pub author: String,
+    pub message: String,
+}
