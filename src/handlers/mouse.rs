@@ -71,6 +71,12 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                         app.ui.selected_commit_idx = row - 1;
                     }
                 }
+                PrimaryMode::Stashes => {
+                    if row > 0 {
+                        app.ui.selected_stash_idx = row - 1;
+                        app.load_stash_detail(path);
+                    }
+                }
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {

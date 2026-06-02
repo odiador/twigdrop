@@ -66,6 +66,7 @@ pub enum AppMode {
     FilesView,
     CommitsView,
     DatePicker(DatePickerState),
+    CommitFiles(String, Vec<crate::git::files::FileEntry>),
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -73,6 +74,7 @@ pub enum PrimaryMode {
     Branches,
     Files,
     Commits,
+    Stashes,
 }
 
 #[derive(Default, Clone)]
@@ -139,6 +141,7 @@ pub struct UiState {
     pub filter_selected: usize,
     pub diff_file_selected: usize,
     pub selected_commit_idx: usize,
+    pub selected_commit_file_idx: usize,
 
     // Scrolling
     pub info_scroll: u16,
@@ -194,6 +197,7 @@ impl UiState {
             filter_selected: 0,
             diff_file_selected: 0,
             selected_commit_idx: 0,
+            selected_commit_file_idx: 0,
             info_scroll: 0,
             list_start_index: 0,
             current_filter: None,
@@ -230,8 +234,8 @@ impl UiState {
                 AppMode::BranchesView,
                 AppMode::FilesView,
                 AppMode::CommitsView,
+                AppMode::StashDetail, // We use StashDetail as the view for Stashes mode
                 AppMode::Diff,
-                AppMode::StashDetail,
                 AppMode::Search,
                 AppMode::Filter,
                 AppMode::Settings,
@@ -249,8 +253,8 @@ impl UiState {
             AppMode::BranchesView
                 | AppMode::FilesView
                 | AppMode::CommitsView
-                | AppMode::Diff
                 | AppMode::StashDetail
+                | AppMode::Diff
                 | AppMode::Search
                 | AppMode::Filter
                 | AppMode::Settings
@@ -275,6 +279,7 @@ impl UiState {
                 PrimaryMode::Branches => AppMode::BranchesView,
                 PrimaryMode::Files => AppMode::FilesView,
                 PrimaryMode::Commits => AppMode::CommitsView,
+                PrimaryMode::Stashes => AppMode::StashDetail,
             };
             self.track_history(view);
         } else {
