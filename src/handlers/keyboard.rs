@@ -29,22 +29,6 @@ fn handle_date_picker_keyboard(
             };
         }
         KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('k') => match state.active_field {
-            DatePickerField::Year => state.year += 1,
-            DatePickerField::Month => {
-                state.month = (state.month % 12) + 1;
-                let max_days = crate::utils::days_in_month(state.month, state.year);
-                if state.day > max_days {
-                    state.day = max_days;
-                }
-            }
-            DatePickerField::Day => {
-                let max_days = crate::utils::days_in_month(state.month, state.year);
-                state.day = (state.day % max_days) + 1;
-            }
-            DatePickerField::Hour => state.hour = (state.hour + 1) % 24,
-            DatePickerField::Minute => state.minute = (state.minute + 1) % 60,
-        },
-        KeyCode::Down | KeyCode::Char('-') | KeyCode::Char('j') => match state.active_field {
             DatePickerField::Year => state.year -= 1,
             DatePickerField::Month => {
                 state.month = if state.month == 1 { 12 } else { state.month - 1 };
@@ -61,6 +45,22 @@ fn handle_date_picker_keyboard(
             DatePickerField::Minute => {
                 state.minute = if state.minute == 0 { 59 } else { state.minute - 1 }
             }
+        },
+        KeyCode::Down | KeyCode::Char('-') | KeyCode::Char('j') => match state.active_field {
+            DatePickerField::Year => state.year += 1,
+            DatePickerField::Month => {
+                state.month = (state.month % 12) + 1;
+                let max_days = crate::utils::days_in_month(state.month, state.year);
+                if state.day > max_days {
+                    state.day = max_days;
+                }
+            }
+            DatePickerField::Day => {
+                let max_days = crate::utils::days_in_month(state.month, state.year);
+                state.day = (state.day % max_days) + 1;
+            }
+            DatePickerField::Hour => state.hour = (state.hour + 1) % 24,
+            DatePickerField::Minute => state.minute = (state.minute + 1) % 60,
         },
         KeyCode::Enter => {
             let new_date = format!(
@@ -84,7 +84,7 @@ fn handle_date_picker_keyboard(
 
                 let msg = match crate::git::commands::run_git(
                     path,
-                    &["rebase", &format!("{}^", short_hash), "--exec", &exec_cmd],
+                    &["rebase", "--autostash", &format!("{}^", short_hash), "--exec", &exec_cmd],
                 ) {
                     Ok(m) => {
                         // Refresh the tree to show the new date and updated hashes
@@ -164,15 +164,15 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     app.ui.modal_stack.clear(); // Clear other modals to return to normal base
                     match selected_mode {
                         AppMode::BranchesView => {
-                            app.ui.primary_mode = PrimaryMode::Branches;
+                            app.set_primary_mode(PrimaryMode::Branches);
                             app.ui.track_history(AppMode::BranchesView);
                         }
                         AppMode::FilesView => {
-                            app.ui.primary_mode = PrimaryMode::Files;
+                            app.set_primary_mode(PrimaryMode::Files);
                             app.ui.track_history(AppMode::FilesView);
                         }
                         AppMode::CommitsView => {
-                            app.ui.primary_mode = PrimaryMode::Commits;
+                            app.set_primary_mode(PrimaryMode::Commits);
                             app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
                             app.ui.selected_commit_idx = 0;
                             app.ui.track_history(AppMode::CommitsView);
@@ -253,12 +253,17 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             return res;
         }
+        AppMode::CommitFiles(hash, files) => {
+            let hash = hash.clone();
+            let files = files.clone();
+            return handle_commit_files_keyboard(app, key, &hash, &files, path);
+        }
         AppMode::CommitAction(hash) => {
             match key.code {
                 KeyCode::Up | KeyCode::Char('k') if app.ui.settings_state.selected > 0 => {
                     app.ui.settings_state.selected -= 1;
                 }
-                KeyCode::Down | KeyCode::Char('j') if app.ui.settings_state.selected < 1 => {
+                KeyCode::Down | KeyCode::Char('j') if app.ui.settings_state.selected < 2 => {
                     app.ui.settings_state.selected += 1;
                 }
                 KeyCode::Enter => {
@@ -293,10 +298,14 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                                 "--autostash",
                                 &format!("{}^", hash),
                             ],
-                        );
+                                );
                         app.ui.pop_modal();
                         app.ui
                             .push_modal(AppMode::Message(format!("Amended to {}", hash)));
+                    } else if app.ui.settings_state.selected == 2 {
+                        let files = crate::git::files::get_commit_files(path, &hash);
+                        app.ui.selected_commit_file_idx = 0;
+                        app.ui.push_modal(AppMode::CommitFiles(hash.clone(), files));
                     }
                 }
                 KeyCode::Esc | KeyCode::Char('q') => {
@@ -834,7 +843,7 @@ fn handle_generic_actions(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('C') if app.ui.shift_pressed => {
-            app.ui.primary_mode = PrimaryMode::Commits;
+            app.set_primary_mode(PrimaryMode::Commits);
             app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
             app.ui.selected_commit_idx = 0;
             app.ui.track_history(AppMode::CommitsView);
@@ -1242,7 +1251,7 @@ fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     5 => {
-                        app.ui.primary_mode = PrimaryMode::Commits;
+                        app.set_primary_mode(PrimaryMode::Commits);
                         app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
                         app.ui.selected_commit_idx = 0;
                         app.ui.pop_modal();
@@ -1319,6 +1328,14 @@ fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                 }
                 return false;
             }
+            PrimaryMode::Stashes => {
+                if let Some(stash) = app.repo.stashes.get(app.ui.selected_stash_idx) {
+                    let msg = apply_stash(path, &stash.id);
+                    app.refresh_branches(path);
+                    app.ui.push_modal(AppMode::Message(msg));
+                }
+                return false;
+            }
         }
     }
     false
@@ -1347,6 +1364,35 @@ fn handle_filter_keyboard(app: &mut App, _key: KeyEvent) -> bool {
             };
             app.refresh_filtered_branches();
             app.ui.pop_modal();
+        }
+        KeyCode::Esc | KeyCode::Char('q') => {
+            app.ui.pop_modal();
+        }
+        _ => {}
+    }
+    false
+}
+
+fn handle_commit_files_keyboard(app: &mut App, key: KeyEvent, hash: &str, files: &[crate::git::files::FileEntry], path: &str) -> bool {
+    match key.code {
+        KeyCode::Up | KeyCode::Char('k') if app.ui.selected_commit_file_idx > 0 => {
+            app.ui.selected_commit_file_idx -= 1;
+        }
+        KeyCode::Down | KeyCode::Char('j') if app.ui.selected_commit_file_idx < files.len().saturating_sub(1) => {
+            app.ui.selected_commit_file_idx += 1;
+        }
+        KeyCode::Char('u') => {
+            if let Some(entry) = files.get(app.ui.selected_commit_file_idx) {
+                let file_path = entry.path.to_string_lossy().to_string();
+                let msg = match crate::actions::commands::move_file_changes_forward(path, hash, &file_path) {
+                    Ok(m) => m,
+                    Err(e) => format!("Error: {}", e),
+                };
+                app.ui.pop_modal(); // pop CommitFiles
+                app.ui.pop_modal(); // pop CommitAction
+                app.ui.push_modal(AppMode::Message(msg));
+                app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
+            }
         }
         KeyCode::Esc | KeyCode::Char('q') => {
             app.ui.pop_modal();

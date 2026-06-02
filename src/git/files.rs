@@ -14,7 +14,7 @@ pub enum FileStatus {
     Normal,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FileEntry {
     pub path: PathBuf,
     pub is_dir: bool,
@@ -245,6 +245,45 @@ pub fn build_file_tree(
             status,
             is_open: false,
             depth,
+        });
+    }
+
+    entries
+}
+
+pub fn get_commit_files(path: &str, hash: &str) -> Vec<FileEntry> {
+    let mut entries = vec![];
+    let stdout = match run_git(path, &["show", "--name-status", "--format=", hash]) {
+        Ok(out) => out,
+        Err(_) => return entries,
+    };
+
+    for line in stdout.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 2 {
+            continue;
+        }
+
+        let status_code = parts[0];
+        let file_path = parts[1];
+
+        let status = match status_code {
+            "A" => FileStatus::Added,
+            "M" => FileStatus::Modified,
+            "D" => FileStatus::Deleted,
+            "R" => FileStatus::Staged, // Renamed (approximate status)
+            _ => FileStatus::Normal,
+        };
+
+        entries.push(FileEntry {
+            path: PathBuf::from(file_path),
+            is_dir: false,
+            status,
+            is_open: false,
+            depth: 0,
         });
     }
 

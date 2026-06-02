@@ -59,6 +59,7 @@ pub struct Commit {
 pub struct CommitTreeItem {
     pub graph: String,
     pub hash: String,
+    pub branch_info: String,
     pub date: String,
     pub author: String,
     pub message: String,

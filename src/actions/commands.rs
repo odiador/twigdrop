@@ -102,6 +102,70 @@ pub fn apply_resolution_to_file(
     }
 }
 
+pub fn move_file_changes_forward(
+    path: &str,
+    hash: &str,
+    file_rel_path: &str,
+) -> Result<String, String> {
+    // 1. Find the next commit that touches this file
+    let next_commit_hash = match run_git(
+        path,
+        &[
+            "log",
+            "--format=%H",
+            "--reverse",
+            &format!("{}..HEAD", hash),
+            "--",
+            file_rel_path,
+        ],
+    ) {
+        Ok(out) => out.lines().next().map(|s| s.to_string()),
+        Err(_) => None,
+    };
+
+    // 2. Extract changes and rebase
+    // We use a temporary fixup strategy
+
+    // a. Restore file to state before target commit
+    let _ = run_git(
+        path,
+        &["checkout", &format!("{}^", hash), "--", file_rel_path],
+    );
+    // b. Fixup the target commit to remove those changes
+    let _ = run_git(path, &["commit", "--fixup", hash]);
+
+    // c. Restore file to state at target commit (reintroducing the changes as floating)
+    let _ = run_git(path, &["checkout", hash, "--", file_rel_path]);
+
+    let result_msg = if let Some(next_h) = next_commit_hash {
+        // d. Fixup the next commit to absorb these changes
+        let _ = run_git(path, &["commit", "--fixup", &next_h]);
+        format!("Moving changes from {} to next commit {}.", hash, next_h)
+    } else {
+        "No future commit touches this file. Changes left staged at HEAD.".to_string()
+    };
+
+    // 3. Run the rebase to consolidate
+    match run_git(
+        path,
+        &[
+            "-c",
+            "sequence.editor=:",
+            "rebase",
+            "-i",
+            "--autosquash",
+            "--autostash",
+            &format!("{}^", hash),
+        ],
+    ) {
+        Ok(_) => Ok(format!("Success! {}", result_msg)),
+        Err(e) => Err(format!(
+            "Rebase failed: {}. Manual resolution might be needed.",
+            e
+        )),
+    }
+}
+
 pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
     use std::io::Write;
 

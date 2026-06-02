@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::git::files::FileStatus;
+use crate::git::files::{FileEntry, FileStatus};
 use crate::models::{BranchStatus, GutterStatus};
 use crate::state::ui::{AppMode, DatePickerField, DatePickerState, FilePanel, PreviewState, PrimaryMode, RebaseAction};
 use crate::ui::components::get_status_icons;
@@ -579,13 +579,23 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
 
             let mut commit_spans = vec![
                 Span::styled(format!(" {} ", commit.hash), Style::default().fg(Color::Yellow)),
+            ];
+
+            if !commit.branch_info.is_empty() {
+                commit_spans.push(Span::styled(
+                    format!(" {} ", commit.branch_info),
+                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                ));
+            }
+
+            commit_spans.extend(vec![
                 Span::styled(format!(" {} ", commit.date), Style::default().fg(Color::Cyan)),
                 Span::styled(
                     format!(" [{}] ", commit.author),
                     Style::default().fg(Color::Rgb(180, 180, 200)),
                 ),
                 Span::styled(commit.message.clone(), Style::default().fg(Color::White)),
-            ];
+            ]);
 
             let mut all_spans = graph_spans;
             all_spans.append(&mut commit_spans);
@@ -634,8 +644,9 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
     f.render_widget(Clear, inner);
 
     let options = [
-        "1. Change Date (git commit --amend --date=...)",
-        "2. Amend Staged Files (git commit --fixup & rebase)",
+        "1. Change Date (iOS Style Picker)",
+        "2. Amend Staged Files (Fixup current)",
+        "3. Browse Files (Surgical Undo / Move Forward)",
     ];
 
     let mut items = vec![];
@@ -1392,6 +1403,7 @@ fn render_transparent_ascii(
     }
 }
 
+#[allow(dead_code)]
 pub fn render_main_menu(f: &mut Frame, app: &App) {
     let area = f.area();
     let buf = f.buffer_mut();
@@ -1531,6 +1543,7 @@ pub fn format_mode(mode: &AppMode) -> String {
         AppMode::Message(_) => "Message".to_string(),
         AppMode::Switcher => "App Switcher".to_string(),
         AppMode::DatePicker(_) => "Date Picker".to_string(),
+        AppMode::CommitFiles(hash, _) => format!("Files in {}", hash),
     }
 }
 
@@ -1662,5 +1675,89 @@ fn get_month_name(m: u32) -> &'static str {
         1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr", 5 => "May", 6 => "Jun",
         7 => "Jul", 8 => "Aug", 9 => "Sep", 10 => "Oct", 11 => "Nov", 12 => "Dec",
         _ => "???"
+    }
+}
+
+pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEntry]) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(20),
+            Constraint::Percentage(60),
+            Constraint::Percentage(20),
+        ])
+        .split(f.area())[1];
+
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(20),
+            Constraint::Percentage(60),
+            Constraint::Percentage(20),
+        ])
+        .split(area)[1];
+
+    f.render_widget(Clear, inner);
+
+    let mut items = vec![];
+    if files.is_empty() {
+        items.push(ListItem::new(" No files found in this commit. ").style(Style::default().fg(Color::Gray)));
+    } else {
+        for (i, entry) in files.iter().enumerate() {
+            let is_selected = i == app.ui.selected_commit_file_idx;
+            let mut style = Style::default();
+            
+            let status_color = match entry.status {
+                FileStatus::Added => Color::Green,
+                FileStatus::Modified => Color::Yellow,
+                FileStatus::Deleted => Color::Red,
+                _ => Color::Gray,
+            };
+
+            if is_selected {
+                style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+            }
+
+            let text = Line::from(vec![
+                Span::styled(format!(" {:?} ", entry.status), Style::default().fg(status_color)),
+                Span::styled(entry.path.to_string_lossy().to_string(), Style::default()),
+            ]);
+            items.push(ListItem::new(text).style(style));
+        }
+    }
+
+    let block = Block::default()
+        .title(format!(" Files in commit {} ", hash))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Cyan));
+
+    let list = List::new(items).block(block);
+    f.render_widget(list, inner);
+
+    // Footer for this modal
+    let footer_area = Rect::new(inner.x + 1, inner.y + inner.height - 1, inner.width - 2, 1);
+    f.render_widget(
+        Paragraph::new(" ↑/↓: navigate │ u: Move changes forward │ Esc: close ")
+            .style(Style::default().fg(Color::DarkGray)),
+        footer_area
+    );
+}
+
+pub fn render_help(f: &mut Frame, app: &App) {
+    let area = f.area();
+    render_help_content(f, area, app);
+}
+
+pub fn render_diff(f: &mut Frame, app: &App) {
+    // Diff is currently integrated into primary views or rendered as a full-screen overlay
+    // I'll create a simple full-screen diff renderer for AppMode::Diff
+    let area = f.area();
+    if let Some(ref state) = app.repo.diff_preview {
+        render_code_preview(f, app, area, state);
+    } else {
+        let block = Block::default()
+            .title(" Diff View ")
+            .borders(Borders::ALL);
+        f.render_widget(Paragraph::new("No diff available.").block(block), area);
     }
 }

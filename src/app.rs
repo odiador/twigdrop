@@ -44,6 +44,7 @@ impl App {
         let primary_mode = match config.last_primary_mode {
             1 => PrimaryMode::Files,
             2 => PrimaryMode::Commits,
+            3 => PrimaryMode::Stashes,
             _ => PrimaryMode::Branches,
         };
 
@@ -70,6 +71,9 @@ impl App {
             app.load_file_tree(repo_path);
         } else if app.ui.primary_mode == PrimaryMode::Commits {
             app.repo.commit_tree = crate::git::commands::get_commit_tree(repo_path);
+        } else if app.ui.primary_mode == PrimaryMode::Stashes {
+            app.load_stashes(repo_path);
+            app.load_stash_detail(repo_path);
         }
 
         app.refresh_filtered_branches();
@@ -77,19 +81,26 @@ impl App {
     }
 
     pub fn toggle_primary_mode(&mut self) {
-        self.ui.primary_mode = match self.ui.primary_mode {
+        let next_mode = match self.ui.primary_mode {
             PrimaryMode::Branches => PrimaryMode::Files,
             PrimaryMode::Files => PrimaryMode::Commits,
-            PrimaryMode::Commits => PrimaryMode::Branches,
+            PrimaryMode::Commits => PrimaryMode::Stashes,
+            PrimaryMode::Stashes => PrimaryMode::Branches,
         };
-        self.config.last_primary_mode = match self.ui.primary_mode {
+        self.set_primary_mode(next_mode);
+    }
+
+    pub fn set_primary_mode(&mut self, mode: PrimaryMode) {
+        self.ui.primary_mode = mode;
+        self.config.last_primary_mode = match mode {
             PrimaryMode::Branches => 0,
             PrimaryMode::Files => 1,
             PrimaryMode::Commits => 2,
+            PrimaryMode::Stashes => 3,
         };
 
         if let Ok(mut w) = self.shared_primary_mode.write() {
-            *w = self.ui.primary_mode;
+            *w = mode;
         }
 
         crate::utils::config::save_config(&self.config);
@@ -192,6 +203,7 @@ impl App {
         }
     }
 
+    #[allow(dead_code)]
     pub fn apply_snap_deletion(&mut self, path: &str) -> String {
         if let Some(ref anim) = self.ui.snap_animation {
             let names: Vec<String> = anim.rows.iter().map(|r| r.branch_name.clone()).collect();
@@ -262,6 +274,11 @@ impl App {
                     self.ui.selected_commit_idx += 1;
                 }
             }
+            PrimaryMode::Stashes => {
+                if self.ui.selected_stash_idx < self.repo.stashes.len().saturating_sub(1) {
+                    self.ui.selected_stash_idx += 1;
+                }
+            }
         }
     }
 
@@ -280,6 +297,11 @@ impl App {
             PrimaryMode::Commits => {
                 if self.ui.selected_commit_idx > 0 {
                     self.ui.selected_commit_idx -= 1;
+                }
+            }
+            PrimaryMode::Stashes => {
+                if self.ui.selected_stash_idx > 0 {
+                    self.ui.selected_stash_idx -= 1;
                 }
             }
         }
@@ -487,14 +509,6 @@ impl App {
         state.highlighted_lines.clear();
         for line in &state.lines {
             let color = if line.starts_with('+') && !line.starts_with("+++") {
-                Color::Rgb(161, 239, 173) // Light Green
-            } else if line.starts_with('-') && !line.starts_with("---") {
-                Color::Rgb(245, 194, 231) // Pinkish Red
-            } else if line.starts_with("@@") {
-                Color::Rgb(137, 180, 250) // Blue for hunk headers
-            } else if line.starts_with("diff --git") {
-                Color::Rgb(249, 226, 175) // Yellow for file headers
-            } else if line.starts_with("index ") {
                 Color::Rgb(148, 156, 187) // Gray for index info
             } else if line.starts_with("+++") || line.starts_with("---") {
                 Color::Rgb(180, 190, 254) // Lavender for file paths
@@ -513,5 +527,12 @@ impl App {
 
             state.highlighted_lines.push(Line::from(spans));
         }
+    }
+
+    pub fn delete_selected_branches(&mut self, path: &str) {
+        let names: Vec<String> = self.ui.bulk_selected.iter().cloned().collect();
+        crate::actions::bulk_delete_branches(path, &names);
+        self.ui.bulk_selected.clear();
+        self.refresh_branches(path);
     }
 }

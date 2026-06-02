@@ -35,7 +35,7 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
         "--graph",
         "--all",
         "--color=never",
-        "--format=<|%h|%cd|%an|%s",
+        "--format=<|%h%d|%cd|%an|%s",
         "--date=short",
     ];
 
@@ -56,9 +56,17 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
             let parts: Vec<&str> = rest.split('|').collect();
 
             if parts.len() >= 4 {
+                let hash_and_refs = parts[0];
+                let (hash, refs) = if let Some(p) = hash_and_refs.find('(') {
+                    (hash_and_refs[..p].trim().to_string(), hash_and_refs[p..].trim().to_string())
+                } else {
+                    (hash_and_refs.to_string(), String::new())
+                };
+
                 items.push(CommitTreeItem {
                     graph: graph.to_string(),
-                    hash: parts[0].to_string(),
+                    hash,
+                    branch_info: refs,
                     date: parts[1].to_string(),
                     author: parts[2].to_string(),
                     message: parts[3..].join("|"),
@@ -68,6 +76,7 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
                 items.push(CommitTreeItem {
                     graph: line.to_string(),
                     hash: String::new(),
+                    branch_info: String::new(),
                     date: String::new(),
                     author: String::new(),
                     message: String::new(),
@@ -78,6 +87,7 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
             items.push(CommitTreeItem {
                 graph: line.to_string(),
                 hash: String::new(),
+                branch_info: String::new(),
                 date: String::new(),
                 author: String::new(),
                 message: String::new(),
