@@ -1,6 +1,6 @@
+use crate::models::CommitTreeItem;
 use anyhow::{Result, anyhow};
 use std::process::Command;
-use crate::models::CommitTreeItem;
 
 pub fn run_git(path: &str, args: &[&str]) -> Result<String> {
     let output = Command::new("git").current_dir(path).args(args).output()?;
@@ -58,7 +58,10 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
             if parts.len() >= 4 {
                 let hash_and_refs = parts[0];
                 let (hash, refs) = if let Some(p) = hash_and_refs.find('(') {
-                    (hash_and_refs[..p].trim().to_string(), hash_and_refs[p..].trim().to_string())
+                    (
+                        hash_and_refs[..p].trim().to_string(),
+                        hash_and_refs[p..].trim().to_string(),
+                    )
                 } else {
                     (hash_and_refs.to_string(), String::new())
                 };
@@ -95,4 +98,21 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
         }
     }
     items
+}
+
+pub fn get_commit_details(path: &str, hash: &str) -> (String, String) {
+    let stat_args = ["show", "--stat", "--format=", hash];
+    let diff_args = ["show", "-p", "--format=", hash];
+
+    let stats = match run_git(path, &stat_args) {
+        Ok(out) => out,
+        Err(_) => String::from("Could not load stats."),
+    };
+
+    let diff = match run_git(path, &diff_args) {
+        Ok(out) => out,
+        Err(_) => String::from("Could not load diff."),
+    };
+
+    (stats, diff)
 }

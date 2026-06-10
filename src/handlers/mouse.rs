@@ -138,7 +138,7 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                     state.scroll_y -= 1;
                 }
             } else {
-                app.previous();
+                app.previous(path);
             }
         }
         MouseEventKind::ScrollDown => {
@@ -162,7 +162,7 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                     }
                 }
             } else {
-                app.next();
+                app.next(path);
             }
         }
         _ => {}

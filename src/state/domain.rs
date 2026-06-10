@@ -16,6 +16,8 @@ pub struct RepositoryState {
     pub diff_files: Vec<String>,
     pub diff_preview: Option<PreviewState>,
     pub commit_tree: Vec<CommitTreeItem>,
+    pub commit_diff: Option<String>,
+    pub commit_stats: Option<String>,
 }
 
 impl RepositoryState {
@@ -32,6 +34,8 @@ impl RepositoryState {
             diff_files: Vec::new(),
             diff_preview: None,
             commit_tree: Vec::new(),
+            commit_diff: None,
+            commit_stats: None,
         }
     }
 }

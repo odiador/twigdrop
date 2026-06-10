@@ -1,10 +1,10 @@
+pub mod animations;
 pub mod components;
 pub mod screens;
-pub mod animations;
 
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
     Frame,
+    layout::{Constraint, Direction, Layout, Rect},
 };
 
 use crate::app::App;
@@ -34,7 +34,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     }
 
     // 2. Capture and Animate
-    if app.config.enable_animations && let Some(ref mut anim) = app.ui.snap_animation {
+    if app.config.enable_animations
+        && let Some(ref mut anim) = app.ui.snap_animation
+    {
         if !anim.captured {
             let buf = f.buffer_mut();
             for row in anim.rows.iter_mut() {
@@ -57,7 +59,11 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
 
         if let Some(ref mut anim) = app.ui.snap_animation {
             for p in &anim.particles.particles {
-                if p.x >= 0.0 && p.x < f.area().width as f32 && p.y >= 0.0 && p.y < f.area().height as f32 {
+                if p.x >= 0.0
+                    && p.x < f.area().width as f32
+                    && p.y >= 0.0
+                    && p.y < f.area().height as f32
+                {
                     let cell = &mut f.buffer_mut()[(p.x as u16, p.y as u16)];
                     let density_chars = [" ", ".", ":", "-", "=", "+", "*", "#", "%", "@"];
                     cell.set_symbol(density_chars[p.density as usize]);
@@ -180,6 +186,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::QuickActions => screens::render_quick_actions(f, app),
         AppMode::Switcher => screens::render_switcher(f, app),
         AppMode::MainMenu => screens::render_main_menu(f, app),
+        AppMode::CommandPalette(state) => screens::render_command_palette(f, state),
         _ => {}
     }
 }
