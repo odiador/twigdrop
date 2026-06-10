@@ -136,11 +136,27 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     if key.code == KeyCode::BackTab && key.kind == KeyEventKind::Press {
         if *app.ui.current_mode() != AppMode::Switcher {
             app.ui.push_modal(AppMode::Switcher);
-            if app.ui.mode_history.is_empty() {
-                app.ui.switcher_index = 0;
-            } else {
-                app.ui.switcher_index = 1.min(app.ui.mode_history.len().saturating_sub(1));
-            }
+            let modes = [
+                AppMode::FilesView,
+                AppMode::BranchesView,
+                AppMode::CommitsView,
+                AppMode::Help,
+            ];
+            // Find current primary mode index, or default to 0
+            app.ui.switcher_index = modes
+                .iter()
+                .position(|m| {
+                    if let AppMode::FilesView = m {
+                        app.ui.primary_mode == PrimaryMode::Files
+                    } else if let AppMode::BranchesView = m {
+                        app.ui.primary_mode == PrimaryMode::Branches
+                    } else if let AppMode::CommitsView = m {
+                        app.ui.primary_mode == PrimaryMode::Commits
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(0);
         }
         return false;
     }
@@ -153,13 +169,15 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     let current_mode = app.ui.current_mode().clone();
     match current_mode {
         AppMode::Switcher => {
+            let modes = [
+                AppMode::FilesView,
+                AppMode::BranchesView,
+                AppMode::CommitsView,
+                AppMode::Help,
+            ];
             match key.code {
                 KeyCode::Enter => {
-                    if app.ui.mode_history.is_empty() {
-                        app.ui.pop_modal();
-                        return false;
-                    }
-                    let selected_mode = app.ui.mode_history[app.ui.switcher_index].clone();
+                    let selected_mode = modes[app.ui.switcher_index].clone();
                     app.ui.pop_modal(); // pop Switcher
                     app.ui.modal_stack.clear(); // Clear other modals to return to normal base
                     match selected_mode {
@@ -177,10 +195,10 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                             app.ui.selected_commit_idx = 0;
                             app.ui.track_history(AppMode::CommitsView);
                         }
-                        AppMode::Normal => {}
-                        _ => {
-                            app.ui.push_modal(selected_mode);
+                        AppMode::Help => {
+                            app.ui.push_modal(AppMode::Help);
                         }
+                        _ => {}
                     }
                 }
                 KeyCode::Esc | KeyCode::Char('q') => {
@@ -189,12 +207,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.ui.switcher_index = app.ui.switcher_index.saturating_sub(1);
                 }
-                KeyCode::Down | KeyCode::Char('j')
-                    if app.ui.switcher_index + 1 < app.ui.mode_history.len() =>
-                {
-                    app.ui.switcher_index += 1;
+                KeyCode::Down | KeyCode::Char('j') => {
+                    if app.ui.switcher_index + 1 < modes.len() {
+                        app.ui.switcher_index += 1;
+                    }
                 }
-                KeyCode::Down | KeyCode::Char('j') => {}
                 _ => {}
             }
             return false;
@@ -263,7 +280,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 KeyCode::Up | KeyCode::Char('k') if app.ui.settings_state.selected > 0 => {
                     app.ui.settings_state.selected -= 1;
                 }
-                KeyCode::Down | KeyCode::Char('j') if app.ui.settings_state.selected < 2 => {
+                KeyCode::Down | KeyCode::Char('j') if app.ui.settings_state.selected < 4 => {
                     app.ui.settings_state.selected += 1;
                 }
                 KeyCode::Enter => {
@@ -306,6 +323,58 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         let files = crate::git::files::get_commit_files(path, &hash);
                         app.ui.selected_commit_file_idx = 0;
                         app.ui.push_modal(AppMode::CommitFiles(hash.clone(), files));
+                    } else if app.ui.settings_state.selected == 3 {
+                        let short_hash = hash.clone();
+                        let parent_hash = crate::git::commands::run_git(path, &["rev-parse", &format!("{}^", short_hash)])
+                            .unwrap_or_default().trim().to_string();
+                        
+                        if parent_hash.is_empty() {
+                            app.ui.pop_modal();
+                            app.ui.push_modal(AppMode::Message("Cannot squash: no parent commit found.".to_string()));
+                            return false;
+                        }
+
+                        let editor_script_path = std::path::Path::new(path)
+                            .join(".git")
+                            .join("twigdrop-squash-editor.sh");
+
+                        // We use a robust awk script to replace "pick <hash>" with "squash <hash>"
+                        let script_content = format!(
+                            "#!/bin/sh\nawk '{{ if ($1 == \"pick\" && match($2, \"^{}\")) {{ $1 = \"squash\" }} print }}' \"$1\" > \"$1.tmp\" && mv \"$1.tmp\" \"$1\"\n",
+                            short_hash
+                        );
+
+                        let _ = std::fs::write(&editor_script_path, script_content);
+                        #[cfg(unix)]
+                        let _ = std::process::Command::new("chmod").arg("+x").arg(&editor_script_path).status();
+
+                        let msg = match crate::git::commands::run_git(
+                            path,
+                            &[
+                                "-c",
+                                &format!("sequence.editor={}", editor_script_path.display()),
+                                "rebase",
+                                "-i",
+                                "--autostash",
+                                &format!("{}^^", short_hash),
+                            ],
+                        ) {
+                            Ok(_) => format!("Squashed {} into its parent.", short_hash),
+                            Err(e) => format!("Failed to squash: {}", e),
+                        };
+                        let _ = std::fs::remove_file(&editor_script_path);
+                        
+                        app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
+                        app.ui.pop_modal();
+                        app.ui.push_modal(AppMode::Message(msg));
+                    } else if app.ui.settings_state.selected == 4 {
+                        app.load_rebase_commits_from_hash(path, &hash);
+                        app.ui.pop_modal();
+                        if app.ui.rebase_state.commits.is_empty() {
+                            app.ui.push_modal(AppMode::Message("No commits to rebase.".to_string()));
+                        } else {
+                            app.ui.push_modal(AppMode::InteractiveRebase);
+                        }
                     }
                 }
                 KeyCode::Esc | KeyCode::Char('q') => {

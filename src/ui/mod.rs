@@ -179,6 +179,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::Shell(input) => screens::render_shell(f, input),
         AppMode::QuickActions => screens::render_quick_actions(f, app),
         AppMode::Switcher => screens::render_switcher(f, app),
+        AppMode::MainMenu => screens::render_main_menu(f, app),
         _ => {}
     }
 }
