@@ -256,7 +256,18 @@ impl App {
             .collect()
     }
 
-    pub fn next(&mut self) {
+    pub fn fetch_current_commit_details(&mut self, path: &str) {
+        if let Some(commit) = self.repo.commit_tree.get(self.ui.selected_commit_idx) {
+            let (stats, diff) = crate::git::commands::get_commit_details(path, &commit.hash);
+            self.repo.commit_stats = Some(stats);
+            self.repo.commit_diff = Some(diff);
+        } else {
+            self.repo.commit_stats = None;
+            self.repo.commit_diff = None;
+        }
+    }
+
+    pub fn next(&mut self, path: &str) {
         match self.ui.primary_mode {
             PrimaryMode::Branches => {
                 let max = self.ui.filtered_indices.len().saturating_sub(1);
@@ -272,6 +283,7 @@ impl App {
             PrimaryMode::Commits => {
                 if self.ui.selected_commit_idx < self.repo.commit_tree.len().saturating_sub(1) {
                     self.ui.selected_commit_idx += 1;
+                    self.fetch_current_commit_details(path);
                 }
             }
             PrimaryMode::Stashes => {
@@ -282,7 +294,7 @@ impl App {
         }
     }
 
-    pub fn previous(&mut self) {
+    pub fn previous(&mut self, path: &str) {
         match self.ui.primary_mode {
             PrimaryMode::Branches => {
                 if self.ui.selected_branch_idx > 0 {
@@ -297,6 +309,7 @@ impl App {
             PrimaryMode::Commits => {
                 if self.ui.selected_commit_idx > 0 {
                     self.ui.selected_commit_idx -= 1;
+                    self.fetch_current_commit_details(path);
                 }
             }
             PrimaryMode::Stashes => {
@@ -387,16 +400,23 @@ impl App {
 
     pub fn load_rebase_commits_from_hash(&mut self, path: &str, hash: &str) {
         // Instead of getting unpushed commits, we want to get the commits from the hash to HEAD.
-        let out = crate::git::commands::run_git(path, &["log", "--format=%h|%s", &format!("{}..HEAD", hash)]).unwrap_or_default();
-        let commits: Vec<crate::state::ui::RebaseCommit> = out.lines().map(|line| {
-            let mut parts = line.splitn(2, '|');
-            crate::state::ui::RebaseCommit {
-                hash: parts.next().unwrap_or_default().to_string(),
-                original_message: parts.next().unwrap_or_default().to_string(),
-                new_message: None,
-                action: RebaseAction::Pick,
-            }
-        }).collect();
+        let out = crate::git::commands::run_git(
+            path,
+            &["log", "--format=%h|%s", &format!("{}..HEAD", hash)],
+        )
+        .unwrap_or_default();
+        let commits: Vec<crate::state::ui::RebaseCommit> = out
+            .lines()
+            .map(|line| {
+                let mut parts = line.splitn(2, '|');
+                crate::state::ui::RebaseCommit {
+                    hash: parts.next().unwrap_or_default().to_string(),
+                    original_message: parts.next().unwrap_or_default().to_string(),
+                    new_message: None,
+                    action: RebaseAction::Pick,
+                }
+            })
+            .collect();
 
         self.ui.rebase_state.commits = commits;
         self.ui.rebase_state.selected = 0;

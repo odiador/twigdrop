@@ -67,6 +67,7 @@ pub enum AppMode {
     CommitsView,
     DatePicker(DatePickerState),
     CommitFiles(String, Vec<crate::git::files::FileEntry>),
+    CommandPalette(CommandPaletteState),
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -75,6 +76,27 @@ pub enum PrimaryMode {
     Files,
     Commits,
     Stashes,
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum CommandAction {
+    CheckoutBranch,
+    CreateBranch,
+    OpenSettings,
+    InteractiveRebase,
+    StashChanges,
+    PopStash,
+    Fetch,
+    Pull,
+    Push,
+    CommitChanges,
+}
+
+#[derive(Default, PartialEq, Debug, Clone)]
+pub struct CommandPaletteState {
+    pub query: String,
+    pub selected: usize,
+    pub actions: Vec<(String, CommandAction)>,
 }
 
 #[derive(Default, Clone)]

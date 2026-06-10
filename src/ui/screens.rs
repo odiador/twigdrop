@@ -9,7 +9,10 @@ use ratatui::{
 use crate::app::App;
 use crate::git::files::{FileEntry, FileStatus};
 use crate::models::{BranchStatus, GutterStatus};
-use crate::state::ui::{AppMode, DatePickerField, DatePickerState, FilePanel, PreviewState, PrimaryMode, RebaseAction};
+use crate::state::ui::{
+    AppMode, CommandPaletteState, DatePickerField, DatePickerState, FilePanel, PreviewState,
+    PrimaryMode, RebaseAction,
+};
 use crate::ui::components::get_status_icons;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
@@ -557,11 +560,21 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
 }
 
 pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)].as_ref())
+        .split(area);
+
+    let list_area = chunks[0];
+    let details_area = chunks[1];
+
     let mut items = vec![];
     if app.repo.commit_tree.is_empty() {
         items.push(
-            ListItem::new(" No commits found in history. Ensure this is a git repository with commits. ")
-                .style(Style::default().fg(Color::Yellow)),
+            ListItem::new(
+                " No commits found in history. Ensure this is a git repository with commits. ",
+            )
+            .style(Style::default().fg(Color::Yellow)),
         );
     } else {
         for (i, commit) in app.repo.commit_tree.iter().enumerate() {
@@ -571,25 +584,31 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
             for ch in commit.graph.chars() {
                 let color = match ch {
                     '*' => Color::Magenta,
-                    '|' | '/' | '\\' | '_' => Color::Rgb(100, 100, 120), // Darker gray for lines
+                    '|' | '/' | '\\' | '_' => Color::Rgb(100, 100, 120),
                     _ => Color::Gray,
                 };
                 graph_spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
             }
 
-            let mut commit_spans = vec![
-                Span::styled(format!(" {} ", commit.hash), Style::default().fg(Color::Yellow)),
-            ];
+            let mut commit_spans = vec![Span::styled(
+                format!(" {} ", commit.hash),
+                Style::default().fg(Color::Yellow),
+            )];
 
             if !commit.branch_info.is_empty() {
                 commit_spans.push(Span::styled(
                     format!(" {} ", commit.branch_info),
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 ));
             }
 
             commit_spans.extend(vec![
-                Span::styled(format!(" {} ", commit.date), Style::default().fg(Color::Cyan)),
+                Span::styled(
+                    format!(" {} ", commit.date),
+                    Style::default().fg(Color::Cyan),
+                ),
                 Span::styled(
                     format!(" [{}] ", commit.author),
                     Style::default().fg(Color::Rgb(180, 180, 200)),
@@ -615,7 +634,147 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan)),
     );
-    f.render_widget(list, area);
+    f.render_widget(list, list_area);
+
+    let details_block = Block::default()
+        .title(" Commit Details ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+
+    if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx) {
+        let stats = app
+            .repo
+            .commit_stats
+            .as_deref()
+            .unwrap_or("Loading stats...");
+        let diff = app.repo.commit_diff.as_deref().unwrap_or("Loading diff...");
+
+        let mut detail_lines = vec![
+            Line::from(vec![
+                Span::styled("Hash: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(&commit.hash, Style::default().fg(Color::Yellow)),
+            ]),
+            Line::from(vec![
+                Span::styled("Author: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(&commit.author, Style::default().fg(Color::White)),
+            ]),
+            Line::from(vec![
+                Span::styled("Date: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(&commit.date, Style::default().fg(Color::Cyan)),
+            ]),
+            Line::from(vec![
+                Span::styled("Message: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    &commit.message,
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Stats:",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )),
+            Line::from(stats),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Diff Preview:",
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::BOLD),
+            )),
+        ];
+
+        for line in diff.lines() {
+            let style = if line.starts_with('+') {
+                Style::default().fg(Color::Green)
+            } else if line.starts_with('-') {
+                Style::default().fg(Color::Red)
+            } else if line.starts_with("@@") {
+                Style::default().fg(Color::Cyan)
+            } else {
+                Style::default().fg(Color::Gray)
+            };
+            detail_lines.push(Line::from(Span::styled(line, style)));
+        }
+
+        let p = Paragraph::new(detail_lines)
+            .block(details_block)
+            .scroll((app.ui.info_scroll, 0))
+            .wrap(ratatui::widgets::Wrap { trim: false });
+
+        f.render_widget(p, details_area);
+    } else {
+        f.render_widget(
+            Paragraph::new("No commit selected").block(details_block),
+            details_area,
+        );
+    }
+}
+
+pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
+    let area = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage(20),
+            Constraint::Percentage(60),
+            Constraint::Percentage(20),
+        ])
+        .split(f.area())[1];
+
+    let inner = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(20),
+            Constraint::Percentage(60),
+            Constraint::Percentage(20),
+        ])
+        .split(area)[1];
+
+    f.render_widget(Clear, inner);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(0)])
+        .split(inner);
+
+    let input_block = Block::default()
+        .title(" Command Palette (Ctrl+P) ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Yellow));
+
+    let query_text = format!("> {}", state.query);
+    f.render_widget(Paragraph::new(query_text).block(input_block), chunks[0]);
+
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::DarkGray));
+
+    let mut items = vec![];
+    for (_i, (name, _)) in state.actions.iter().enumerate() {
+        // Simple case-insensitive contains filter
+        if !state.query.is_empty() && !name.to_lowercase().contains(&state.query.to_lowercase()) {
+            continue;
+        }
+
+        let mut style = Style::default().fg(Color::Gray);
+        if items.len() == state.selected {
+            style = style
+                .bg(Color::Rgb(45, 45, 65))
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD);
+        }
+        items.push(ListItem::new(name.clone()).style(style));
+    }
+
+    if items.is_empty() {
+        items.push(ListItem::new("No commands found.").style(Style::default().fg(Color::DarkGray)));
+    }
+
+    f.render_widget(List::new(items).block(list_block), chunks[1]);
 }
 
 pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
@@ -1552,6 +1711,7 @@ pub fn format_mode(mode: &AppMode) -> String {
         AppMode::Switcher => "App Switcher".to_string(),
         AppMode::DatePicker(_) => "Date Picker".to_string(),
         AppMode::CommitFiles(hash, _) => format!("Files in {}", hash),
+        AppMode::CommandPalette(_) => "Command Palette".to_string(),
     }
 }
 
@@ -1580,7 +1740,7 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
         .title(" Select Date & Time (Enter to Save) ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
-    
+
     f.render_widget(block, inner);
 
     let picker_area = Layout::default()
@@ -1612,14 +1772,20 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(1), Constraint::Min(0)])
             .split(col_area);
-        
+
         f.render_widget(
             Paragraph::new(Span::styled(
                 *label,
-                Style::default().fg(if is_focused { Color::Cyan } else { Color::DarkGray })
-                    .add_modifier(Modifier::BOLD)
-            )).alignment(Alignment::Center),
-            label_area[0]
+                Style::default()
+                    .fg(if is_focused {
+                        Color::Cyan
+                    } else {
+                        Color::DarkGray
+                    })
+                    .add_modifier(Modifier::BOLD),
+            ))
+            .alignment(Alignment::Center),
+            label_area[0],
         );
 
         // Wheel (Previous, Current, Next)
@@ -1630,16 +1796,36 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
                 (state.year + 1).to_string(),
             ],
             DatePickerField::Month => vec![
-                get_month_name(if state.month == 1 { 12 } else { state.month - 1 }).to_string(),
+                get_month_name(if state.month == 1 {
+                    12
+                } else {
+                    state.month - 1
+                })
+                .to_string(),
                 get_month_name(state.month).to_string(),
-                get_month_name(if state.month == 12 { 1 } else { state.month + 1 }).to_string(),
+                get_month_name(if state.month == 12 {
+                    1
+                } else {
+                    state.month + 1
+                })
+                .to_string(),
             ],
             DatePickerField::Day => {
                 let max_days = crate::utils::days_in_month(state.month, state.year);
                 vec![
-                    (if state.day == 1 { max_days } else { state.day - 1 }).to_string(),
+                    (if state.day == 1 {
+                        max_days
+                    } else {
+                        state.day - 1
+                    })
+                    .to_string(),
                     state.day.to_string(),
-                    (if state.day == max_days { 1 } else { state.day + 1 }).to_string(),
+                    (if state.day == max_days {
+                        1
+                    } else {
+                        state.day + 1
+                    })
+                    .to_string(),
                 ]
             }
             DatePickerField::Hour => vec![
@@ -1648,7 +1834,14 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
                 format!("{:02}", (state.hour + 1) % 24),
             ],
             DatePickerField::Minute => vec![
-                format!("{:02}", if state.minute == 0 { 59 } else { state.minute - 1 }),
+                format!(
+                    "{:02}",
+                    if state.minute == 0 {
+                        59
+                    } else {
+                        state.minute - 1
+                    }
+                ),
                 format!("{:02}", state.minute),
                 format!("{:02}", (state.minute + 1) % 60),
             ],
@@ -1658,7 +1851,7 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
         for (idx, val) in wheel_items.iter().enumerate() {
             let mut style = Style::default().fg(Color::DarkGray);
             let mut text = val.clone();
-            
+
             if idx == 1 {
                 style = style.fg(Color::White).add_modifier(Modifier::BOLD);
                 if is_focused {
@@ -1670,7 +1863,9 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
             } else {
                 text = format!(" {}  ", text);
             }
-            spans.push(ListItem::new(Line::from(Span::styled(text, style)).alignment(Alignment::Center)));
+            spans.push(ListItem::new(
+                Line::from(Span::styled(text, style)).alignment(Alignment::Center),
+            ));
         }
 
         let list = List::new(spans);
@@ -1680,9 +1875,19 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
 
 fn get_month_name(m: u32) -> &'static str {
     match m {
-        1 => "Jan", 2 => "Feb", 3 => "Mar", 4 => "Apr", 5 => "May", 6 => "Jun",
-        7 => "Jul", 8 => "Aug", 9 => "Sep", 10 => "Oct", 11 => "Nov", 12 => "Dec",
-        _ => "???"
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        12 => "Dec",
+        _ => "???",
     }
 }
 
@@ -1709,12 +1914,15 @@ pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEn
 
     let mut items = vec![];
     if files.is_empty() {
-        items.push(ListItem::new(" No files found in this commit. ").style(Style::default().fg(Color::Gray)));
+        items.push(
+            ListItem::new(" No files found in this commit. ")
+                .style(Style::default().fg(Color::Gray)),
+        );
     } else {
         for (i, entry) in files.iter().enumerate() {
             let is_selected = i == app.ui.selected_commit_file_idx;
             let mut style = Style::default();
-            
+
             let status_color = match entry.status {
                 FileStatus::Added => Color::Green,
                 FileStatus::Modified => Color::Yellow,
@@ -1723,11 +1931,17 @@ pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEn
             };
 
             if is_selected {
-                style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::White).add_modifier(Modifier::BOLD);
+                style = style
+                    .bg(Color::Rgb(45, 45, 65))
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD);
             }
 
             let text = Line::from(vec![
-                Span::styled(format!(" {:?} ", entry.status), Style::default().fg(status_color)),
+                Span::styled(
+                    format!(" {:?} ", entry.status),
+                    Style::default().fg(status_color),
+                ),
                 Span::styled(entry.path.to_string_lossy().to_string(), Style::default()),
             ]);
             items.push(ListItem::new(text).style(style));
@@ -1747,7 +1961,7 @@ pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEn
     f.render_widget(
         Paragraph::new(" ↑/↓: navigate │ u: Move changes forward │ Esc: close ")
             .style(Style::default().fg(Color::DarkGray)),
-        footer_area
+        footer_area,
     );
 }
 
@@ -1763,9 +1977,7 @@ pub fn render_diff(f: &mut Frame, app: &App) {
     if let Some(ref state) = app.repo.diff_preview {
         render_code_preview(f, app, area, state);
     } else {
-        let block = Block::default()
-            .title(" Diff View ")
-            .borders(Borders::ALL);
+        let block = Block::default().title(" Diff View ").borders(Borders::ALL);
         f.render_widget(Paragraph::new("No diff available.").block(block), area);
     }
 }
