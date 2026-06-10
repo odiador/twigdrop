@@ -647,6 +647,8 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
         "1. Change Date (iOS Style Picker)",
         "2. Amend Staged Files (Fixup current)",
         "3. Browse Files (Surgical Undo / Move Forward)",
+        "4. Squash into parent commit (Auto-rebase)",
+        "5. Interactive Rebase from here",
     ];
 
     let mut items = vec![];
@@ -1403,7 +1405,6 @@ fn render_transparent_ascii(
     }
 }
 
-#[allow(dead_code)]
 pub fn render_main_menu(f: &mut Frame, app: &App) {
     let area = f.area();
     let buf = f.buffer_mut();
@@ -1491,8 +1492,15 @@ pub fn render_switcher(f: &mut Frame, app: &App) {
 
     f.render_widget(Clear, inner);
 
+    let modes = [
+        AppMode::FilesView,
+        AppMode::BranchesView,
+        AppMode::CommitsView,
+        AppMode::Help,
+    ];
+
     let mut items = Vec::new();
-    for (i, mode) in app.ui.mode_history.iter().enumerate() {
+    for (i, mode) in modes.iter().enumerate() {
         let text = format_mode(mode);
         let mut style = Style::default().fg(Color::Gray);
 
