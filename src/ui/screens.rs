@@ -621,7 +621,7 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
 
             let mut line_style = Style::default();
             if is_selected {
-                line_style = line_style.bg(Color::Rgb(45, 45, 65));
+                line_style = line_style.bg(Color::Rgb(80, 80, 100));
             }
 
             items.push(ListItem::new(Line::from(all_spans)).style(line_style));
@@ -763,7 +763,7 @@ pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
         let mut style = Style::default().fg(Color::Gray);
         if items.len() == state.selected {
             style = style
-                .bg(Color::Rgb(45, 45, 65))
+                .bg(Color::Rgb(80, 80, 100))
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD);
         }
@@ -815,7 +815,7 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.settings_state.selected {
             style = style
-                .bg(Color::Rgb(45, 45, 65))
+                .bg(Color::Rgb(80, 80, 100))
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD);
         }
@@ -909,7 +909,7 @@ pub fn render_quick_actions(f: &mut Frame, app: &App) {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.quick_actions_state.selected {
             style = style
-                .bg(Color::Rgb(45, 45, 65))
+                .bg(Color::Rgb(80, 80, 100))
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD);
         }
@@ -1293,7 +1293,7 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.settings_state.selected {
             style = style
-                .bg(Color::Rgb(45, 45, 65))
+                .bg(Color::Rgb(80, 80, 100))
                 .add_modifier(Modifier::BOLD);
         }
 
@@ -1665,7 +1665,7 @@ pub fn render_switcher(f: &mut Frame, app: &App) {
 
         if i == app.ui.switcher_index {
             style = style
-                .bg(Color::Rgb(45, 45, 65))
+                .bg(Color::Rgb(80, 80, 100))
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD);
         }
@@ -1855,7 +1855,7 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
             if idx == 1 {
                 style = style.fg(Color::White).add_modifier(Modifier::BOLD);
                 if is_focused {
-                    style = style.bg(Color::Rgb(45, 45, 65)).fg(Color::Cyan);
+                    style = style.bg(Color::Rgb(80, 80, 100)).fg(Color::Cyan);
                     text = format!(" {} ◄", text);
                 } else {
                     text = format!(" {}  ", text);
@@ -1932,7 +1932,7 @@ pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEn
 
             if is_selected {
                 style = style
-                    .bg(Color::Rgb(45, 45, 65))
+                    .bg(Color::Rgb(80, 80, 100))
                     .fg(Color::White)
                     .add_modifier(Modifier::BOLD);
             }
