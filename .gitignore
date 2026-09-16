@@ -1,5 +1,7 @@
 /target
 .DS_Store
+scratch_debug
+scratch_debug.rs
 
 .agents/
 
