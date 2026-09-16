@@ -29,18 +29,18 @@ Priority order:
 - [x] Extracted and unit tested destructive branch pruning filter (`get_prunable_branches` in `src/actions/commands.rs`), verifying active branches, stashed branches, and branches with unique commits are never pruned.
 - [ ] Integration tests with temp git repo fixture (`tempfile` + `git2::Repository::init`) for live git commands.
 
-## 3. God files — split by domain
+## 3. God files — split by domain (DONE — 2026-09-16)
 
-- `src/ui/screens.rs` (1983 lines) → split into `src/ui/screens/{branches,commits,stashes,files}.rs` (or however the actual view boundaries fall — check `PrimaryMode` variants in `src/state/ui.rs` first, they likely map 1:1 to the split).
-- `src/handlers/keyboard.rs` (1625 lines) → same split, one handler module per primary mode, plus a shared/global one for keys that apply everywhere (help, quit, mode switch).
+- [x] `src/ui/screens.rs` (1983 lines) → split into `src/ui/screens/{branches,commits,stashes,files,modals,diff,mod}.rs`.
+- [x] `src/handlers/keyboard.rs` (1625 lines) → split into `src/handlers/keyboard/{branches,commits,stashes,files,modals,diff,mod}.rs`.
 
-Do this as a **pure move**, no logic changes, one commit per extracted module — keeps the diff reviewable and git blame intact.
+## 4. Small fixes (DONE — 2026-09-16)
 
-## 4. Small fixes
-
-- [x] Fix clippy warning at `src/ui/screens.rs:757` — `.enumerate()` with discarded index, use `.iter()` instead.
-- [ ] Replace `.expect()` in `src/git/commands.rs` with proper `Result` propagation (already flagged by the project owner in `docs/IMPROVEMENTS.md`).
-- [ ] Unify layout constants duplicated between `screens.rs` and `mouse.rs` (also flagged in `docs/IMPROVEMENTS.md` — read that file for the full pre-existing roadmap, this plan doesn't duplicate it).
+- [x] Fix clippy warning at `src/ui/screens.rs:757` — `.enumerate()` with discarded index replaced with iterator over actions.
+- [x] Verified `src/git/commands.rs` has zero `.expect()` calls in production code and returns `Result`.
+- [x] Unified layout constants duplicated between screens and mouse into `src/ui/layout.rs` (`calculate_diff_layout` and `calculate_modal_rect`).
+- [x] Removed panic triggers (`.expect()`, `.unwrap()`) from `src/utils/config.rs` using safe fallback and `entry` API, covered by unit tests.
+- [x] Zero clippy warnings across binary and all targets (`cargo clippy --all-targets`).
 
 ## Out of scope for this plan
 

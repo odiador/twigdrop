@@ -185,3 +185,52 @@ pub fn save_config(config: &Config) {
         let _ = fs::write(path, content);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_obfuscation_roundtrip() {
+        let secret = "sk-ant-api03-secretkey12345";
+        let obfuscated = obfuscate(secret);
+        assert_ne!(secret, obfuscated);
+        let recovered = deobfuscate(&obfuscated);
+        assert_eq!(secret, recovered);
+    }
+
+    #[test]
+    fn test_current_provider_existing() {
+        let config = Config::default();
+        let provider = config.current_provider();
+        assert_eq!(provider.model, "llama3");
+    }
+
+    #[test]
+    fn test_current_provider_fallback_when_missing() {
+        let config = Config {
+            ai_provider: "nonexistent_provider".to_string(),
+            ..Default::default()
+        };
+        // Should not panic, but return fallback provider with empty fields
+        let provider = config.current_provider();
+        assert_eq!(provider.model, "");
+        assert_eq!(provider.api_key, "");
+        assert_eq!(provider.url, "");
+    }
+
+    #[test]
+    fn test_current_provider_mut_inserts_when_missing() {
+        let mut config = Config {
+            ai_provider: "custom_provider".to_string(),
+            ..Default::default()
+        };
+        {
+            let prov = config.current_provider_mut();
+            prov.model = "custom-model".to_string();
+            prov.url = "http://custom-url:8080".to_string();
+        }
+        assert_eq!(config.current_provider().model, "custom-model");
+        assert_eq!(config.current_provider().url, "http://custom-url:8080");
+    }
+}

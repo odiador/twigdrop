@@ -16,13 +16,13 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             if cur != AppMode::Normal
                 && !matches!(cur, AppMode::CodePreview(_))
                 && cur != AppMode::Diff
-                && handle_modal_click(app, row, col, term_rows as usize, term_cols as usize, path)
+                && handle_modal_click(app, row, col, term_rows, term_cols, path)
             {
                 return;
             }
 
             if *app.ui.current_mode() == AppMode::Diff {
-                let area = ratatui::layout::Rect::new(0, 0, term_cols as u16, term_rows as u16);
+                let area = ratatui::layout::Rect::new(0, 0, term_cols, term_rows);
                 let diff_layout = crate::ui::layout::calculate_diff_layout(area);
 
                 if row < diff_layout.inner_area.top() as usize
@@ -204,13 +204,13 @@ fn handle_modal_click(
     app: &mut App,
     row: usize,
     col: usize,
-    term_rows: usize,
-    term_cols: usize,
+    term_rows: u16,
+    term_cols: u16,
     path: &str,
 ) -> bool {
     let cur = app.ui.current_mode().clone();
 
-    let area = ratatui::layout::Rect::new(0, 0, term_cols as u16, term_rows as u16);
+    let area = ratatui::layout::Rect::new(0, 0, term_cols, term_rows);
     let modal_rect = crate::ui::layout::calculate_modal_rect(&cur, area);
 
     let min_row = modal_rect.top() as usize;
