@@ -15,27 +15,35 @@ pub fn bulk_delete_branches(path: &str, names: &[String]) -> String {
     results
 }
 
+pub fn get_prunable_branches(
+    branches: &[crate::models::Branch],
+    current_branch: &str,
+) -> Vec<String> {
+    branches
+        .iter()
+        .filter(|b| {
+            if b.name == current_branch {
+                return false;
+            }
+
+            let is_gone = b.status.contains(&crate::models::BranchStatus::Gone);
+            let has_unique = b
+                .status
+                .contains(&crate::models::BranchStatus::HasUniqueCommits);
+            let has_stash = b.status.contains(&crate::models::BranchStatus::Stashed);
+
+            is_gone && !has_unique && !has_stash
+        })
+        .map(|b| b.name.clone())
+        .collect()
+}
+
 pub fn prune_branches(
     path: &str,
     branches: &[crate::models::Branch],
     current_branch: &str,
 ) -> String {
-    let mut to_delete = vec![];
-    for b in branches {
-        if b.name == current_branch {
-            continue;
-        }
-
-        let is_gone = b.status.contains(&crate::models::BranchStatus::Gone);
-        let has_unique = b
-            .status
-            .contains(&crate::models::BranchStatus::HasUniqueCommits);
-        let has_stash = b.status.contains(&crate::models::BranchStatus::Stashed);
-
-        if is_gone && !has_unique && !has_stash {
-            to_delete.push(b.name.clone());
-        }
-    }
+    let to_delete = get_prunable_branches(branches, current_branch);
 
     if to_delete.is_empty() {
         return "No safe branches found to prune.".to_string();
@@ -237,4 +245,59 @@ pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
         );
     }
     let _ = std::fs::remove_file(editor_script_path);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Branch, BranchStatus, MergeStatus};
+
+    fn make_test_branch(name: &str, status: Vec<BranchStatus>) -> Branch {
+        Branch {
+            name: name.to_string(),
+            status,
+            merge_status: MergeStatus::NotAnalyzed,
+            age: "1 day ago".to_string(),
+            author: "Dev".to_string(),
+            commit_date: "2026-09-15".to_string(),
+            ahead_count: 0,
+            behind_count: 0,
+        }
+    }
+
+    #[test]
+    fn test_get_prunable_branches_filtering() {
+        let branches = vec![
+            // Safe to prune: Gone without unique commits or stashes
+            make_test_branch("feature/done", vec![BranchStatus::Gone]),
+            // Must NOT prune: currently checked out branch even if gone
+            make_test_branch("main", vec![BranchStatus::Gone]),
+            // Must NOT prune: has unique commits (unpushed work!)
+            make_test_branch(
+                "feature/unpushed",
+                vec![BranchStatus::Gone, BranchStatus::HasUniqueCommits],
+            ),
+            // Must NOT prune: has associated stash
+            make_test_branch(
+                "feature/stashed",
+                vec![BranchStatus::Gone, BranchStatus::Stashed],
+            ),
+            // Must NOT prune: normal active local branch
+            make_test_branch("feature/active", vec![BranchStatus::Local]),
+        ];
+
+        let prunable = get_prunable_branches(&branches, "main");
+        assert_eq!(prunable, vec!["feature/done".to_string()]);
+    }
+
+    #[test]
+    fn test_get_prunable_branches_empty_when_no_gone() {
+        let branches = vec![
+            make_test_branch("dev", vec![BranchStatus::RemoteTracked]),
+            make_test_branch("main", vec![BranchStatus::Local]),
+        ];
+
+        let prunable = get_prunable_branches(&branches, "main");
+        assert!(prunable.is_empty());
+    }
 }

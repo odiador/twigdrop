@@ -73,25 +73,27 @@ impl Default for Config {
     }
 }
 
+static FALLBACK_PROVIDER: std::sync::LazyLock<ProviderConfig> = std::sync::LazyLock::new(|| ProviderConfig {
+    model: String::new(),
+    api_key: String::new(),
+    url: String::new(),
+});
+
 impl Config {
     pub fn current_provider(&self) -> &ProviderConfig {
         self.providers
             .get(&self.ai_provider)
-            .expect("Provider map must contain the current ai_provider")
+            .unwrap_or(&FALLBACK_PROVIDER)
     }
 
     pub fn current_provider_mut(&mut self) -> &mut ProviderConfig {
-        if !self.providers.contains_key(&self.ai_provider) {
-            self.providers.insert(
-                self.ai_provider.clone(),
-                ProviderConfig {
-                    model: String::new(),
-                    api_key: String::new(),
-                    url: String::new(),
-                },
-            );
-        }
-        self.providers.get_mut(&self.ai_provider).unwrap()
+        self.providers
+            .entry(self.ai_provider.clone())
+            .or_insert_with(|| ProviderConfig {
+                model: String::new(),
+                api_key: String::new(),
+                url: String::new(),
+            })
     }
 }
 

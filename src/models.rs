@@ -55,7 +55,7 @@ pub struct Commit {
     pub author: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitTreeItem {
     pub graph: String,
     pub hash: String,

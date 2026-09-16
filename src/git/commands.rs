@@ -44,60 +44,58 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
         Err(_) => return Vec::new(),
     };
 
-    let mut items = Vec::new();
-    for line in output.lines() {
-        if line.trim().is_empty() {
-            continue;
-        }
+    output.lines().filter_map(parse_commit_tree_line).collect()
+}
 
-        if let Some(pos) = line.find("<|") {
-            let (graph, rest) = line.split_at(pos);
-            let rest = &rest[2..]; // skip "<|"
-            let parts: Vec<&str> = rest.split('|').collect();
+pub fn parse_commit_tree_line(line: &str) -> Option<CommitTreeItem> {
+    if line.trim().is_empty() {
+        return None;
+    }
 
-            if parts.len() >= 4 {
-                let hash_and_refs = parts[0];
-                let (hash, refs) = if let Some(p) = hash_and_refs.find('(') {
-                    (
-                        hash_and_refs[..p].trim().to_string(),
-                        hash_and_refs[p..].trim().to_string(),
-                    )
-                } else {
-                    (hash_and_refs.to_string(), String::new())
-                };
+    if let Some(pos) = line.find("<|") {
+        let (graph, rest) = line.split_at(pos);
+        let rest = &rest[2..]; // skip "<|"
+        let parts: Vec<&str> = rest.split('|').collect();
 
-                items.push(CommitTreeItem {
-                    graph: graph.to_string(),
-                    hash,
-                    branch_info: refs,
-                    date: parts[1].to_string(),
-                    author: parts[2].to_string(),
-                    message: parts[3..].join("|"),
-                });
+        if parts.len() >= 4 {
+            let hash_and_refs = parts[0];
+            let (hash, refs) = if let Some(p) = hash_and_refs.find('(') {
+                (
+                    hash_and_refs[..p].trim().to_string(),
+                    hash_and_refs[p..].trim().to_string(),
+                )
             } else {
-                // Should not happen with this format, but fallback
-                items.push(CommitTreeItem {
-                    graph: line.to_string(),
-                    hash: String::new(),
-                    branch_info: String::new(),
-                    date: String::new(),
-                    author: String::new(),
-                    message: String::new(),
-                });
-            }
+                (hash_and_refs.to_string(), String::new())
+            };
+
+            Some(CommitTreeItem {
+                graph: graph.to_string(),
+                hash,
+                branch_info: refs,
+                date: parts[1].to_string(),
+                author: parts[2].to_string(),
+                message: parts[3..].join("|"),
+            })
         } else {
-            // Lines with only graph parts
-            items.push(CommitTreeItem {
+            Some(CommitTreeItem {
                 graph: line.to_string(),
                 hash: String::new(),
                 branch_info: String::new(),
                 date: String::new(),
                 author: String::new(),
                 message: String::new(),
-            });
+            })
         }
+    } else {
+        Some(CommitTreeItem {
+            graph: line.to_string(),
+            hash: String::new(),
+            branch_info: String::new(),
+            date: String::new(),
+            author: String::new(),
+            message: String::new(),
+        })
     }
-    items
 }
 
 pub fn get_commit_details(path: &str, hash: &str) -> (String, String) {
@@ -115,4 +113,51 @@ pub fn get_commit_details(path: &str, hash: &str) -> (String, String) {
     };
 
     (stats, diff)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_commit_tree_line_with_branch_info() {
+        let line = "* | <|a1b2c3d (HEAD -> main, origin/main)|2026-09-16|Alice|feat: add awesome feature";
+        let item = parse_commit_tree_line(line).unwrap();
+
+        assert_eq!(item.graph, "* | ");
+        assert_eq!(item.hash, "a1b2c3d");
+        assert_eq!(item.branch_info, "(HEAD -> main, origin/main)");
+        assert_eq!(item.date, "2026-09-16");
+        assert_eq!(item.author, "Alice");
+        assert_eq!(item.message, "feat: add awesome feature");
+    }
+
+    #[test]
+    fn test_parse_commit_tree_line_without_branch_info() {
+        let line = "* <|e4f5g6h|2026-09-15|Bob|fix: handle edge case";
+        let item = parse_commit_tree_line(line).unwrap();
+
+        assert_eq!(item.graph, "* ");
+        assert_eq!(item.hash, "e4f5g6h");
+        assert_eq!(item.branch_info, "");
+        assert_eq!(item.date, "2026-09-15");
+        assert_eq!(item.author, "Bob");
+        assert_eq!(item.message, "fix: handle edge case");
+    }
+
+    #[test]
+    fn test_parse_commit_tree_line_graph_only() {
+        let line = "| \\";
+        let item = parse_commit_tree_line(line).unwrap();
+
+        assert_eq!(item.graph, "| \\");
+        assert_eq!(item.hash, "");
+        assert_eq!(item.message, "");
+    }
+
+    #[test]
+    fn test_parse_commit_tree_line_empty() {
+        assert_eq!(parse_commit_tree_line(""), None);
+        assert_eq!(parse_commit_tree_line("   \n"), None);
+    }
 }

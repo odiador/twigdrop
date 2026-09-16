@@ -22,20 +22,21 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
             }
 
             if *app.ui.current_mode() == AppMode::Diff {
-                let v_start = (term_rows as f32 * 0.05) as usize;
-                let v_end = (term_rows as f32 * 0.95) as usize;
-                let h_start = (term_cols as f32 * 0.05) as usize;
-                let h_end = (term_cols as f32 * 0.95) as usize;
+                let area = ratatui::layout::Rect::new(0, 0, term_cols as u16, term_rows as u16);
+                let diff_layout = crate::ui::layout::calculate_diff_layout(area);
 
-                if row < v_start || row > v_end || col < h_start || col > h_end {
+                if row < diff_layout.inner_area.top() as usize
+                    || row >= diff_layout.inner_area.bottom() as usize
+                    || col < diff_layout.inner_area.left() as usize
+                    || col >= diff_layout.inner_area.right() as usize
+                {
                     app.ui.pop_modal();
                     return;
                 }
 
-                let sidebar_width = ((h_end - h_start) as f32 * 0.25) as usize;
-                if col < h_start + sidebar_width {
+                if col < diff_layout.files_list_area.right() as usize {
                     app.ui.diff_panel = FilePanel::Directory;
-                    let list_v_start = v_start + 1;
+                    let list_v_start = diff_layout.files_list_area.top() as usize + 1;
                     if row > list_v_start {
                         let idx = row - list_v_start - 1;
                         if idx < app.repo.diff_files.len() {
@@ -209,26 +210,13 @@ fn handle_modal_click(
 ) -> bool {
     let cur = app.ui.current_mode().clone();
 
-    // Modal areas based on percentages in screens.rs
-    let (v_start_pct, v_size_pct) = match &cur {
-        AppMode::Filter => (0.20, 0.60),
-        AppMode::Manage | AppMode::Message(_) | AppMode::ConfirmDelete(_) => (0.30, 0.40),
-        AppMode::Settings => (0.25, 0.50),
-        AppMode::Help => (0.0, 1.0),
-        _ => (0.30, 0.40),
-    };
+    let area = ratatui::layout::Rect::new(0, 0, term_cols as u16, term_rows as u16);
+    let modal_rect = crate::ui::layout::calculate_modal_rect(&cur, area);
 
-    let h_start_pct = match &cur {
-        AppMode::Filter | AppMode::Manage => 0.30,
-        AppMode::Settings => 0.20,
-        AppMode::Message(_) | AppMode::Help | AppMode::ConfirmDelete(_) => 0.15,
-        _ => 0.30,
-    };
-
-    let min_row = (term_rows as f32 * v_start_pct) as usize;
-    let max_row = min_row + (term_rows as f32 * v_size_pct) as usize;
-    let min_col = (term_cols as f32 * h_start_pct) as usize;
-    let max_col = term_cols.saturating_sub(min_col);
+    let min_row = modal_rect.top() as usize;
+    let max_row = modal_rect.bottom() as usize;
+    let min_col = modal_rect.left() as usize;
+    let max_col = modal_rect.right() as usize;
 
     // [X] detection (Top right corner of the modal)
     if row == min_row && col > max_col.saturating_sub(6) && col <= max_col {
