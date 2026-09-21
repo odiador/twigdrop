@@ -60,8 +60,20 @@ pub fn get_current_branch(path: &str) -> String {
 
 #[allow(dead_code)]
 pub fn is_merging(path: &str) -> bool {
-    let git_dir = std::path::Path::new(path).join(".git");
-    git_dir.join("MERGE_HEAD").exists()
+    if let Some(git_dir) = crate::git::commands::get_git_dir(path) {
+        git_dir.join("MERGE_HEAD").exists()
+    } else {
+        false
+    }
+}
+
+#[allow(dead_code)]
+pub fn is_rebasing(path: &str) -> bool {
+    if let Some(git_dir) = crate::git::commands::get_git_dir(path) {
+        git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists()
+    } else {
+        false
+    }
 }
 
 #[allow(dead_code)]
@@ -223,5 +235,17 @@ mod tests {
 
         let line3 = "stash@{2}: custom stash without on";
         assert_eq!(parse_stashed_branch_line(line3), None);
+    }
+
+    #[test]
+    fn test_is_merging_and_rebasing() {
+        // In a normal repo state, neither merging nor rebasing is active
+        assert!(!is_merging("."));
+        assert!(!is_rebasing("."));
+
+        // In a non-git dir, neither should panic, both should return false
+        let temp = tempfile::tempdir().unwrap();
+        assert!(!is_merging(temp.path().to_str().unwrap()));
+        assert!(!is_rebasing(temp.path().to_str().unwrap()));
     }
 }

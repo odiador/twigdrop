@@ -177,10 +177,9 @@ pub fn move_file_changes_forward(
 pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
     use std::io::Write;
 
-    // Fallback: we write a script that git can use as sequence editor
-    let editor_script_path = std::path::Path::new(path)
-        .join(".git")
-        .join("twigdrop-rebase-editor.sh");
+    let git_dir = crate::git::commands::get_git_dir(path)
+        .unwrap_or_else(|| std::path::Path::new(path).join(".git"));
+    let editor_script_path = git_dir.join("twigdrop-rebase-editor.sh");
 
     let mut script_content = String::new();
     script_content.push_str("#!/bin/sh\n");
@@ -200,22 +199,22 @@ pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
             script_content.push_str(&format!(
                 "pick {} {}\n",
                 commit.hash,
-                commit.original_message.replace("'", "'\\''")
+                commit.original_message.replace('\'', "'\\''")
             ));
             let new_msg = commit
                 .new_message
-                .clone()
-                .unwrap_or_else(|| commit.original_message.clone());
+                .as_ref()
+                .unwrap_or(&commit.original_message);
             script_content.push_str(&format!(
                 "x git commit --amend -m '{}'\n",
-                new_msg.replace("'", "'\\''")
+                new_msg.replace('\'', "'\\''")
             ));
         } else {
             script_content.push_str(&format!(
                 "{} {} {}\n",
                 action,
                 commit.hash,
-                commit.original_message.replace("'", "'\\''")
+                commit.original_message.replace('\'', "'\\''")
             ));
         }
     }
@@ -245,6 +244,22 @@ pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
         );
     }
     let _ = std::fs::remove_file(editor_script_path);
+}
+
+#[allow(dead_code)]
+pub fn abort_rebase(path: &str) -> Result<String, String> {
+    match run_git(path, &["rebase", "--abort"]) {
+        Ok(out) => Ok(format!("Rebase aborted successfully.\n{}", out.trim())),
+        Err(e) => Err(format!("Failed to abort rebase: {}", e)),
+    }
+}
+
+#[allow(dead_code)]
+pub fn continue_rebase(path: &str) -> Result<String, String> {
+    match run_git(path, &["rebase", "--continue"]) {
+        Ok(out) => Ok(format!("Rebase continued.\n{}", out.trim())),
+        Err(e) => Err(format!("Failed to continue rebase: {}", e)),
+    }
 }
 
 #[cfg(test)]

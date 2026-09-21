@@ -103,9 +103,9 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
                     return false;
                 }
 
-                let editor_script_path = std::path::Path::new(path)
-                    .join(".git")
-                    .join("twigdrop-squash-editor.sh");
+                let git_dir = crate::git::commands::get_git_dir(path)
+                    .unwrap_or_else(|| std::path::Path::new(path).join(".git"));
+                let editor_script_path = git_dir.join("twigdrop-squash-editor.sh");
 
                 let script_content = format!(
                     "#!/bin/sh\nawk '{{ if ($1 == \"pick\" && match($2, \"^{}\")) {{ $1 = \"squash\" }} print }}' \"$1\" > \"$1.tmp\" && mv \"$1.tmp\" \"$1\"\n",

@@ -29,9 +29,38 @@ pub fn run_git_with_status(path: &str, args: &[&str]) -> Result<(String, i32)> {
     }
 }
 
+use std::path::{Path, PathBuf};
+
+pub fn is_inside_git_work_tree(path: &str) -> bool {
+    match run_git(path, &["rev-parse", "--is-inside-work-tree"]) {
+        Ok(out) => out.trim() == "true",
+        Err(_) => false,
+    }
+}
+
+pub fn get_git_dir(path: &str) -> Option<PathBuf> {
+    match run_git(path, &["rev-parse", "--git-dir"]) {
+        Ok(out) => {
+            let p = Path::new(out.trim());
+            if p.is_absolute() {
+                Some(p.to_path_buf())
+            } else {
+                Some(Path::new(path).join(p))
+            }
+        }
+        Err(_) => None,
+    }
+}
+
 pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
+    get_commit_tree_limited(path, 300)
+}
+
+pub fn get_commit_tree_limited(path: &str, limit: usize) -> Vec<CommitTreeItem> {
+    let limit_str = format!("--max-count={}", limit);
     let args = [
         "log",
+        &limit_str,
         "--graph",
         "--all",
         "--color=never",
@@ -159,5 +188,32 @@ mod tests {
     fn test_parse_commit_tree_line_empty() {
         assert_eq!(parse_commit_tree_line(""), None);
         assert_eq!(parse_commit_tree_line("   \n"), None);
+    }
+
+    #[test]
+    fn test_is_inside_git_work_tree() {
+        // Current directory is a git repo
+        assert!(is_inside_git_work_tree("."));
+
+        // Temp dir is not a git repo
+        let temp = tempfile::tempdir().unwrap();
+        assert!(!is_inside_git_work_tree(temp.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn test_get_git_dir() {
+        // Current repo has a valid git dir that exists
+        let git_dir = get_git_dir(".").expect("Should resolve git-dir for current repo");
+        assert!(git_dir.exists());
+
+        // Temp dir returns None
+        let temp = tempfile::tempdir().unwrap();
+        assert!(get_git_dir(temp.path().to_str().unwrap()).is_none());
+    }
+
+    #[test]
+    fn test_get_commit_tree_limited() {
+        let tree = get_commit_tree_limited(".", 2);
+        assert!(tree.len() <= 2);
     }
 }

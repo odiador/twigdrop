@@ -45,6 +45,14 @@ async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
     let path = args.get(1).cloned().unwrap_or_else(|| ".".to_string());
 
+    if !git::commands::is_inside_git_work_tree(&path) {
+        eprintln!(
+            "fatal: not a git repository (or any of the parent directories): {}",
+            path
+        );
+        std::process::exit(1);
+    }
+
     let branches = git::build_branches(&path);
     let current_branch = git::get_current_branch(&path);
 
@@ -129,33 +137,76 @@ async fn main() -> Result<()> {
     std::process::exit(0);
 }
 
+fn process_event(app: &mut App, event: &Event, path: &str) -> bool {
+    match event {
+        Event::Key(key) => handlers::keyboard::handle_keyboard(app, *key, path),
+        Event::Mouse(mouse) => {
+            handlers::mouse::handle_mouse(app, *mouse, path);
+            false
+        }
+        _ => false,
+    }
+}
+
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut App,
     path: &str,
     event_rx: &mut mpsc::Receiver<Event>,
 ) -> io::Result<()> {
+    // Initial draw
+    terminal.draw(|f| ui::draw(f, app, path))?;
+
     loop {
-        while let Ok(event) = event_rx.try_recv() {
-            match &event {
-                Event::Key(key) if handlers::keyboard::handle_keyboard(app, *key, path) => {
+        let has_animation = app.config.enable_animations && app.ui.snap_animation.is_some();
+        let mut should_draw;
+
+        if has_animation {
+            // Active animation: drain pending events or tick with ~60 FPS timeout
+            tokio::select! {
+                maybe_event = event_rx.recv() => {
+                    if let Some(event) = maybe_event {
+                        if process_event(app, &event, path) {
+                            return Ok(());
+                        }
+                        app.update(event);
+                        should_draw = true;
+                    } else {
+                        return Ok(());
+                    }
+                }
+                _ = tokio::time::sleep(std::time::Duration::from_millis(16)) => {
+                    should_draw = true;
+                }
+            }
+        } else {
+            // Idle state: wait for events reactively without burning CPU cycles
+            if let Some(event) = event_rx.recv().await {
+                if process_event(app, &event, path) {
                     return Ok(());
                 }
-                Event::Mouse(mouse) => {
-                    handlers::mouse::handle_mouse(app, *mouse, path);
-                }
-                _ => {}
+                app.update(event);
+                should_draw = true;
+            } else {
+                return Ok(());
+            }
+        }
+
+        // Drain any burst events that queued up during processing
+        while let Ok(event) = event_rx.try_recv() {
+            if process_event(app, &event, path) {
+                return Ok(());
             }
             app.update(event);
+            should_draw = true;
         }
 
-        if app.ui.needs_clear {
-            terminal.clear()?;
-            app.ui.needs_clear = false;
+        if should_draw {
+            if app.ui.needs_clear {
+                terminal.clear()?;
+                app.ui.needs_clear = false;
+            }
+            terminal.draw(|f| ui::draw(f, app, path))?;
         }
-
-        terminal.draw(|f| ui::draw(f, app, path))?;
-
-        tokio::time::sleep(std::time::Duration::from_millis(8)).await;
     }
 }

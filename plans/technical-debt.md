@@ -42,6 +42,14 @@ Priority order:
 - [x] Removed panic triggers (`.expect()`, `.unwrap()`) from `src/utils/config.rs` using safe fallback and `entry` API, covered by unit tests.
 - [x] Zero clippy warnings across binary and all targets (`cargo clippy --all-targets`).
 
+## 5. Architectural gaps & stability (DONE — 2026-09-21)
+
+- [x] **Fail-fast startup**: Validates `is_inside_git_work_tree` before enabling raw mode or alternate screen; prints clear fatal error and exits cleanly when run outside a git repository.
+- [x] **Git Worktree & Submodule support**: Replaced hardcoded `.join(".git")` with dynamic `get_git_dir` (`git rev-parse --git-dir`), enabling seamless execution in git worktrees and submodules across rebase, squash, and merge checks.
+- [x] **Event-driven render loop (CPU/Battery optimization)**: Eliminated the 8ms (~120 FPS) busy polling loop in `run_app`. The app now idles at 0% CPU waiting reactively on events, falling back to 60 FPS tick only while snap animations are actively running.
+- [x] **Bounded commit graph**: Added `--max-count=300` in `get_commit_tree` to prevent freezing the UI thread when opening large repositories.
+- [x] **Rebase recovery helpers**: Added `abort_rebase` (`git rebase --abort`) and `continue_rebase` in `src/actions/commands.rs`.
+
 ## Out of scope for this plan
 
 Feature work from `docs/IMPROVEMENTS.md` (branch protection, backups, search mode, etc.) — that's roadmap, not debt. Don't mix the two in the same PR.
