@@ -161,7 +161,8 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
 
     // 5. Modals and Overlays
     let is_modal = !app.ui.modal_stack.is_empty();
-    if is_modal {
+    let is_overlay_modal = matches!(app.ui.current_mode(), AppMode::CommandPalette(_) | AppMode::MainMenu);
+    if is_modal && !is_overlay_modal {
         let overlay = Rect::new(0, 0, f.area().width, f.area().height);
         f.render_widget(ratatui::widgets::Clear, overlay);
     }
@@ -191,3 +192,136 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         _ => {}
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Branch, BranchStatus, MergeStatus};
+    use crate::state::ui::CommandPaletteState;
+    use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
+    use tokio::sync::mpsc;
+
+    fn create_test_app() -> App {
+        let (tx, _) = mpsc::channel(1);
+        let (ai_tx, _) = mpsc::channel(1);
+        let (conflict_tx, _) = mpsc::channel(1);
+        let branch = Branch {
+            name: "main".to_string(),
+            status: vec![BranchStatus::Merged],
+            merge_status: MergeStatus::Clean,
+            age: "1d ago".to_string(),
+            author: "Tester".to_string(),
+            commit_date: "2026-10-01".to_string(),
+            ahead_count: 0,
+            behind_count: 0,
+        };
+        let mut app = App::new(".", vec![branch], "main".to_string(), tx, ai_tx, conflict_tx);
+        app.refresh_filtered_branches();
+        app
+    }
+
+    #[test]
+    fn test_ui_draw_normal_table() {
+        let mut app = create_test_app();
+        let backend = TestBackend::new(120, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|f| draw(f, &mut app, ".")).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("Branches"));
+        assert!(content.contains("main"));
+    }
+
+    #[test]
+    fn test_ui_draw_inspector_drawer() {
+        let mut app = create_test_app();
+        app.ui.show_inspector_drawer = true;
+
+        let backend = TestBackend::new(120, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|f| draw(f, &mut app, ".")).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("Inspector"));
+        assert!(content.contains("Background Workers"));
+    }
+
+    #[test]
+    fn test_ui_draw_sidebar_drawer() {
+        let mut app = create_test_app();
+        app.ui.show_nav_sidebar = true;
+
+        let backend = TestBackend::new(120, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|f| draw(f, &mut app, ".")).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("Menu"));
+        assert!(content.contains("Views"));
+    }
+
+    #[test]
+    fn test_ui_draw_command_palette_overlay() {
+        let mut app = create_test_app();
+        app.ui.push_modal(AppMode::CommandPalette(CommandPaletteState {
+            query: String::new(),
+            selected: 0,
+            actions: vec![("Test Action".to_string(), crate::state::ui::CommandAction::OpenSettings)],
+        }));
+
+        let backend = TestBackend::new(120, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|f| draw(f, &mut app, ".")).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("COMMAND PALETTE"));
+        assert!(content.contains("Test Action"));
+
+        // Verify dimming on a corner cell outside the modal window
+        let corner_cell = &buffer[(0, 0)];
+        assert_eq!(corner_cell.bg, ratatui::style::Color::Rgb(17, 17, 27));
+        assert_eq!(corner_cell.fg, ratatui::style::Color::Rgb(88, 91, 112));
+    }
+}
+
