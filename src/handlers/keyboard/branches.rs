@@ -121,6 +121,26 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
             app.refresh_filtered_branches();
             false
         }
+        KeyCode::Char('s') => {
+            app.cycle_branch_sort();
+            false
+        }
+        KeyCode::Right | KeyCode::Char('l') => {
+            if app.ui.show_nav_sidebar {
+                app.ui.show_nav_sidebar = false;
+            } else {
+                app.ui.show_inspector_drawer = !app.ui.show_inspector_drawer;
+            }
+            false
+        }
+        KeyCode::Left | KeyCode::Char('h') => {
+            if app.ui.show_inspector_drawer {
+                app.ui.show_inspector_drawer = false;
+            } else {
+                app.ui.show_nav_sidebar = !app.ui.show_nav_sidebar;
+            }
+            false
+        }
         KeyCode::Char('m') | KeyCode::Enter => handle_enter_or_selection(app, path),
         KeyCode::Char('j') | KeyCode::Down => {
             app.next(path);

@@ -2,8 +2,11 @@ pub mod branches;
 pub mod commits;
 pub mod diff;
 pub mod files;
+pub mod inspector;
 pub mod modals;
+pub mod sidebar;
 pub mod stashes;
+
 
 pub use branches::{
     render_confirm_delete, render_create_branch, render_filter, render_main_list, render_manage,

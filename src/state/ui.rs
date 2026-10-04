@@ -22,6 +22,14 @@ pub enum FilePanel {
     Preview,
 }
 
+#[derive(PartialEq, Debug, Clone, Copy, Default)]
+pub enum BranchSortMode {
+    #[default]
+    Recent,
+    PrunableFirst,
+    Alphabetical,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum DatePickerField {
     Year,
@@ -181,6 +189,10 @@ pub struct UiState {
     pub show_terminal: bool,
     pub active_panel: FilePanel,
     pub diff_panel: FilePanel,
+    pub branch_sort_mode: BranchSortMode,
+    pub show_inspector_drawer: bool,
+    pub show_nav_sidebar: bool,
+    pub nav_sidebar_selected: usize,
 
     // Interaction State
     pub alt_pressed: bool,
@@ -231,6 +243,10 @@ impl UiState {
             show_terminal: false,
             active_panel: FilePanel::Directory,
             diff_panel: FilePanel::Directory,
+            branch_sort_mode: BranchSortMode::Recent,
+            show_inspector_drawer: false,
+            show_nav_sidebar: false,
+            nav_sidebar_selected: 0,
             alt_pressed: false,
             shift_pressed: false,
             last_click_time: Instant::now(),
@@ -328,3 +344,26 @@ impl UiState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ui_state_defaults() {
+        let state = UiState::new(PrimaryMode::Branches, 30);
+        assert_eq!(state.branch_sort_mode, BranchSortMode::Recent);
+        assert!(!state.show_inspector_drawer);
+        assert!(!state.show_nav_sidebar);
+    }
+
+    #[test]
+    fn test_drawer_state_toggling() {
+        let mut state = UiState::new(PrimaryMode::Branches, 30);
+        state.show_inspector_drawer = true;
+        assert!(state.show_inspector_drawer);
+        state.show_inspector_drawer = false;
+        assert!(!state.show_inspector_drawer);
+    }
+}
+

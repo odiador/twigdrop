@@ -1,0 +1,154 @@
+use ratatui::{
+    Frame,
+    layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph},
+};
+
+use crate::app::App;
+use crate::state::ui::PrimaryMode;
+
+pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
+    let block = Block::default()
+        .title(" ◀ Menu [→/Esc] ")
+        .title_style(
+            Style::default()
+                .fg(Color::Rgb(203, 166, 247))
+                .add_modifier(Modifier::BOLD),
+        )
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Rgb(69, 71, 90)));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(8), // Views
+            Constraint::Length(6), // Filter scopes
+            Constraint::Min(4),    // Worktrees
+        ])
+        .split(inner);
+
+    // 1. Views
+    let views = [
+        ("🌿 Branches", PrimaryMode::Branches),
+        ("📁 Changed Files", PrimaryMode::Files),
+        ("📜 Commit Graph", PrimaryMode::Commits),
+        ("🗃️ Stashes", PrimaryMode::Stashes),
+    ];
+
+    let mut view_lines = vec![];
+    for (i, (label, mode)) in views.iter().enumerate() {
+        let is_active = app.ui.primary_mode == *mode;
+        let is_hovered = app.ui.nav_sidebar_selected == i;
+
+        let style = if is_hovered {
+            Style::default()
+                .bg(Color::Rgb(49, 50, 68))
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        } else if is_active {
+            Style::default()
+                .fg(Color::Rgb(137, 180, 250))
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Rgb(166, 173, 200))
+        };
+
+        let prefix = if is_hovered {
+            "▎ "
+        } else if is_active {
+            "● "
+        } else {
+            "  "
+        };
+        view_lines.push(Line::from(vec![
+            Span::styled(prefix, style),
+            Span::styled(*label, style),
+        ]));
+    }
+
+    f.render_widget(
+        Paragraph::new(view_lines).block(
+            Block::default()
+                .title(" Views ")
+                .title_style(Style::default().fg(Color::Gray))
+                .borders(Borders::BOTTOM)
+                .border_style(Style::default().fg(Color::Rgb(49, 50, 68))),
+        ),
+        chunks[0],
+    );
+
+    // 2. Filter Scopes
+    let filters = ["All Branches", "Prunable (Gone)", "Protected Only"];
+    let mut filter_lines = vec![];
+    for (idx, name) in filters.iter().enumerate() {
+        let is_hovered = app.ui.nav_sidebar_selected == (4 + idx);
+        let style = if is_hovered {
+            Style::default()
+                .bg(Color::Rgb(49, 50, 68))
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Rgb(166, 173, 200))
+        };
+        let prefix = if is_hovered { "▎ " } else { "  " };
+        filter_lines.push(Line::from(vec![
+            Span::styled(prefix, style),
+            Span::styled(*name, style),
+        ]));
+    }
+
+    f.render_widget(
+        Paragraph::new(filter_lines).block(
+            Block::default()
+                .title(" Filters ")
+                .title_style(Style::default().fg(Color::Gray))
+                .borders(Borders::BOTTOM)
+                .border_style(Style::default().fg(Color::Rgb(49, 50, 68))),
+        ),
+        chunks[1],
+    );
+
+    // 3. Worktrees List
+    let mut worktree_lines = vec![];
+    let wt_out = crate::git::commands::run_git(".", &["worktree", "list", "--porcelain"])
+        .unwrap_or_default();
+    let mut current_wt = String::new();
+    for line in wt_out.lines() {
+        if let Some(wt) = line.strip_prefix("worktree ") {
+            current_wt = std::path::Path::new(wt)
+                .file_name()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| wt.to_string());
+        } else if let Some(branch) = line.strip_prefix("branch refs/heads/") {
+            worktree_lines.push(Line::from(vec![
+                Span::styled("• ", Style::default().fg(Color::Green)),
+                Span::styled(current_wt.clone(), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!(" [{}]", branch),
+                    Style::default().fg(Color::Rgb(137, 220, 235)),
+                ),
+            ]));
+        }
+    }
+
+    if worktree_lines.is_empty() {
+        worktree_lines.push(Line::from(vec![
+            Span::styled("• ", Style::default().fg(Color::Green)),
+            Span::styled("main (default)", Style::default().fg(Color::White)),
+        ]));
+    }
+
+    f.render_widget(
+        Paragraph::new(worktree_lines).block(
+            Block::default()
+                .title(" Worktrees ")
+                .title_style(Style::default().fg(Color::Gray)),
+        ),
+        chunks[2],
+    );
+}

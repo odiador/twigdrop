@@ -216,8 +216,17 @@ impl App {
         }
     }
 
+    pub fn cycle_branch_sort(&mut self) {
+        self.ui.branch_sort_mode = match self.ui.branch_sort_mode {
+            crate::state::ui::BranchSortMode::Recent => crate::state::ui::BranchSortMode::PrunableFirst,
+            crate::state::ui::BranchSortMode::PrunableFirst => crate::state::ui::BranchSortMode::Alphabetical,
+            crate::state::ui::BranchSortMode::Alphabetical => crate::state::ui::BranchSortMode::Recent,
+        };
+        self.refresh_filtered_branches();
+    }
+
     pub fn refresh_filtered_branches(&mut self) {
-        self.ui.filtered_indices = self
+        let mut indices: Vec<usize> = self
             .repo
             .branches
             .iter()
@@ -241,6 +250,50 @@ impl App {
             })
             .map(|(i, _)| i)
             .collect();
+
+        let current_branch = &self.repo.current_branch;
+        let sort_mode = self.ui.branch_sort_mode;
+        let branches = &self.repo.branches;
+
+        indices.sort_by(|&a_idx, &b_idx| {
+            let a = &branches[a_idx];
+            let b = &branches[b_idx];
+
+            let a_is_pseudo = a.name.starts_with('*');
+            let b_is_pseudo = b.name.starts_with('*');
+            if a_is_pseudo != b_is_pseudo {
+                return b_is_pseudo.cmp(&a_is_pseudo);
+            }
+            if a_is_pseudo && b_is_pseudo {
+                return a_idx.cmp(&b_idx);
+            }
+
+            let a_is_current = a.name == *current_branch;
+            let b_is_current = b.name == *current_branch;
+            if a_is_current != b_is_current {
+                return b_is_current.cmp(&a_is_current);
+            }
+
+            match sort_mode {
+                crate::state::ui::BranchSortMode::Recent => {
+                    b.commit_date.cmp(&a.commit_date).then_with(|| a.name.cmp(&b.name))
+                }
+                crate::state::ui::BranchSortMode::PrunableFirst => {
+                    let a_prunable = a.status.contains(&crate::models::BranchStatus::Gone)
+                        && !crate::actions::commands::is_protected_branch(&a.name);
+                    let b_prunable = b.status.contains(&crate::models::BranchStatus::Gone)
+                        && !crate::actions::commands::is_protected_branch(&b.name);
+                    b_prunable
+                        .cmp(&a_prunable)
+                        .then_with(|| b.commit_date.cmp(&a.commit_date))
+                }
+                crate::state::ui::BranchSortMode::Alphabetical => {
+                    a.name.to_lowercase().cmp(&b.name.to_lowercase())
+                }
+            }
+        });
+
+        self.ui.filtered_indices = indices;
 
         let max = self.ui.filtered_indices.len().saturating_sub(1);
         if self.ui.selected_branch_idx > max {

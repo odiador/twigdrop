@@ -79,7 +79,9 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 
     // 2. Global Shortcuts across normal views
     match key.code {
-        KeyCode::Char('p') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+        KeyCode::Char('p') | KeyCode::Char('k')
+            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
             app.ui
                 .push_modal(AppMode::CommandPalette(CommandPaletteState {
                     query: String::new(),
@@ -103,6 +105,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             return false;
         }
         KeyCode::Esc => {
+            if app.ui.show_inspector_drawer || app.ui.show_nav_sidebar {
+                app.ui.show_inspector_drawer = false;
+                app.ui.show_nav_sidebar = false;
+                return false;
+            }
             app.ui.push_modal(AppMode::MainMenu);
             app.ui.main_menu_state.selected = 0;
             return false;

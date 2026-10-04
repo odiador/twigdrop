@@ -12,9 +12,32 @@ use crate::state::ui::AppMode;
 use crate::ui::components::get_status_icons;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
+    let (table_area, maybe_inspector, maybe_sidebar) = if app.ui.show_inspector_drawer {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(65), Constraint::Percentage(35)])
+            .split(area);
+        (chunks[0], Some(chunks[1]), None)
+    } else if app.ui.show_nav_sidebar {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(25), Constraint::Percentage(75)])
+            .split(area);
+        (chunks[1], None, Some(chunks[0]))
+    } else {
+        (area, None, None)
+    };
+
+    if let Some(sidebar_area) = maybe_sidebar {
+        super::sidebar::render_sidebar_menu(f, sidebar_area, app);
+    }
+    if let Some(inspector_area) = maybe_inspector {
+        super::inspector::render_inspector_drawer(f, inspector_area, app);
+    }
+
     let filtered_indices = app.ui.filtered_indices.clone();
     let branches_len = filtered_indices.len();
-    let inner_height = area.height.saturating_sub(4) as usize;
+    let inner_height = table_area.height.saturating_sub(4) as usize;
 
     if inner_height == 0 {
         return;
@@ -52,13 +75,13 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
         app.ui
             .branch_screen_positions
-            .push((actual_idx, area.y + 3 + i as u16));
+            .push((actual_idx, table_area.y + 3 + i as u16));
 
         let (icons, color) = get_status_icons(&b.status);
         let (merge_text, merge_color) =
             crate::ui::components::get_merge_status_display(&b.merge_status);
 
-        let current_tag = if is_current { " (current)" } else { "" };
+        let current_tag = if is_current { " (HEAD)" } else { "" };
         let is_protected = crate::actions::commands::is_protected_branch(&b.name);
         let is_bulk_selected = app.ui.bulk_selected.contains(&b.name);
         let checkbox = if is_protected {
@@ -98,49 +121,45 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         let mut row_style = Style::default().fg(Color::Rgb(205, 214, 244));
         let mut branch_style = Style::default().fg(color);
         if is_current {
-            branch_style = branch_style.add_modifier(Modifier::BOLD).fg(Color::White);
+            branch_style = branch_style.add_modifier(Modifier::BOLD).fg(Color::Rgb(166, 227, 161));
         }
 
         if selected {
-            row_style = row_style.bg(Color::White).fg(Color::Black);
-            branch_style = branch_style.fg(Color::Black);
+            row_style = row_style.bg(Color::Rgb(49, 50, 68));
         }
 
+        let checkbox_prefix = if selected {
+            format!("▎{}", checkbox)
+        } else {
+            format!(" {}", checkbox)
+        };
+
+        let checkbox_style = if is_protected {
+            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+        } else if is_bulk_selected {
+            Style::default().fg(Color::Rgb(166, 227, 161)).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::Rgb(124, 128, 156))
+        };
+
         let cells = vec![
-            Cell::from(checkbox).style(if selected {
-                Style::default().fg(Color::Black)
-            } else if is_protected {
-                Style::default().fg(Color::Yellow)
-            } else {
-                Style::default().fg(Color::Rgb(124, 128, 156))
-            }),
+            Cell::from(checkbox_prefix).style(checkbox_style),
             Cell::from(Line::from(vec![
-                Span::styled(
-                    format!("{:<4} ", icons),
-                    if selected {
-                        Style::default().fg(Color::Black)
-                    } else {
-                        Style::default().fg(color)
-                    },
-                ),
+                Span::styled(format!("{:<4} ", icons), Style::default().fg(color)),
                 Span::styled(branch_name, branch_style),
             ])),
-            Cell::from(b.age.clone()),
+            Cell::from(b.age.clone()).style(Style::default().fg(Color::Rgb(249, 226, 175))),
             Cell::from(status_str),
-            Cell::from(merge_text).style(if selected {
-                Style::default().fg(Color::Black)
-            } else {
-                Style::default().fg(merge_color)
-            }),
-            Cell::from(type_str),
-            Cell::from(author_str),
+            Cell::from(merge_text).style(Style::default().fg(merge_color)),
+            Cell::from(type_str).style(Style::default().fg(Color::Rgb(147, 153, 178))),
+            Cell::from(author_str).style(Style::default().fg(Color::Rgb(166, 173, 200))),
         ];
 
         rows.push(Row::new(cells).style(row_style));
     }
 
     let widths = [
-        Constraint::Length(4),
+        Constraint::Length(5),
         Constraint::Percentage(35),
         Constraint::Length(12),
         Constraint::Length(10),
@@ -148,6 +167,12 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         Constraint::Length(8),
         Constraint::Percentage(25),
     ];
+
+    let sort_hint = match app.ui.branch_sort_mode {
+        crate::state::ui::BranchSortMode::Recent => "Recent ▾ (s)",
+        crate::state::ui::BranchSortMode::PrunableFirst => "Prunable ▾ (s)",
+        crate::state::ui::BranchSortMode::Alphabetical => "A-Z ▾ (s)",
+    };
 
     let table = Table::new(rows, widths)
         .header(
@@ -162,21 +187,25 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             ])
             .style(
                 Style::default()
-                    .fg(Color::Rgb(124, 128, 156))
+                    .fg(Color::Rgb(147, 153, 178))
                     .add_modifier(Modifier::BOLD),
             )
             .bottom_margin(1),
         )
         .block(
             Block::default()
+                .title(Line::from(vec![
+                    Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
+                    Span::styled(format!("[{}/{}] • Sort: {} • [→] Inspector • [←] Sidebar ", branch_items_to_show, branches_len, sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
+                ]))
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Rgb(74, 79, 106))),
         );
 
     if app.ui.current_mode() == &AppMode::Diff {
-        super::diff::render_diff_overlay(f, area, app);
+        super::diff::render_diff_overlay(f, table_area, app);
     } else {
-        f.render_widget(table, area);
+        f.render_widget(table, table_area);
     }
 }
 

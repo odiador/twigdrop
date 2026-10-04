@@ -89,3 +89,35 @@ pub fn centered_rect(
         ])
         .split(popup_layout[1])[1]
 }
+
+pub fn apply_dimmed_backdrop(buf: &mut ratatui::buffer::Buffer, area: ratatui::layout::Rect) {
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            let cell = &mut buf[(x, y)];
+            cell.set_fg(Color::Rgb(88, 91, 112));
+            cell.set_bg(Color::Rgb(17, 17, 27));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::buffer::Buffer;
+    use ratatui::layout::Rect;
+
+    #[test]
+    fn test_apply_dimmed_backdrop() {
+        let area = Rect::new(0, 0, 5, 5);
+        let mut buf = Buffer::empty(area);
+        buf[(2, 2)].set_char('A').set_fg(Color::White).set_bg(Color::Black);
+
+        apply_dimmed_backdrop(&mut buf, area);
+
+        assert_eq!(buf[(2, 2)].symbol(), "A");
+        assert_eq!(buf[(2, 2)].fg, Color::Rgb(88, 91, 112));
+        assert_eq!(buf[(2, 2)].bg, Color::Rgb(17, 17, 27));
+    }
+}
+
+
