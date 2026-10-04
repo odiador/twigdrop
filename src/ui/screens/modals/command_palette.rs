@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::state::ui::CommandPaletteState;
 
-pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
+pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState, locale: &crate::i18n::Locale) {
     let full_area = f.area();
     // 1. Dim the underlying terminal screen without clearing it
     crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
@@ -30,7 +30,7 @@ pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
     let input_block = Block::default()
         .title(Line::from(vec![
             Span::styled(
-                " ⚡ COMMAND PALETTE ",
+                format!(" ⚡ {} ", locale.modals.command_palette_title),
                 Style::default()
                     .fg(Color::Rgb(203, 166, 247))
                     .add_modifier(Modifier::BOLD),
@@ -53,7 +53,7 @@ pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                "Type a command or search actions...",
+                locale.modals.command_palette_placeholder,
                 Style::default().fg(Color::Rgb(108, 112, 134)),
             ),
             Span::styled("▌", Style::default().fg(Color::Rgb(203, 166, 247))),
@@ -160,7 +160,7 @@ pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " Navigate   ",
+            format!(" {}   ", locale.common.select),
             Style::default().fg(Color::Rgb(147, 153, 178)),
         ),
         Span::styled(
@@ -170,7 +170,7 @@ pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " Execute   ",
+            format!(" {}   ", locale.common.execute),
             Style::default().fg(Color::Rgb(147, 153, 178)),
         ),
         Span::styled(
@@ -179,7 +179,7 @@ pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState) {
                 .fg(Color::Rgb(243, 139, 168))
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" Dismiss", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(format!(" {}", locale.common.cancel), Style::default().fg(Color::Rgb(147, 153, 178))),
     ]);
     f.render_widget(
         Paragraph::new(footer_hints).style(Style::default().bg(Color::Rgb(24, 24, 37))),

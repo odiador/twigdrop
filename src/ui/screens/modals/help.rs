@@ -24,8 +24,9 @@ pub fn render_help(f: &mut Frame, app: &App) {
     render_help_content(f, area, app);
 }
 
-pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
+pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
+    let loc = app.locale();
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -81,10 +82,10 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
         .add_modifier(Modifier::BOLD);
 
     let left_lines = vec![
-        Line::from(Span::styled("⚡ BRANCH OPERATIONS", header_style)),
+        Line::from(Span::styled(loc.modals.help_branch_ops_title, header_style)),
         Line::from(vec![
             Span::styled("  Type [a-z0-9]  ", key_style),
-            Span::styled("Instant filter (Esc to clear)", desc_style),
+            Span::styled(format!("{} {}", loc.branches.type_to_filter, loc.branches.esc_to_clear), desc_style),
         ]),
         Line::from(vec![
             Span::styled("  ↑ / ↓          ", key_style),
@@ -104,7 +105,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
         ]),
         Line::from(vec![
             Span::styled("  Ctrl+P         ", key_style),
-            Span::styled("Prune 'Gone' branches", desc_style),
+            Span::styled(loc.branches.act_checkout_desc, desc_style),
         ]),
         Line::from(vec![
             Span::styled("  Ctrl+D         ", key_style),
@@ -116,7 +117,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
         ]),
         Line::from(vec![
             Span::styled("  Ctrl+C         ", key_style),
-            Span::styled("Create new branch", desc_style),
+            Span::styled(loc.modals.cmd_create_branch, desc_style),
         ]),
         Line::from(vec![
             Span::styled("  Ctrl+F         ", key_style),
@@ -127,7 +128,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
             Span::styled("AI Intelligence Analysis", desc_style),
         ]),
         Line::from(""),
-        Line::from(Span::styled("🏷️  STATUS BADGES", header_style)),
+        Line::from(Span::styled(loc.modals.help_status_badges_title, header_style)),
         Line::from(vec![
             Span::styled(
                 "  ▲ (Red)        ",
@@ -135,7 +136,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
                     .fg(Color::Rgb(243, 139, 168))
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled("Unpushed commits (DANGER: unique)", desc_style),
+            Span::styled(loc.branches.legend_unique_commits, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
@@ -144,7 +145,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
                     .fg(Color::Rgb(147, 153, 178))
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled("Gone (upstream deleted, safe to prune)", desc_style),
+            Span::styled(loc.branches.legend_gone, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
@@ -153,7 +154,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
                     .fg(Color::Rgb(249, 226, 175))
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled("Ahead / Behind remote commits", desc_style),
+            Span::styled(loc.branches.legend_ahead_behind, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
@@ -162,7 +163,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
                     .fg(Color::Rgb(166, 227, 161))
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled("Merged (safe to delete)", desc_style),
+            Span::styled(loc.branches.legend_merged, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
@@ -171,14 +172,14 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::styled("Protected branch (main, dev, master)", desc_style),
+            Span::styled(loc.branches.legend_protected, desc_style),
         ]),
     ];
     f.render_widget(Paragraph::new(left_lines), cols[0]);
 
     // Right Column: Global Shortcuts & Views
     let right_lines = vec![
-        Line::from(Span::styled("🌐 GLOBAL SHORTCUTS", header_style)),
+        Line::from(Span::styled(loc.modals.help_global_shortcuts_title, header_style)),
         Line::from(vec![
             Span::styled("  Ctrl+K         ", key_style),
             Span::styled("Spotlight Command Palette", desc_style),
@@ -228,22 +229,22 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
             Span::styled("Execute Shell command", desc_style),
         ]),
         Line::from(""),
-        Line::from(Span::styled("📂 FILES VIEW SHORTCUTS", header_style)),
+        Line::from(Span::styled(loc.modals.help_files_shortcuts_title, header_style)),
         Line::from(vec![
             Span::styled("  s              ", key_style),
-            Span::styled("Stage / Unstage selected file", desc_style),
+            Span::styled(loc.files.stage_unstage, desc_style),
         ]),
         Line::from(vec![
             Span::styled("  e              ", key_style),
-            Span::styled("Open in Finder / File Explorer", desc_style),
+            Span::styled(loc.files.open_explorer, desc_style),
         ]),
         Line::from(vec![
             Span::styled("  v / a          ", key_style),
-            Span::styled("Open in Primary / Alt IDE", desc_style),
+            Span::styled(loc.files.open_ide, desc_style),
         ]),
         Line::from(vec![
             Span::styled("  [ / ]          ", key_style),
-            Span::styled("Expand / Contract sidebar width", desc_style),
+            Span::styled(loc.files.resize_sidebar, desc_style),
         ]),
     ];
     f.render_widget(Paragraph::new(right_lines), cols[1]);
@@ -261,7 +262,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
                 .fg(Color::Rgb(243, 139, 168))
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled("Close Help  •  ", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(format!("{}  •  ", loc.modals.help_footer_close), Style::default().fg(Color::Rgb(147, 153, 178))),
         Span::styled(
             "twigdrop ",
             Style::default()
@@ -275,7 +276,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
                 .fg(Color::Rgb(245, 194, 231))
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" ❤️ for the community", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(format!(" ❤️ {}", loc.modals.help_footer_credit), Style::default().fg(Color::Rgb(147, 153, 178))),
     ]);
 
     let footer_p = Paragraph::new(footer_line)

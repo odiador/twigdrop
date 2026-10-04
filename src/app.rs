@@ -216,6 +216,10 @@ impl App {
         }
     }
 
+    pub fn locale(&self) -> &'static crate::i18n::Locale {
+        self.config.locale()
+    }
+
     pub fn cycle_branch_sort(&mut self) {
         self.ui.branch_sort_mode = match self.ui.branch_sort_mode {
             crate::state::ui::BranchSortMode::Recent => crate::state::ui::BranchSortMode::PrunableFirst,

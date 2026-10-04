@@ -74,18 +74,21 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         }
     }
 
+    let loc = app.locale();
+
     // 3. Status Bar
     let status_prefix = match app.ui.primary_mode {
         PrimaryMode::Branches => {
             let filter_text = if let Some(f) = &app.ui.current_filter {
                 format!("sort: {:?}", f)
             } else {
-                "none".to_string()
+                loc.common.none.to_string()
             };
             format!(
-                " 🧹 twigdrop │ {} · {} branches · {} │",
+                " 🧹 twigdrop │ {} · {} {} · {} │",
                 app.repo.current_branch,
                 app.ui.filtered_indices.len(),
+                loc.footer.status_tag,
                 filter_text
             )
         }
@@ -111,16 +114,12 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         " ↑/k, ↓/j: navigate │ Enter: confirm │ Esc/q: cancel "
     } else if app.ui.shift_pressed {
         match app.ui.primary_mode {
-            PrimaryMode::Branches => {
-                " Shift+S: Stash Mgr │ Shift+C: Commit Tree │ Shift+R: Rebase │ Ctrl+D: Delete │ Shift+Tab: Switcher │ Ctrl+Q: quit "
-            }
+            PrimaryMode::Branches => loc.footer.branches_shift,
             _ => " S: Stash Mgr │ C: Commit Tree │ h: Legend │ q: quit ",
         }
     } else if app.ui.alt_pressed {
         match app.ui.primary_mode {
-            PrimaryMode::Branches => {
-                " ↑/↓: move │ Alt+D: switch view │ Alt+T: Ext TTY │ Alt+J: TTY "
-            }
+            PrimaryMode::Branches => loc.footer.branches_alt,
             PrimaryMode::Files => {
                 " ↑/↓: move │ Alt+D: switch view │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+T: Ext TTY │ Alt+J: TTY "
             }
@@ -128,18 +127,10 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         }
     } else {
         match app.ui.primary_mode {
-            PrimaryMode::Branches => {
-                " ↑/↓: move │ Type: filter │ Esc: clear/menu │ ↵: manage │ Ctrl+F: filter │ Ctrl+P: prune │ Ctrl+D: delete │ Ctrl+C: new │ Ctrl+K: palette │ Ctrl+H: help │ Ctrl+Q: quit "
-            }
-            PrimaryMode::Files => {
-                " ↑/↓: move │ Shift+Tab: switcher │ d: commits │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "
-            }
-            PrimaryMode::Commits => {
-                " ↑/↓: move │ Shift+Tab: switcher │ d: stashes │ Enter: details │ ?: help │ q: quit "
-            }
-            PrimaryMode::Stashes => {
-                " ↑/↓: move │ Shift+Tab: switcher │ d: branches │ a: apply │ ?: help │ q: quit "
-            }
+            PrimaryMode::Branches => loc.footer.branches_normal,
+            PrimaryMode::Files => loc.footer.files_normal,
+            PrimaryMode::Commits => loc.footer.commits_normal,
+            PrimaryMode::Stashes => loc.footer.stashes_normal,
         }
     };
 
@@ -181,7 +172,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::StashDetail => screens::render_stash_detail(f, f.area(), app),
         AppMode::Diff => screens::render_diff(f, app),
         AppMode::CodePreview(state) => screens::render_code_preview(f, app, f.area(), state),
-        AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names),
+        AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names, loc),
         AppMode::CreateBranch(input) => screens::render_create_branch(f, input),
         AppMode::CommitAction(hash) => screens::render_commit_action(f, app, hash),
         AppMode::DatePicker(state) => screens::render_date_picker(f, app, state),
@@ -191,7 +182,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         AppMode::QuickActions => screens::render_quick_actions(f, app),
         AppMode::Switcher => screens::render_switcher(f, app),
         AppMode::MainMenu => screens::render_main_menu(f, app),
-        AppMode::CommandPalette(state) => screens::render_command_palette(f, state),
+        AppMode::CommandPalette(state) => screens::render_command_palette(f, state, loc),
         _ => {}
     }
 }

@@ -62,6 +62,8 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
     let branch_items_to_show = inner_height.min(branches_len.saturating_sub(start));
 
+    let loc = app.locale();
+
     for i in 0..branch_items_to_show {
         let branch_idx = start + i;
         if branch_idx >= branches_len {
@@ -79,7 +81,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
         let (icons, color) = get_status_icons(&b.status);
         let (merge_text, merge_color) =
-            crate::ui::components::get_merge_status_display(&b.merge_status);
+            crate::ui::components::get_merge_status_display(&b.merge_status, loc);
 
         let current_tag = if is_current { " (HEAD)" } else { "" };
         let is_protected = crate::actions::commands::is_protected_branch(&b.name);
@@ -102,9 +104,9 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             }
             parts.join(" ")
         } else if b.status.contains(&BranchStatus::RemoteTracked) {
-            "✓ synced".to_string()
+            loc.branches.sync_synced.to_string()
         } else {
-            "local".to_string()
+            loc.branches.sync_local.to_string()
         };
 
         let sync_color = if b.ahead_count > 0 {
@@ -169,20 +171,20 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     ];
 
     let sort_hint = match app.ui.branch_sort_mode {
-        crate::state::ui::BranchSortMode::Recent => "Recent ▾ (Ctrl+S)",
-        crate::state::ui::BranchSortMode::PrunableFirst => "Prunable ▾ (Ctrl+S)",
-        crate::state::ui::BranchSortMode::Alphabetical => "A-Z ▾ (Ctrl+S)",
+        crate::state::ui::BranchSortMode::Recent => loc.branches.sort_recent,
+        crate::state::ui::BranchSortMode::PrunableFirst => loc.branches.sort_prunable,
+        crate::state::ui::BranchSortMode::Alphabetical => loc.branches.sort_alphabetical,
     };
 
     let table = Table::new(rows, widths)
         .header(
             Row::new(vec![
-                "",
-                "Branch",
-                "Sync",
-                "Merge Health",
-                "Age",
-                "Last Commit",
+                loc.branches.header_sel,
+                loc.branches.header_branch,
+                loc.branches.header_sync,
+                loc.branches.header_merge_health,
+                loc.branches.header_age,
+                loc.branches.header_last_commit,
             ])
             .style(
                 Style::default()
@@ -195,25 +197,25 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             Block::default()
                 .title(if !app.ui.search_query.is_empty() {
                     Line::from(vec![
-                        Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!(" {} ", loc.branches.title_branches), Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
                         Span::styled(" ", Style::default().fg(Color::Rgb(249, 226, 175)).add_modifier(Modifier::BOLD)),
                         Span::styled(&app.ui.search_query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
                         Span::styled("▌ ", Style::default().fg(Color::Rgb(203, 166, 247))),
-                        Span::styled("(Esc to clear) • ", Style::default().fg(Color::Rgb(147, 153, 178))),
-                        Span::styled(format!("Sort: {} ", sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled(format!("{} • ", loc.branches.esc_to_clear), Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled(format!("{}: {} ", loc.branches.sort_label, sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
                     ])
                 } else {
                     Line::from(vec![
-                        Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
-                        Span::styled("Type to filter • ", Style::default().fg(Color::Rgb(108, 112, 134))),
-                        Span::styled(format!("Sort: {} • ", sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
-                        Span::styled("[→] Inspector • [←] Sidebar ", Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled(format!(" {} ", loc.branches.title_branches), Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("{} • ", loc.branches.type_to_filter), Style::default().fg(Color::Rgb(108, 112, 134))),
+                        Span::styled(format!("{}: {} • ", loc.branches.sort_label, sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled(format!("{} • {} ", loc.branches.inspector_hint, loc.branches.sidebar_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
                     ])
                 })
                 .title(
                     Line::from(vec![
                         Span::styled(
-                            format!(" {}-{} of {} ", if branches_len == 0 { 0 } else { start + 1 }, start + branch_items_to_show, branches_len),
+                            loc.format_range(if branches_len == 0 { 0 } else { start + 1 }, start + branch_items_to_show, branches_len),
                             Style::default().fg(Color::Rgb(147, 153, 178)),
                         ),
                     ])
@@ -284,7 +286,7 @@ pub fn render_filter(f: &mut Frame, app: &App) {
     f.render_widget(list, inner);
 }
 
-pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
+pub fn render_confirm_delete(f: &mut Frame, names: &[String], locale: &crate::i18n::Locale) {
     let full_area = f.area();
     crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
 
@@ -321,57 +323,30 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
     };
 
     let block = Block::default()
-        .title(Line::from(" ⚠️ UNPUSHED COMMITS DETECTED ⚠️ ").alignment(Alignment::Center))
+        .title(Line::from(locale.branches.confirm_unpushed_title).alignment(Alignment::Center))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Red).add_modifier(Modifier::BOLD))
         .style(Style::default().bg(Color::Rgb(30, 10, 10)));
 
     let text = vec![
         Line::from(""),
-        Line::from(vec![
-            Span::raw("The following branch(es) have "),
-            Span::styled(
-                "unique commits",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(" not found in remote:"),
-        ])
+        Line::from(Span::styled(
+            locale.branches.confirm_unique_msg,
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ))
         .alignment(Alignment::Center),
         Line::from(""),
         Line::from(Span::styled(branch_list, Style::default().fg(Color::Cyan)))
             .alignment(Alignment::Center),
         Line::from(""),
-        Line::from("Deleting these branches will result in PERMANENT data loss.")
+        Line::from(locale.branches.confirm_data_loss)
             .alignment(Alignment::Center),
         Line::from(""),
-        Line::from(vec![
-            Span::raw("Are you absolutely sure? ("),
-            Span::styled(
-                "y",
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("/"),
-            Span::styled(
-                "n",
-                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
-            ),
-            Span::raw(")"),
-        ])
-        .alignment(Alignment::Center),
-        Line::from(""),
-        Line::from(
-            Span::styled(
-                "(Press 'y' to confirm deletion, any other key to cancel)",
-                Style::default().fg(Color::DarkGray),
-            ),
-        )
-        .alignment(Alignment::Center),
+        Line::from(locale.branches.confirm_prompt)
+            .alignment(Alignment::Center),
     ];
-
     let p = Paragraph::new(text).block(block);
     f.render_widget(p, inner);
 }
@@ -419,6 +394,8 @@ pub fn render_create_branch(f: &mut Frame, input: &str) {
 
 pub fn render_manage(f: &mut Frame, app: &App) {
     let full_area = f.area();
+    let loc = app.locale();
+
     // 1. Dim background
     crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
 
@@ -439,14 +416,14 @@ pub fn render_manage(f: &mut Frame, app: &App) {
         .get_filtered_branches()
         .get(app.ui.selected_branch_idx)
         .map(|b| b.name.as_str())
-        .unwrap_or("none");
+        .unwrap_or(loc.common.none);
 
     let is_protected = crate::actions::commands::is_protected_branch(b_name);
 
     let header_block = Block::default()
         .title(Line::from(vec![
             Span::styled(
-                " ⚡ MANAGE BRANCH ",
+                format!(" {} ", loc.branches.manage_title),
                 Style::default()
                     .fg(Color::Rgb(203, 166, 247))
                     .add_modifier(Modifier::BOLD),
@@ -471,7 +448,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
         .style(Style::default().bg(Color::Rgb(24, 24, 37)));
 
     let header_text = Line::from(vec![
-        Span::styled("  Target: ", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(format!("  {}", loc.branches.manage_target_prefix), Style::default().fg(Color::Rgb(147, 153, 178))),
         Span::styled(
             b_name,
             Style::default()
@@ -479,7 +456,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " • Select an action to execute",
+            loc.branches.manage_instruction,
             Style::default().fg(Color::Rgb(108, 112, 134)),
         ),
     ]);
@@ -492,28 +469,40 @@ pub fn render_manage(f: &mut Frame, app: &App) {
 
     let actions = [
         (
-            "CHECKOUT",
-            "Switch to this branch (git checkout)",
+            loc.branches.act_checkout,
+            loc.branches.act_checkout_desc,
             Color::Rgb(166, 227, 161),
         ),
         (
-            "DIFF / AI",
-            "View diff and run AI conflict analysis",
+            loc.branches.act_diff_ai,
+            loc.branches.act_diff_ai_desc,
             Color::Rgb(137, 180, 250),
         ),
         (
-            "DELETE",
-            "Delete branch (Snap delete)",
+            loc.branches.act_delete,
+            loc.branches.act_delete_desc,
             Color::Rgb(243, 139, 168),
         ),
-        ("RENAME", "Rename branch", Color::Rgb(249, 226, 175)),
         (
-            "STASH",
-            "Create stash from current branch",
+            loc.branches.act_rename,
+            loc.branches.act_rename_desc,
+            Color::Rgb(249, 226, 175),
+        ),
+        (
+            loc.branches.act_stash,
+            loc.branches.act_stash_desc,
             Color::Rgb(245, 194, 231),
         ),
-        ("HELP", "Help & Legend", Color::Rgb(147, 153, 178)),
-        ("CANCEL", "Close this menu", Color::Rgb(108, 112, 134)),
+        (
+            loc.branches.act_help,
+            loc.branches.act_help_desc,
+            Color::Rgb(147, 153, 178),
+        ),
+        (
+            loc.branches.act_cancel,
+            loc.branches.act_cancel_desc,
+            Color::Rgb(108, 112, 134),
+        ),
     ];
 
     let mut items = vec![];
@@ -564,7 +553,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " Select   ",
+            format!(" {}   ", loc.common.select),
             Style::default().fg(Color::Rgb(147, 153, 178)),
         ),
         Span::styled(
@@ -574,7 +563,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            " Execute   ",
+            format!(" {}   ", loc.common.execute),
             Style::default().fg(Color::Rgb(147, 153, 178)),
         ),
         Span::styled(
@@ -583,7 +572,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
                 .fg(Color::Rgb(243, 139, 168))
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(" Cancel", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(format!(" {}", loc.common.cancel), Style::default().fg(Color::Rgb(147, 153, 178))),
     ]);
     f.render_widget(
         Paragraph::new(footer_hints).style(Style::default().bg(Color::Rgb(24, 24, 37))),

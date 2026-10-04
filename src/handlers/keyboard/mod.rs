@@ -67,24 +67,25 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         KeyCode::Char('k') | KeyCode::Char('K')
             if key.modifiers.contains(KeyModifiers::CONTROL) =>
         {
+            let loc = app.locale();
             app.ui
                 .push_modal(AppMode::CommandPalette(CommandPaletteState {
                     query: String::new(),
                     selected: 0,
                     actions: vec![
-                        ("Checkout Branch".to_string(), CommandAction::CheckoutBranch),
-                        ("Create Branch".to_string(), CommandAction::CreateBranch),
-                        ("Open Settings".to_string(), CommandAction::OpenSettings),
+                        (loc.modals.cmd_checkout.to_string(), CommandAction::CheckoutBranch),
+                        (loc.modals.cmd_create_branch.to_string(), CommandAction::CreateBranch),
+                        (loc.modals.cmd_settings.to_string(), CommandAction::OpenSettings),
                         (
-                            "Interactive Rebase".to_string(),
+                            loc.modals.cmd_rebase.to_string(),
                             CommandAction::InteractiveRebase,
                         ),
-                        ("Stash Changes".to_string(), CommandAction::StashChanges),
-                        ("Pop Stash".to_string(), CommandAction::PopStash),
-                        ("Fetch from Remote".to_string(), CommandAction::Fetch),
-                        ("Pull from Remote".to_string(), CommandAction::Pull),
-                        ("Push to Remote".to_string(), CommandAction::Push),
-                        ("Commit Changes".to_string(), CommandAction::CommitChanges),
+                        (loc.modals.cmd_stash.to_string(), CommandAction::StashChanges),
+                        (loc.modals.cmd_pop_stash.to_string(), CommandAction::PopStash),
+                        (loc.modals.cmd_fetch.to_string(), CommandAction::Fetch),
+                        (loc.modals.cmd_pull.to_string(), CommandAction::Pull),
+                        (loc.modals.cmd_push.to_string(), CommandAction::Push),
+                        (loc.modals.cmd_commit.to_string(), CommandAction::CommitChanges),
                     ],
                 }));
             return false;

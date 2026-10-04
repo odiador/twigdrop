@@ -19,6 +19,8 @@ pub struct Config {
     pub providers: std::collections::HashMap<String, ProviderConfig>,
     pub enable_animations: bool,
     pub default_sidebar_width: usize,
+    #[serde(default = "crate::i18n::detect_system_language")]
+    pub language: crate::i18n::Language,
 }
 
 impl Default for Config {
@@ -69,6 +71,7 @@ impl Default for Config {
             providers,
             enable_animations: false,
             default_sidebar_width: 30,
+            language: crate::i18n::detect_system_language(),
         }
     }
 }
@@ -80,6 +83,10 @@ static FALLBACK_PROVIDER: std::sync::LazyLock<ProviderConfig> = std::sync::LazyL
 });
 
 impl Config {
+    pub fn locale(&self) -> &'static crate::i18n::Locale {
+        crate::i18n::get_locale(self.language)
+    }
+
     pub fn current_provider(&self) -> &ProviderConfig {
         self.providers
             .get(&self.ai_provider)

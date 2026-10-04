@@ -36,12 +36,12 @@ pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
     (icons, color)
 }
 
-pub fn get_merge_status_display(status: &MergeStatus) -> (String, Color) {
+pub fn get_merge_status_display(status: &MergeStatus, locale: &crate::i18n::Locale) -> (String, Color) {
     match status {
-        MergeStatus::NotAnalyzed => ("?".to_string(), Color::Rgb(140, 143, 161)),
-        MergeStatus::Checking => ("∞ Checking".to_string(), Color::Rgb(249, 226, 175)),
-        MergeStatus::Clean => ("✓ Clean".to_string(), Color::Rgb(161, 229, 193)),
-        MergeStatus::Conflict(_) => ("⨯ Conflict".to_string(), Color::Rgb(245, 194, 231)),
+        MergeStatus::NotAnalyzed => (locale.branches.merge_not_analyzed.to_string(), Color::Rgb(140, 143, 161)),
+        MergeStatus::Checking => (locale.branches.merge_checking.to_string(), Color::Rgb(249, 226, 175)),
+        MergeStatus::Clean => (locale.branches.merge_clean.to_string(), Color::Rgb(161, 229, 193)),
+        MergeStatus::Conflict(_) => (locale.branches.merge_conflict.to_string(), Color::Rgb(245, 194, 231)),
         MergeStatus::SafeLimit(safe, total) => {
             let total_f = *total as f32;
             let safe_f = *safe as f32;
