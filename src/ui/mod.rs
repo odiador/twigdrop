@@ -112,24 +112,24 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     } else if app.ui.shift_pressed {
         match app.ui.primary_mode {
             PrimaryMode::Branches => {
-                " S: Stash Mgr │ C: Commit Tree │ D: Delete Selected │ h: Legend │ q: quit "
+                " Shift+S: Stash Mgr │ Shift+C: Commit Tree │ Shift+R: Rebase │ Ctrl+D: Delete │ Shift+Tab: Switcher │ q: quit "
             }
             _ => " S: Stash Mgr │ C: Commit Tree │ h: Legend │ q: quit ",
         }
     } else if app.ui.alt_pressed {
         match app.ui.primary_mode {
             PrimaryMode::Branches => {
-                " ↑/↓: move │ d: switch mode │ Alt+t: Ext TTY │ Alt+j: TTY │ f: filter "
+                " ↑/↓: move │ Alt+D: switch view │ Alt+T: Ext TTY │ Alt+J: TTY "
             }
             PrimaryMode::Files => {
-                " ↑/↓: move │ d: switch mode │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+t: Ext TTY │ Alt+j: TTY "
+                " ↑/↓: move │ Alt+D: switch view │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+T: Ext TTY │ Alt+J: TTY "
             }
-            _ => " ↑/↓: move │ d: switch mode │ Alt+t: Ext TTY │ Alt+j: TTY ",
+            _ => " ↑/↓: move │ Alt+D: switch view │ Alt+T: Ext TTY │ Alt+J: TTY ",
         }
     } else {
         match app.ui.primary_mode {
             PrimaryMode::Branches => {
-                " ↑/↓: move │ Shift+Tab: switcher │ d: files │ f: filter │ /: search │ c: create │ p: prune │ :: actions │ !: shell │ Shift+D: bulk delete │ m: manage │ ?: help │ q: quit "
+                " ↑/↓: move │ Type: filter │ Esc: clear/menu │ ↵: manage │ Ctrl+F: filter │ Ctrl+P: prune │ Ctrl+D: delete │ Ctrl+C: new │ Ctrl+K: palette │ Ctrl+H: help │ q: quit "
             }
             PrimaryMode::Files => {
                 " ↑/↓: move │ Shift+Tab: switcher │ d: commits │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "

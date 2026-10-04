@@ -69,6 +69,45 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
                 app.cycle_branch_sort();
                 return false;
             }
+            KeyCode::Char('i') | KeyCode::Char('I') => {
+                if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx) {
+                    if branch.name.starts_with('*') {
+                        return false;
+                    }
+                    let branch_name = branch.name.clone();
+                    let _ = app.ai_trigger_tx.try_send((
+                        "analyze".to_string(),
+                        path.to_string(),
+                        branch_name.clone(),
+                    ));
+                    app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
+                    app.repo.branch_info = git::get_branch_info(path, &branch_name);
+                    app.ui.info_scroll = 0;
+
+                    app.repo.diff_files = git::get_branch_diff_files(path, &branch_name);
+                    app.ui.diff_file_selected = 0;
+                    app.repo.diff_preview = None;
+                    if !app.repo.diff_files.is_empty() {
+                        let first_file = app.repo.diff_files[0].clone();
+                        let diff_content = git::get_branch_file_diff(path, &branch_name, &first_file);
+                        let mut preview = PreviewState {
+                            file_path: first_file,
+                            lines: diff_content.lines().map(|s| s.to_string()).collect(),
+                            highlighted_lines: vec![],
+                            cursor_y: 0,
+                            scroll_y: 0,
+                            selection_start: None,
+                            selection_end: None,
+                            line_diffs: std::collections::HashMap::new(),
+                        };
+                        app.update_diff_highlighting(&mut preview);
+                        app.repo.diff_preview = Some(preview);
+                    }
+
+                    app.ui.push_modal(AppMode::Diff);
+                }
+                return false;
+            }
             _ => {}
         }
     }

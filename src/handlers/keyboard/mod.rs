@@ -79,7 +79,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
 
     // 2. Global Shortcuts across normal views
     match key.code {
-        KeyCode::Char('p') | KeyCode::Char('k')
+        KeyCode::Char('k') | KeyCode::Char('K')
             if key.modifiers.contains(KeyModifiers::CONTROL) =>
         {
             app.ui
@@ -139,15 +139,34 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             return false;
         }
-        KeyCode::Char('?') | KeyCode::Char('h') => {
+        KeyCode::Char('?') => {
             app.ui.push_modal(AppMode::Help);
+            return false;
+        }
+        KeyCode::Char('h') | KeyCode::Char('H')
+            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
+            app.ui.push_modal(AppMode::Help);
+            return false;
+        }
+        KeyCode::Char('c') | KeyCode::Char('C')
+            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
+            app.ui.push_modal(AppMode::CreateBranch(String::new()));
+            return false;
+        }
+        KeyCode::Char('f') | KeyCode::Char('F')
+            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+        {
+            app.ui.push_modal(AppMode::Filter);
+            app.ui.filter_selected = 0;
             return false;
         }
         KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::ALT) => {
             app.ui.show_terminal = !app.ui.show_terminal;
             return false;
         }
-        KeyCode::Char('d') => {
+        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::ALT) => {
             app.toggle_primary_mode();
             if app.ui.primary_mode == PrimaryMode::Files {
                 app.load_file_tree(path);
@@ -175,10 +194,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.ui.push_modal(AppMode::StashDetail);
             return false;
         }
-        KeyCode::Char('c') => {
-            app.ui.push_modal(AppMode::CreateBranch(String::new()));
-            return false;
-        }
+
         KeyCode::Char('!') => {
             app.ui.push_modal(AppMode::Shell(String::new()));
             return false;
