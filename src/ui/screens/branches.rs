@@ -196,7 +196,6 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
                 .title(if !app.ui.search_query.is_empty() {
                     Line::from(vec![
                         Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
-                        Span::styled(format!("[{}/{}] ", branch_items_to_show, branches_len), Style::default().fg(Color::Rgb(147, 153, 178))),
                         Span::styled(" ", Style::default().fg(Color::Rgb(249, 226, 175)).add_modifier(Modifier::BOLD)),
                         Span::styled(&app.ui.search_query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
                         Span::styled("▌ ", Style::default().fg(Color::Rgb(203, 166, 247))),
@@ -206,12 +205,20 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
                 } else {
                     Line::from(vec![
                         Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
-                        Span::styled(format!("[{}/{}] • ", branch_items_to_show, branches_len), Style::default().fg(Color::Rgb(147, 153, 178))),
                         Span::styled("Type to filter • ", Style::default().fg(Color::Rgb(108, 112, 134))),
                         Span::styled(format!("Sort: {} • ", sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
                         Span::styled("[→] Inspector • [←] Sidebar ", Style::default().fg(Color::Rgb(147, 153, 178))),
                     ])
                 })
+                .title(
+                    Line::from(vec![
+                        Span::styled(
+                            format!(" {}-{} of {} ", if branches_len == 0 { 0 } else { start + 1 }, start + branch_items_to_show, branches_len),
+                            Style::default().fg(Color::Rgb(147, 153, 178)),
+                        ),
+                    ])
+                    .alignment(Alignment::Right),
+                )
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Rgb(74, 79, 106))),
         );
