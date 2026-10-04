@@ -2,9 +2,28 @@ use crate::git::commands::{run_git, run_git_with_status};
 use crate::state::ui::{RebaseAction, RebaseCommit};
 use std::fs;
 
+pub const DEFAULT_PROTECTED_BRANCHES: &[&str] = &[
+    "main",
+    "master",
+    "develop",
+    "dev",
+    "staging",
+    "production",
+];
+
+pub fn is_protected_branch(name: &str) -> bool {
+    let clean = name.trim().trim_start_matches('*').trim();
+    DEFAULT_PROTECTED_BRANCHES.iter().any(|&p| clean.eq_ignore_ascii_case(p))
+}
+
 pub fn bulk_delete_branches(path: &str, names: &[String]) -> String {
     let mut results = String::new();
     for name in names {
+        if is_protected_branch(name) {
+            results.push_str(&format!("Skipping protected branch: {}\n", name));
+            continue;
+        }
+
         match run_git(path, &["branch", "-D", name]) {
             Ok(output) => {
                 results.push_str(&format!("> git branch -D {}\n{}\n", name, output.trim()))
@@ -22,7 +41,7 @@ pub fn get_prunable_branches(
     branches
         .iter()
         .filter(|b| {
-            if b.name == current_branch {
+            if b.name == current_branch || is_protected_branch(&b.name) {
                 return false;
             }
 
@@ -314,5 +333,41 @@ mod tests {
 
         let prunable = get_prunable_branches(&branches, "main");
         assert!(prunable.is_empty());
+    }
+
+    #[test]
+    fn test_is_protected_branch() {
+        assert!(is_protected_branch("main"));
+        assert!(is_protected_branch("master"));
+        assert!(is_protected_branch("develop"));
+        assert!(is_protected_branch("dev"));
+        assert!(is_protected_branch("staging"));
+        assert!(is_protected_branch("production"));
+        assert!(is_protected_branch("* main"));
+        assert!(is_protected_branch("MAIN"));
+        assert!(!is_protected_branch("feature/login"));
+        assert!(!is_protected_branch("bugfix/issue-123"));
+    }
+
+    #[test]
+    fn test_get_prunable_branches_skips_protected() {
+        let branches = vec![
+            // Gone, but protected -> MUST NOT prune
+            make_test_branch("master", vec![BranchStatus::Gone]),
+            make_test_branch("develop", vec![BranchStatus::Gone]),
+            make_test_branch("staging", vec![BranchStatus::Gone]),
+            // Gone and not protected -> safe to prune
+            make_test_branch("feature/old", vec![BranchStatus::Gone]),
+        ];
+
+        let prunable = get_prunable_branches(&branches, "other-branch");
+        assert_eq!(prunable, vec!["feature/old".to_string()]);
+    }
+
+    #[test]
+    fn test_bulk_delete_branches_skips_protected() {
+        let res = bulk_delete_branches(".", &["main".to_string(), "develop".to_string()]);
+        assert!(res.contains("Skipping protected branch: main"));
+        assert!(res.contains("Skipping protected branch: develop"));
     }
 }

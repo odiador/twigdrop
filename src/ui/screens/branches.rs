@@ -59,8 +59,15 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             crate::ui::components::get_merge_status_display(&b.merge_status);
 
         let current_tag = if is_current { " (current)" } else { "" };
+        let is_protected = crate::actions::commands::is_protected_branch(&b.name);
         let is_bulk_selected = app.ui.bulk_selected.contains(&b.name);
-        let checkbox = if is_bulk_selected { "[x]" } else { "[ ]" };
+        let checkbox = if is_protected {
+            "[P]"
+        } else if is_bulk_selected {
+            "[x]"
+        } else {
+            "[ ]"
+        };
 
         let mut diff_counts = String::new();
         if b.ahead_count > 0 {
@@ -102,6 +109,8 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         let cells = vec![
             Cell::from(checkbox).style(if selected {
                 Style::default().fg(Color::Black)
+            } else if is_protected {
+                Style::default().fg(Color::Yellow)
             } else {
                 Style::default().fg(Color::Rgb(124, 128, 156))
             }),

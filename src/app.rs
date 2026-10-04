@@ -445,6 +445,9 @@ impl App {
     pub fn toggle_selection(&mut self) {
         if let Some(&idx) = self.ui.filtered_indices.get(self.ui.selected_branch_idx) {
             let name = self.repo.branches[idx].name.clone();
+            if crate::actions::commands::is_protected_branch(&name) {
+                return;
+            }
             if self.ui.bulk_selected.contains(&name) {
                 self.ui.bulk_selected.remove(&name);
             } else {

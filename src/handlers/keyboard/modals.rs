@@ -405,6 +405,15 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                         app.ui.push_modal(AppMode::Diff);
                     }
                     2 => {
+                        if crate::actions::commands::is_protected_branch(&b.name) {
+                            let clean = b.name.trim().trim_start_matches('*').trim().to_string();
+                            app.ui.pop_modal();
+                            app.ui.push_modal(AppMode::Message(format!(
+                                "Cannot delete protected branch: {}",
+                                clean
+                            )));
+                            return false;
+                        }
                         let names = vec![b.name.clone()];
                         if b.status
                             .contains(&crate::models::BranchStatus::HasUniqueCommits)
