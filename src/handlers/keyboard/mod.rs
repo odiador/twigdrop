@@ -105,9 +105,19 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             return false;
         }
         KeyCode::Esc => {
+            if !app.ui.search_query.is_empty() {
+                app.ui.search_query.clear();
+                app.refresh_filtered_branches();
+                app.ui.selected_branch_idx = 0;
+                return false;
+            }
             if app.ui.show_inspector_drawer || app.ui.show_nav_sidebar {
                 app.ui.show_inspector_drawer = false;
                 app.ui.show_nav_sidebar = false;
+                return false;
+            }
+            if *app.ui.current_mode() == AppMode::MainMenu {
+                app.ui.pop_modal();
                 return false;
             }
             app.ui.push_modal(AppMode::MainMenu);

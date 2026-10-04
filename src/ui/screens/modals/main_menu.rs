@@ -44,6 +44,8 @@ pub fn render_main_menu(f: &mut Frame, app: &App) {
     let area = f.area();
     let buf = f.buffer_mut();
 
+    crate::ui::components::apply_dimmed_backdrop(buf, area);
+
     let ascii_logo = r#"
  ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
  ╚══██╔══╝██║    ██║██║██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗

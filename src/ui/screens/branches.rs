@@ -92,31 +92,33 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             "[ ]"
         };
 
-        let mut diff_counts = String::new();
-        if b.ahead_count > 0 {
-            diff_counts.push_str(&format!("↑{} ", b.ahead_count));
-        }
-        if b.behind_count > 0 {
-            diff_counts.push_str(&format!("↓{} ", b.behind_count));
-        }
-        let diff_counts_str = if diff_counts.is_empty() {
-            String::new()
+        let sync_text = if b.ahead_count > 0 || b.behind_count > 0 {
+            let mut parts = vec![];
+            if b.ahead_count > 0 {
+                parts.push(format!("↑{}", b.ahead_count));
+            }
+            if b.behind_count > 0 {
+                parts.push(format!("↓{}", b.behind_count));
+            }
+            parts.join(" ")
+        } else if b.status.contains(&BranchStatus::RemoteTracked) {
+            "✓ synced".to_string()
         } else {
-            format!(" [{}]", diff_counts.trim_end())
+            "local".to_string()
         };
 
-        let branch_name = format!("{}{}{}", b.name, current_tag, diff_counts_str);
-        let status_str = if b.status.contains(&BranchStatus::Merged) {
-            "merged"
+        let sync_color = if b.ahead_count > 0 {
+            Color::Rgb(249, 226, 175)
+        } else if b.behind_count > 0 {
+            Color::Rgb(137, 220, 235)
+        } else if b.status.contains(&BranchStatus::RemoteTracked) {
+            Color::Rgb(166, 227, 161)
         } else {
-            "unmerged"
+            Color::Rgb(147, 153, 178)
         };
-        let type_str = if b.status.contains(&BranchStatus::RemoteTracked) {
-            "remote"
-        } else {
-            "local"
-        };
-        let author_str = format!("{} {}", b.commit_date, b.author);
+
+        let branch_name = format!("{}{}", b.name, current_tag);
+        let author_str = format!("{} by {}", b.commit_date, b.author);
 
         let mut row_style = Style::default().fg(Color::Rgb(205, 214, 244));
         let mut branch_style = Style::default().fg(color);
@@ -148,10 +150,9 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
                 Span::styled(format!("{:<4} ", icons), Style::default().fg(color)),
                 Span::styled(branch_name, branch_style),
             ])),
-            Cell::from(b.age.clone()).style(Style::default().fg(Color::Rgb(249, 226, 175))),
-            Cell::from(status_str),
+            Cell::from(sync_text).style(Style::default().fg(sync_color)),
             Cell::from(merge_text).style(Style::default().fg(merge_color)),
-            Cell::from(type_str).style(Style::default().fg(Color::Rgb(147, 153, 178))),
+            Cell::from(b.age.clone()).style(Style::default().fg(Color::Rgb(249, 226, 175))),
             Cell::from(author_str).style(Style::default().fg(Color::Rgb(166, 173, 200))),
         ];
 
@@ -160,18 +161,17 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
     let widths = [
         Constraint::Length(5),
-        Constraint::Percentage(35),
+        Constraint::Percentage(30),
         Constraint::Length(12),
-        Constraint::Length(10),
-        Constraint::Length(15),
-        Constraint::Length(8),
-        Constraint::Percentage(25),
+        Constraint::Length(16),
+        Constraint::Length(12),
+        Constraint::Percentage(30),
     ];
 
     let sort_hint = match app.ui.branch_sort_mode {
-        crate::state::ui::BranchSortMode::Recent => "Recent ▾ (s)",
-        crate::state::ui::BranchSortMode::PrunableFirst => "Prunable ▾ (s)",
-        crate::state::ui::BranchSortMode::Alphabetical => "A-Z ▾ (s)",
+        crate::state::ui::BranchSortMode::Recent => "Recent ▾ (Ctrl+S)",
+        crate::state::ui::BranchSortMode::PrunableFirst => "Prunable ▾ (Ctrl+S)",
+        crate::state::ui::BranchSortMode::Alphabetical => "A-Z ▾ (Ctrl+S)",
     };
 
     let table = Table::new(rows, widths)
@@ -179,10 +179,9 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             Row::new(vec![
                 "",
                 "Branch",
+                "Sync",
+                "Merge Health",
                 "Age",
-                "Status",
-                "Merge",
-                "Type",
                 "Last Commit",
             ])
             .style(
@@ -194,10 +193,25 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         )
         .block(
             Block::default()
-                .title(Line::from(vec![
-                    Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
-                    Span::styled(format!("[{}/{}] • Sort: {} • [→] Inspector • [←] Sidebar ", branch_items_to_show, branches_len, sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
-                ]))
+                .title(if !app.ui.search_query.is_empty() {
+                    Line::from(vec![
+                        Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("[{}/{}] ", branch_items_to_show, branches_len), Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled(" ", Style::default().fg(Color::Rgb(249, 226, 175)).add_modifier(Modifier::BOLD)),
+                        Span::styled(&app.ui.search_query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                        Span::styled("▌ ", Style::default().fg(Color::Rgb(203, 166, 247))),
+                        Span::styled("(Esc to clear) • ", Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled(format!("Sort: {} ", sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
+                    ])
+                } else {
+                    Line::from(vec![
+                        Span::styled(" Branches ", Style::default().fg(Color::Rgb(203, 166, 247)).add_modifier(Modifier::BOLD)),
+                        Span::styled(format!("[{}/{}] • ", branch_items_to_show, branches_len), Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled("Type to filter • ", Style::default().fg(Color::Rgb(108, 112, 134))),
+                        Span::styled(format!("Sort: {} • ", sort_hint), Style::default().fg(Color::Rgb(147, 153, 178))),
+                        Span::styled("[→] Inspector • [←] Sidebar ", Style::default().fg(Color::Rgb(147, 153, 178))),
+                    ])
+                })
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::Rgb(74, 79, 106))),
         );
@@ -394,70 +408,175 @@ pub fn render_create_branch(f: &mut Frame, input: &str) {
 }
 
 pub fn render_manage(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(30),
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
+    let full_area = f.area();
+    // 1. Dim background
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
 
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(30),
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
-
+    // 2. Centered Spotlight floating window (52% width, 48% height)
+    let inner = crate::ui::components::centered_rect(52, 48, full_area);
     f.render_widget(Clear, inner);
 
-    let options = [
-        "1. Checkout",
-        "2. View Diff / AI Analysis",
-        "3. Delete (Snap)",
-        "4. Rename Branch",
-        "5. Create Stash from current",
-        "6. Help",
-        "7. Cancel",
-    ];
-    let mut items = vec![];
-    for (i, opt) in options.iter().enumerate() {
-        let mut style = Style::default().fg(Color::Gray);
-        if i == app.ui.manage_selected {
-            style = style
-                .fg(Color::Cyan)
-                .bg(Color::Rgb(40, 40, 40))
-                .add_modifier(Modifier::BOLD);
-        }
-        if i == 2 {
-            style = style.fg(Color::Red);
-            if i == app.ui.manage_selected {
-                style = style
-                    .bg(Color::Rgb(40, 40, 40))
-                    .add_modifier(Modifier::BOLD);
-            }
-        }
-        items.push(ListItem::new(*opt).style(style));
-    }
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // Header banner
+            Constraint::Min(6),    // Action list
+            Constraint::Length(1), // Footer hint bar
+        ])
+        .split(inner);
 
     let b_name = app
         .get_filtered_branches()
         .get(app.ui.selected_branch_idx)
         .map(|b| b.name.as_str())
         .unwrap_or("none");
-    let block = Block::default()
-        .title(Line::from(format!(" Manage: {} ", b_name)).alignment(Alignment::Left))
-        .title(Line::from(" [X] ").alignment(Alignment::Right))
-        .borders(Borders::ALL);
-    let list = List::new(items).block(block);
-    f.render_widget(list, inner);
+
+    let is_protected = crate::actions::commands::is_protected_branch(b_name);
+
+    let header_block = Block::default()
+        .title(Line::from(vec![
+            Span::styled(
+                " ⚡ MANAGE BRANCH ",
+                Style::default()
+                    .fg(Color::Rgb(203, 166, 247))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("({}) ", b_name),
+                Style::default().fg(Color::Rgb(147, 153, 178)),
+            ),
+            if is_protected {
+                Span::styled(
+                    "[PROTECTED] ",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else {
+                Span::raw("")
+            },
+        ]))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)))
+        .style(Style::default().bg(Color::Rgb(24, 24, 37)));
+
+    let header_text = Line::from(vec![
+        Span::styled("  Target: ", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(
+            b_name,
+            Style::default()
+                .fg(Color::Rgb(137, 220, 235))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " • Select an action to execute",
+            Style::default().fg(Color::Rgb(108, 112, 134)),
+        ),
+    ]);
+    f.render_widget(Paragraph::new(header_text).block(header_block), chunks[0]);
+
+    let list_block = Block::default()
+        .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
+        .border_style(Style::default().fg(Color::Rgb(49, 50, 68)))
+        .style(Style::default().bg(Color::Rgb(30, 30, 46)));
+
+    let actions = [
+        (
+            "CHECKOUT",
+            "Switch to this branch (git checkout)",
+            Color::Rgb(166, 227, 161),
+        ),
+        (
+            "DIFF / AI",
+            "View diff and run AI conflict analysis",
+            Color::Rgb(137, 180, 250),
+        ),
+        (
+            "DELETE",
+            "Delete branch (Snap delete)",
+            Color::Rgb(243, 139, 168),
+        ),
+        ("RENAME", "Rename branch", Color::Rgb(249, 226, 175)),
+        (
+            "STASH",
+            "Create stash from current branch",
+            Color::Rgb(245, 194, 231),
+        ),
+        ("HELP", "Help & Legend", Color::Rgb(147, 153, 178)),
+        ("CANCEL", "Close this menu", Color::Rgb(108, 112, 134)),
+    ];
+
+    let mut items = vec![];
+    for (i, (tag, desc, tag_color)) in actions.iter().enumerate() {
+        let is_selected = i == app.ui.manage_selected;
+        let row_style = if is_selected {
+            Style::default().bg(Color::Rgb(49, 50, 68)).fg(Color::White)
+        } else {
+            Style::default().fg(Color::Rgb(205, 214, 244))
+        };
+
+        let prefix = if is_selected { "▎ " } else { "  " };
+        let tag_span = Span::styled(
+            format!("[{}] ", tag),
+            Style::default().fg(*tag_color).add_modifier(Modifier::BOLD),
+        );
+        let desc_span = Span::styled(
+            *desc,
+            if is_selected {
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Rgb(205, 214, 244))
+            },
+        );
+
+        let item_line = Line::from(vec![
+            Span::styled(
+                prefix,
+                Style::default()
+                    .fg(Color::Rgb(203, 166, 247))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            tag_span,
+            desc_span,
+        ]);
+        items.push(ListItem::new(item_line).style(row_style));
+    }
+
+    f.render_widget(List::new(items).block(list_block), chunks[1]);
+
+    let footer_hints = Line::from(vec![
+        Span::styled(
+            "  ↑↓",
+            Style::default()
+                .fg(Color::Rgb(180, 190, 254))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " Select   ",
+            Style::default().fg(Color::Rgb(147, 153, 178)),
+        ),
+        Span::styled(
+            "↵",
+            Style::default()
+                .fg(Color::Rgb(166, 227, 161))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            " Execute   ",
+            Style::default().fg(Color::Rgb(147, 153, 178)),
+        ),
+        Span::styled(
+            "Esc",
+            Style::default()
+                .fg(Color::Rgb(243, 139, 168))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" Cancel", Style::default().fg(Color::Rgb(147, 153, 178))),
+    ]);
+    f.render_widget(
+        Paragraph::new(footer_hints).style(Style::default().bg(Color::Rgb(24, 24, 37))),
+        chunks[2],
+    );
 }

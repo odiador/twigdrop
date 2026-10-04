@@ -161,7 +161,10 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
 
     // 5. Modals and Overlays
     let is_modal = !app.ui.modal_stack.is_empty();
-    let is_overlay_modal = matches!(app.ui.current_mode(), AppMode::CommandPalette(_) | AppMode::MainMenu);
+    let is_overlay_modal = matches!(
+        app.ui.current_mode(),
+        AppMode::CommandPalette(_) | AppMode::MainMenu | AppMode::Manage
+    );
     if is_modal && !is_overlay_modal {
         let overlay = Rect::new(0, 0, f.area().width, f.area().height);
         f.render_widget(ratatui::widgets::Clear, overlay);
