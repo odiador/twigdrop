@@ -41,6 +41,7 @@ impl Particle {
 }
 
 #[allow(dead_code)]
+#[derive(Default)]
 pub struct ParticleSystem {
     pub particles: Vec<Particle>,
 }

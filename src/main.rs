@@ -1,17 +1,3 @@
-mod actions;
-mod ai;
-mod app;
-mod db;
-mod events;
-mod git;
-mod handlers;
-mod models;
-mod runtime;
-mod state;
-mod tasks;
-mod ui;
-mod utils;
-
 use anyhow::Result;
 use ratatui::{
     Terminal,
@@ -28,9 +14,7 @@ use ratatui::{
 use std::{env, io};
 use tokio::sync::mpsc;
 
-use app::App;
-use events::Event;
-use runtime::Runtime;
+use twigdrop::{app::App, events::Event, git, handlers, models, runtime::Runtime, ui};
 
 #[tokio::main]
 async fn main() -> Result<()> {

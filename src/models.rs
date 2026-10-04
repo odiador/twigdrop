@@ -1,3 +1,5 @@
+pub use crate::state::domain::RepositoryState;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum BranchStatus {
     Merged,
