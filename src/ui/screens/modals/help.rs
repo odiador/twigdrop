@@ -7,151 +7,279 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::state::ui::PrimaryMode;
 
 pub const ASCII_LOGO: &str = r#"
-████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
-╚══██╔══╝██║    ██║██║██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
-   ██║   ██║ █╗ ██║██║██║  ███╗██║  ██║██████╔╝██║   ██║██████╔╝
-   ██║   ██║███╗██║██║██║   ██║██║  ██║██╔══██╗██║   ██║██╔═══╝ 
-   ██║   ╚███╔███╔╝██║╚██████╔╝██████╔╝██║  ██║╚██████╔╝██║     
-   ╚═╝    ╚══╝╚══╝ ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝     
+ ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
+ ╚══██╔══╝██║    ██║██║██╔════╝ ██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
+    ██║   ██║ █╗ ██║██║██║  ███╗██║  ██║██████╔╝██║   ██║██████╔╝
+    ██║   ██║███╗██║██║██║   ██║██║  ██║██╔══██╗██║   ██║██╔═══╝ 
+    ██║   ╚███╔███╔╝██║╚██████╔╝██████╔╝██║  ██║╚██████╔╝██║     
+    ╚═╝    ╚══╝╚══╝ ╚═╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝     
 "#;
 
 pub fn render_help(f: &mut Frame, app: &App) {
     let full_area = f.area();
     crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
-    let area = crate::ui::components::centered_rect(80, 80, full_area);
+    let area = crate::ui::components::centered_rect(84, 86, full_area);
     render_help_content(f, area, app);
 }
 
-pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
+pub fn render_help_content(f: &mut Frame, area: Rect, _app: &App) {
     f.render_widget(Clear, area);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Length(8), // Logo
-                Constraint::Min(10),   // Content
-                Constraint::Length(1), // Footer
-            ]
-            .as_ref(),
-        )
+        .constraints([
+            Constraint::Length(7), // ASCII Banner
+            Constraint::Min(12),   // 2-Column Content
+            Constraint::Length(2), // Footer
+        ])
         .split(area);
 
+    // 1. Logo Banner
+    let logo_block = Block::default()
+        .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
+        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)))
+        .style(Style::default().bg(Color::Rgb(24, 24, 37)));
+
     let logo = Paragraph::new(ASCII_LOGO.trim_matches('\n'))
-        .style(Style::default().fg(Color::Cyan))
-        .alignment(Alignment::Center);
+        .style(
+            Style::default()
+                .fg(Color::Rgb(137, 220, 235))
+                .add_modifier(Modifier::BOLD),
+        )
+        .alignment(Alignment::Center)
+        .block(logo_block);
     f.render_widget(logo, chunks[0]);
 
-    let block = Block::default()
-        .title(Line::from(" Help & Legend ").alignment(Alignment::Left))
-        .title(Line::from(" [X] ").alignment(Alignment::Right))
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Reset));
+    // 2. Main 2-Column Body
+    let body_block = Block::default()
+        .borders(Borders::LEFT | Borders::RIGHT)
+        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)))
+        .style(Style::default().bg(Color::Rgb(30, 30, 46)));
 
-    let mut help_text = vec![
-        "Twigdrop helps you clean up your local branches safely.",
-        "",
-    ];
+    let body_area = chunks[1];
+    f.render_widget(body_block, body_area);
 
-    if app.ui.primary_mode == PrimaryMode::Branches {
-        help_text.extend(vec![
-            "Status Icons (Branches):",
-            "  ▲ (Red)     : Has Unique Commits (DANGER: Not in remote!)",
-            "  ⨯ (Gray)    : Gone (Upstream branch was deleted)",
-            "  ↑ (Yellow)  : Ahead of upstream (Local has new commits)",
-            "  ↓ (Cyan)    : Behind upstream (Remote has new commits)",
-            "  ✓ (Green)   : Merged (Safe to delete)",
-            "  L (Lavender) : Local Only (No tracking branch)",
-            "  S (Green)   : Stashed changes exist for this branch",
-            "",
-            "Shortcuts (Branches):",
-            "  Type [a-z0-9]  : Instant type-to-search (Esc to clear)",
-            "  ↑, ↓           : Navigate branch list",
-            "  Space          : Toggle branch selection",
-            "  Enter          : Manage branch (Spotlight overlay)",
-            "  → / ←          : Toggle Inspector drawer / Nav sidebar",
-            "  Ctrl+P         : Prune 'Gone' branches (Safe only)",
-            "  Ctrl+D         : Bulk delete selected branches",
-            "  Ctrl+S         : Cycle sort order (Recent, Prunable, A-Z)",
-            "  Ctrl+F         : Open Filters",
-            "  Ctrl+C         : Create new branch",
-            "  Ctrl+I         : AI Intelligence Analysis for branch",
-            "  Ctrl+K         : Command Palette (Spotlight)",
-            "  Ctrl+H / ?     : Help & Legend",
-            "  Ctrl+Q         : Quit application",
-            "  Esc            : Clear search / Close drawers / Main Menu",
-        ]);
-    } else {
-        help_text.extend(vec![
-            "Status Colors (Files):",
-            "  Yellow      : Modified",
-            "  Green       : Added / New",
-            "  Blue        : Staged (in index)",
-            "  Pink        : Untracked",
-            "  Gray        : Ignored (.gitignore / .twigignore)",
-            "",
-            "Shortcuts (Files):",
-            "  ↑/k, ↓/j    : Navigate tree",
-            "  → / Enter   : Open folder / Move into children",
-            "  ←           : Close folder / Move to parent",
-            "  Enter       : Preview file content",
-            "  e           : Open folder in Explorer (Alt+e for selected path)",
-            "  s           : Stage / Unstage file",
-            "  v           : Open in IDE (Root by default, Path with Alt)",
-            "  t           : Internal TTY (Alt+t for External)",
-            "  a           : Alt IDE (Root by default, Path with Alt)",
-            "  [ / ]       : Expand / Contract sidebar width",
-            "  Tab         : Switch focus between sidebar and preview",
-        ]);
-    }
-
-    help_text.extend(vec![
-        "",
-        "Global Shortcuts:",
-        "  d              : Switch between Branches and Files mode",
-        "  Shift+Tab      : Open App Switcher",
-        "  Esc            : Open Main Menu (Settings, Help, Quit)",
-        "  !              : Open Shell Command Prompt",
-        "  :              : Open Git Quick Actions Palette",
-        "  ? / h          : Help & Legend",
-        "  Shift+S        : Open Stash Manager",
-        "  Shift+C        : Open Unpushed Commits Manager",
-        "  Shift+F        : AI Auto-Fix (in Diff mode with conflicts)",
-        "  Shift+R        : Interactive Rebase",
-        "  Ctrl+o         : Open IDE (Root by default, Path with Alt)",
-        "  q              : Quit",
-    ]);
-
-    let p = Paragraph::new(help_text.join("\n"))
-        .block(block)
-        .alignment(Alignment::Left);
-
-    let help_inner = Layout::default()
+    let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(15),
-                Constraint::Percentage(70),
-                Constraint::Percentage(15),
-            ]
-            .as_ref(),
-        )
-        .split(chunks[1])[1];
+        .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
+        .split(Rect::new(
+            body_area.x + 2,
+            body_area.y,
+            body_area.width.saturating_sub(4),
+            body_area.height,
+        ));
 
-    f.render_widget(p, help_inner);
+    // Left Column: Branch Operations & Status
+    let key_style = Style::default()
+        .fg(Color::Rgb(249, 226, 175))
+        .add_modifier(Modifier::BOLD);
+    let desc_style = Style::default().fg(Color::Rgb(205, 214, 244));
+    let header_style = Style::default()
+        .fg(Color::Rgb(203, 166, 247))
+        .add_modifier(Modifier::BOLD);
 
-    let footer_text = vec![Line::from(vec![
-        Span::raw("Made by: "),
+    let left_lines = vec![
+        Line::from(Span::styled("⚡ BRANCH OPERATIONS", header_style)),
+        Line::from(vec![
+            Span::styled("  Type [a-z0-9]  ", key_style),
+            Span::styled("Instant filter (Esc to clear)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  ↑ / ↓          ", key_style),
+            Span::styled("Navigate branches", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Space          ", key_style),
+            Span::styled("Toggle selection (bulk)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Enter          ", key_style),
+            Span::styled("Manage branch (Spotlight overlay)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  → / ←          ", key_style),
+            Span::styled("Inspector drawer / Sidebar", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+P         ", key_style),
+            Span::styled("Prune 'Gone' branches", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+D         ", key_style),
+            Span::styled("Safe delete (with confirmation)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+S         ", key_style),
+            Span::styled("Cycle sort (Recent, Prunable, A-Z)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+C         ", key_style),
+            Span::styled("Create new branch", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+F         ", key_style),
+            Span::styled("Open Filters modal", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+I         ", key_style),
+            Span::styled("AI Intelligence Analysis", desc_style),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("🏷️  STATUS BADGES", header_style)),
+        Line::from(vec![
+            Span::styled(
+                "  ▲ (Red)        ",
+                Style::default()
+                    .fg(Color::Rgb(243, 139, 168))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("Unpushed commits (DANGER: unique)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  ⨯ (Gray)       ",
+                Style::default()
+                    .fg(Color::Rgb(147, 153, 178))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("Gone (upstream deleted, safe to prune)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  ↑ / ↓          ",
+                Style::default()
+                    .fg(Color::Rgb(249, 226, 175))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("Ahead / Behind remote commits", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  ✓ (Green)      ",
+                Style::default()
+                    .fg(Color::Rgb(166, 227, 161))
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("Merged (safe to delete)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "  [P] (Yellow)   ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("Protected branch (main, dev, master)", desc_style),
+        ]),
+    ];
+    f.render_widget(Paragraph::new(left_lines), cols[0]);
+
+    // Right Column: Global Shortcuts & Views
+    let right_lines = vec![
+        Line::from(Span::styled("🌐 GLOBAL SHORTCUTS", header_style)),
+        Line::from(vec![
+            Span::styled("  Ctrl+K         ", key_style),
+            Span::styled("Spotlight Command Palette", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+H / ?     ", key_style),
+            Span::styled("Toggle Help & Legend", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Ctrl+Q         ", key_style),
+            Span::styled("Quit application safely", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Shift+Tab      ", key_style),
+            Span::styled("App View Switcher", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Alt+D          ", key_style),
+            Span::styled("Toggle Branches / Files view", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Esc            ", key_style),
+            Span::styled("Clear search / Drawers / Main Menu", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Shift+C        ", key_style),
+            Span::styled("Unpushed Commits Manager", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Shift+S        ", key_style),
+            Span::styled("Stash Manager", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Shift+R        ", key_style),
+            Span::styled("Interactive Rebase", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  Shift+F        ", key_style),
+            Span::styled("AI Auto-Fix (in Diff mode)", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  :              ", key_style),
+            Span::styled("Git Quick Actions Palette", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  !              ", key_style),
+            Span::styled("Execute Shell command", desc_style),
+        ]),
+        Line::from(""),
+        Line::from(Span::styled("📂 FILES VIEW SHORTCUTS", header_style)),
+        Line::from(vec![
+            Span::styled("  s              ", key_style),
+            Span::styled("Stage / Unstage selected file", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  e              ", key_style),
+            Span::styled("Open in Finder / File Explorer", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  v / a          ", key_style),
+            Span::styled("Open in Primary / Alt IDE", desc_style),
+        ]),
+        Line::from(vec![
+            Span::styled("  [ / ]          ", key_style),
+            Span::styled("Expand / Contract sidebar width", desc_style),
+        ]),
+    ];
+    f.render_widget(Paragraph::new(right_lines), cols[1]);
+
+    // 3. Footer Banner
+    let footer_block = Block::default()
+        .borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT)
+        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)))
+        .style(Style::default().bg(Color::Rgb(24, 24, 37)));
+
+    let footer_line = Line::from(vec![
+        Span::styled(
+            " [Esc / Ctrl+H / q] ",
+            Style::default()
+                .fg(Color::Rgb(243, 139, 168))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("Close Help  •  ", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(
+            "twigdrop ",
+            Style::default()
+                .fg(Color::Rgb(137, 220, 235))
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("by ", Style::default().fg(Color::Rgb(147, 153, 178))),
         Span::styled(
             "odiador",
             Style::default()
-                .fg(Color::Magenta)
+                .fg(Color::Rgb(245, 194, 231))
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::raw(" ❤️ for the community"),
-    ])];
-    let footer_p = Paragraph::new(footer_text).alignment(Alignment::Center);
+        Span::styled(" ❤️ for the community", Style::default().fg(Color::Rgb(147, 153, 178))),
+    ]);
+
+    let footer_p = Paragraph::new(footer_line)
+        .alignment(Alignment::Center)
+        .block(footer_block);
     f.render_widget(footer_p, chunks[2]);
 }
