@@ -2,7 +2,7 @@ use crate::actions::prune_branches;
 use crate::app::App;
 use crate::git;
 use crate::state::ui::{AppMode, PreviewState};
-use crate::ui::animations::SnapAnimation;
+
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
 pub fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
@@ -55,7 +55,12 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
             KeyCode::Char('d') | KeyCode::Char('D') => {
                 if !app.ui.bulk_selected.is_empty() {
                     let names: Vec<String> = app.ui.bulk_selected.iter().cloned().collect();
-                    app.ui.snap_animation = Some(SnapAnimation::new(names));
+                    app.ui.push_modal(AppMode::ConfirmDelete(names));
+                } else if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx)
+                    && !branch.name.starts_with('*')
+                    && !crate::actions::commands::is_protected_branch(&branch.name)
+                {
+                    app.ui.push_modal(AppMode::ConfirmDelete(vec![branch.name.clone()]));
                 }
                 return false;
             }

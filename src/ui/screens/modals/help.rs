@@ -19,7 +19,9 @@ pub const ASCII_LOGO: &str = r#"
 "#;
 
 pub fn render_help(f: &mut Frame, app: &App) {
-    let area = crate::ui::components::centered_rect(80, 80, f.area());
+    let full_area = f.area();
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+    let area = crate::ui::components::centered_rect(80, 80, full_area);
     render_help_content(f, area, app);
 }
 

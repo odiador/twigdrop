@@ -163,7 +163,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     let is_modal = !app.ui.modal_stack.is_empty();
     let is_overlay_modal = matches!(
         app.ui.current_mode(),
-        AppMode::CommandPalette(_) | AppMode::MainMenu | AppMode::Manage
+        AppMode::CommandPalette(_) | AppMode::MainMenu | AppMode::Manage | AppMode::Help | AppMode::ConfirmDelete(_)
     );
     if is_modal && !is_overlay_modal {
         let overlay = Rect::new(0, 0, f.area().width, f.area().height);

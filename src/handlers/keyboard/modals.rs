@@ -865,8 +865,15 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
         AppMode::Diff => {
             Some(super::diff::handle_diff_keyboard(app, key, path))
         }
-        AppMode::Help if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') => {
-            app.ui.pop_modal();
+        AppMode::Help => {
+            if key.code == KeyCode::Esc
+                || key.code == KeyCode::Char('q')
+                || (key.modifiers.contains(KeyModifiers::CONTROL)
+                    && (key.code == KeyCode::Char('h') || key.code == KeyCode::Char('H')))
+                || key.code == KeyCode::Char('?')
+            {
+                app.ui.pop_modal();
+            }
             Some(false)
         }
         AppMode::StashDetail => {

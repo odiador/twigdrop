@@ -278,6 +278,9 @@ pub fn render_filter(f: &mut Frame, app: &App) {
 }
 
 pub fn render_confirm_delete(f: &mut Frame, names: &[String]) {
+    let full_area = f.area();
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+
     let area = Layout::default()
         .direction(Direction::Vertical)
         .constraints(

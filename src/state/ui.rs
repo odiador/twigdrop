@@ -304,6 +304,9 @@ impl UiState {
     }
 
     pub fn push_modal(&mut self, mode: AppMode) {
+        if self.current_mode() == &mode {
+            return;
+        }
         self.track_history(mode.clone());
         self.modal_stack.push(ModalState { mode });
     }
