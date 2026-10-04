@@ -80,6 +80,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             "  Ctrl+I         : AI Intelligence Analysis for branch",
             "  Ctrl+K         : Command Palette (Spotlight)",
             "  Ctrl+H / ?     : Help & Legend",
+            "  Ctrl+Q         : Quit application",
             "  Esc            : Clear search / Close drawers / Main Menu",
         ]);
     } else {

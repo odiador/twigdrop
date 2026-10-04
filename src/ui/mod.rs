@@ -112,7 +112,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     } else if app.ui.shift_pressed {
         match app.ui.primary_mode {
             PrimaryMode::Branches => {
-                " Shift+S: Stash Mgr │ Shift+C: Commit Tree │ Shift+R: Rebase │ Ctrl+D: Delete │ Shift+Tab: Switcher │ q: quit "
+                " Shift+S: Stash Mgr │ Shift+C: Commit Tree │ Shift+R: Rebase │ Ctrl+D: Delete │ Shift+Tab: Switcher │ Ctrl+Q: quit "
             }
             _ => " S: Stash Mgr │ C: Commit Tree │ h: Legend │ q: quit ",
         }
@@ -129,7 +129,7 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     } else {
         match app.ui.primary_mode {
             PrimaryMode::Branches => {
-                " ↑/↓: move │ Type: filter │ Esc: clear/menu │ ↵: manage │ Ctrl+F: filter │ Ctrl+P: prune │ Ctrl+D: delete │ Ctrl+C: new │ Ctrl+K: palette │ Ctrl+H: help │ q: quit "
+                " ↑/↓: move │ Type: filter │ Esc: clear/menu │ ↵: manage │ Ctrl+F: filter │ Ctrl+P: prune │ Ctrl+D: delete │ Ctrl+C: new │ Ctrl+K: palette │ Ctrl+H: help │ Ctrl+Q: quit "
             }
             PrimaryMode::Files => {
                 " ↑/↓: move │ Shift+Tab: switcher │ d: commits │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit "

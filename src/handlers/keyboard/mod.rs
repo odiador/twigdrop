@@ -17,27 +17,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     app.ui.alt_pressed = key.modifiers.contains(KeyModifiers::ALT);
     app.ui.shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
 
-    // Global quit
-    if key.code == KeyCode::Char('q') && key.kind == KeyEventKind::Press {
-        let is_editing = match app.ui.current_mode() {
-            AppMode::Settings => app.ui.settings_state.editing || app.ui.settings_state.selecting,
-            AppMode::Search
-            | AppMode::CreateBranch(_)
-            | AppMode::Shell(_)
-            | AppMode::DatePicker(_) => true,
-            AppMode::InteractiveRebase => app.ui.rebase_state.editing,
-            AppMode::CommitAction(_) => app.ui.settings_state.editing,
-            _ => false,
-        };
-        if !is_editing && app.ui.modal_stack.is_empty() {
-            if app.ui.current_filter.is_some() {
-                app.ui.current_filter = None;
-                app.refresh_filtered_branches();
-                app.ui.selected_branch_idx = 0;
-                return false;
-            }
-            return true;
-        }
+    // Global quit (Ctrl+Q)
+    if (key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q'))
+        && key.modifiers.contains(KeyModifiers::CONTROL)
+        && key.kind == KeyEventKind::Press
+    {
+        return true;
     }
 
     // Shift+Tab App Switcher
