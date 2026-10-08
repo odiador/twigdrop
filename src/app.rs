@@ -324,6 +324,56 @@ impl App {
         }
     }
 
+    /// Inspector cache refresh (update phase only — never call from render).
+    /// Re-runs `git log` only when the selected branch changed; also fixes
+    /// the legacy hardcoded `"."` repo path. Called at `draw` entry for the
+    /// Branches view so every selection path (keyboard/mouse/filter/sort)
+    /// stays covered without per-frame subprocesses.
+    pub fn refresh_inspector_commits(&mut self, path: &str) {
+        let branch = self
+            .ui
+            .filtered_indices
+            .get(self.ui.selected_branch_idx)
+            .and_then(|&i| self.repo.branches.get(i))
+            .map(|b| b.name.clone())
+            .unwrap_or_default();
+        if branch.is_empty() || branch.starts_with('*') {
+            self.repo.inspector_branch = branch;
+            self.repo.inspector_commits.clear();
+            return;
+        }
+        if branch == self.repo.inspector_branch {
+            return;
+        }
+        let out =
+            crate::git::commands::run_git(path, &["log", "-n", "4", "--format=%h %s", &branch])
+                .unwrap_or_default();
+        self.repo.inspector_branch = branch;
+        self.repo.inspector_commits = out.lines().take(4).map(str::to_string).collect();
+    }
+
+    /// Sidebar worktree cache refresh (update phase only — never in render).
+    /// Also fixes the legacy hardcoded `"."` repo path. Cheap enough to run
+    /// whenever the sidebar is visible; skips when hidden.
+    pub fn refresh_sidebar_worktrees(&mut self, path: &str) {
+        let out =
+            crate::git::commands::run_git(path, &["worktree", "list", "--porcelain"])
+                .unwrap_or_default();
+        let mut worktrees = Vec::new();
+        let mut current_wt = String::new();
+        for line in out.lines() {
+            if let Some(wt) = line.strip_prefix("worktree ") {
+                current_wt = std::path::Path::new(wt)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_else(|| wt.to_string());
+            } else if let Some(branch) = line.strip_prefix("branch refs/heads/") {
+                worktrees.push((current_wt.clone(), branch.to_string()));
+            }
+        }
+        self.repo.worktrees = worktrees;
+    }
+
     pub fn next(&mut self, path: &str) {
         match self.ui.primary_mode {
             PrimaryMode::Branches => {

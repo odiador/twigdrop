@@ -90,6 +90,8 @@ pub struct BranchStrings {
     pub confirm_unique_msg: &'static str,
     pub confirm_data_loss: &'static str,
     pub confirm_prompt: &'static str,
+    pub empty_title: &'static str,
+    pub empty_hint: &'static str,
 }
 
 pub struct ModalStrings {
@@ -204,6 +206,8 @@ mod tests {
             assert!(!loc.branches.type_to_filter.is_empty());
             assert!(!loc.branches.act_checkout.is_empty());
             assert!(!loc.branches.confirm_unpushed_title.is_empty());
+            assert!(!loc.branches.empty_title.is_empty());
+            assert!(!loc.branches.empty_hint.is_empty());
 
             // Modals
             assert!(!loc.modals.command_palette_title.is_empty());

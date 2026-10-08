@@ -105,27 +105,14 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
         chunks[1],
     );
 
-    // 3. Worktrees List
+    // 3. Worktrees List (cached in update — no git in render)
     let mut worktree_lines = vec![];
-    let wt_out = crate::git::commands::run_git(".", &["worktree", "list", "--porcelain"])
-        .unwrap_or_default();
-    let mut current_wt = String::new();
-    for line in wt_out.lines() {
-        if let Some(wt) = line.strip_prefix("worktree ") {
-            current_wt = std::path::Path::new(wt)
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| wt.to_string());
-        } else if let Some(branch) = line.strip_prefix("branch refs/heads/") {
-            worktree_lines.push(Line::from(vec![
-                Span::styled("• ", Style::default().fg(Color::Green)),
-                Span::styled(current_wt.clone(), Style::default().fg(Color::White)),
-                Span::styled(
-                    format!(" [{}]", branch),
-                    theme.accent2,
-                ),
-            ]));
-        }
+    for (name, branch) in &app.repo.worktrees {
+        worktree_lines.push(Line::from(vec![
+            Span::styled("• ", Style::default().fg(Color::Green)),
+            Span::styled(name.clone(), Style::default().fg(Color::White)),
+            Span::styled(format!(" [{}]", branch), theme.accent2),
+        ]));
     }
 
     if worktree_lines.is_empty() {

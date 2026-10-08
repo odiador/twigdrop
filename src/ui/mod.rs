@@ -19,6 +19,15 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(f.area());
 
+    // 0. Update-phase refresh (cached; no-op unless selection changed).
+    // Drawers read these caches — render must never spawn git.
+    if app.ui.primary_mode == PrimaryMode::Branches && app.ui.show_inspector_drawer {
+        app.refresh_inspector_commits(path);
+    }
+    if app.ui.show_nav_sidebar {
+        app.refresh_sidebar_worktrees(path);
+    }
+
     // 1. Primary Views
     match app.ui.primary_mode {
         PrimaryMode::Branches => {
@@ -220,6 +229,52 @@ mod tests {
 
         assert!(content.contains("Branches"));
         assert!(content.contains("main"));
+    }
+
+    #[test]
+    fn test_ui_draw_empty_branches() {        let (tx, _) = mpsc::channel(1);
+        let (ai_tx, _) = mpsc::channel(1);
+        let (conflict_tx, _) = mpsc::channel(1);
+        let mut app = App::new(".", vec![], "main".to_string(), tx, ai_tx, conflict_tx);
+        app.refresh_filtered_branches();
+        let backend = TestBackend::new(120, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|f| draw(f, &mut app, ".")).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("No branches match"));
+    }
+
+    #[test]
+    fn test_ui_draw_narrow_collapses_author() {
+        let mut app = create_test_app();
+        let backend = TestBackend::new(70, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|f| draw(f, &mut app, ".")).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(content.contains("main"));
+        assert!(!content.contains("Tester"));
     }
 
     #[test]

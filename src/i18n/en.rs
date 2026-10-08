@@ -63,6 +63,8 @@ pub static EN: Locale = Locale {
         confirm_unique_msg: "The following branch(es) have unique commits not found in remote:",
         confirm_data_loss: "Deleting these branches will result in PERMANENT data loss.",
         confirm_prompt: "Are you absolutely sure? (y/n)",
+        empty_title: "No branches match the current filter",
+        empty_hint: "Esc: clear filter · Ctrl+C: new branch",
     },
     modals: ModalStrings {
         main_menu_quick_actions: "1. Quick Actions Palette",

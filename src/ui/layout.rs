@@ -12,6 +12,8 @@ pub const SPOTLIGHT_FOOTER_H: u16 = 1;
 pub const HELP_BANNER_H: u16 = 7;
 pub const HELP_BODY_MIN_H: u16 = 12;
 pub const HELP_FOOTER_H: u16 = 2;
+/// Help modal two-column split (keys / views).
+pub const HELP_COLS: (u16, u16) = (52, 48);
 
 /// Commit modals (percent_x, percent_y) — same geometry as the legacy
 /// two-step percentage layouts they replace.

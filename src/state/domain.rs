@@ -18,6 +18,13 @@ pub struct RepositoryState {
     pub commit_tree: Vec<CommitTreeItem>,
     pub commit_diff: Option<String>,
     pub commit_stats: Option<String>,
+    /// Inspector drawer cache: recent commits of the selected branch.
+    /// Refreshed in update (`App::refresh_inspector_commits`), never in render.
+    pub inspector_branch: String,
+    pub inspector_commits: Vec<String>,
+    /// Sidebar cache: `(worktree name, branch)` pairs.
+    /// Refreshed in update (`App::refresh_sidebar_worktrees`), never in render.
+    pub worktrees: Vec<(String, String)>,
 }
 
 impl RepositoryState {
@@ -36,6 +43,9 @@ impl RepositoryState {
             commit_tree: Vec::new(),
             commit_diff: None,
             commit_stats: None,
+            inspector_branch: String::new(),
+            inspector_commits: Vec::new(),
+            worktrees: Vec::new(),
         }
     }
 }

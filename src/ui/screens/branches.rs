@@ -20,6 +20,8 @@ const COL_MERGE_W: u16 = 16;
 const COL_AGE_W: u16 = 12;
 /// Flexible columns (branch name, last commit) share of the table width.
 const COL_FLEX_PCT: u16 = 30;
+/// Branch column share in narrow mode (author column collapsed).
+const COL_FLEX_NARROW_PCT: u16 = 40;
 
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     use crate::ui::layout::{INSPECTOR_SPLIT, SIDEBAR_SPLIT};
@@ -54,16 +56,44 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         return;
     }
 
+    let loc = app.locale();
+    // Frozen Catppuccin default: visual-noop vs previous Rgb() literals.
+    let theme = Theme::dark_default();
+    // Narrow terminals collapse the author column (UI_GUIDE §3).
+    let narrow = table_area.width < crate::ui::theme::NARROW_WIDTH;
+
+    // Designed empty state (UI_GUIDE §3) — never a bare header.
+    if branches_len == 0 {
+        let empty = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                loc.branches.empty_title,
+                theme.warning.add_modifier(Modifier::BOLD),
+            ))
+            .alignment(Alignment::Center),
+            Line::from(""),
+            Line::from(Span::styled(loc.branches.empty_hint, theme.muted))
+                .alignment(Alignment::Center),
+        ])
+        .block(
+            Block::default()
+                .title(Line::from(vec![Span::styled(
+                    format!(" {} ", loc.branches.title_branches),
+                    theme.accent.add_modifier(Modifier::BOLD),
+                )]))
+                .borders(Borders::ALL)
+                .border_style(theme.border),
+        );
+        f.render_widget(empty, table_area);
+        return;
+    }
+
     // Scroll math lives in `UiState::branch_viewport` (pure + tested);
     // positions below are per-frame mouse hit data rebuilt each render.
     let (start, branch_items_to_show) =
         app.ui.sync_branch_viewport(branches_len, inner_height);
 
     let mut rows: Vec<Row> = vec![];
-
-    let loc = app.locale();
-    // Frozen Catppuccin default: visual-noop vs previous Rgb() literals.
-    let theme = Theme::dark_default();
 
     for i in 0..branch_items_to_show {
         let branch_idx = start + i;
@@ -147,7 +177,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             theme.faint
         };
 
-        let cells = vec![
+        let mut cells = vec![
             Cell::from(checkbox_prefix).style(checkbox_style),
             Cell::from(Line::from(vec![
                 Span::styled(format!("{:<4} ", icons), Style::default().fg(color)),
@@ -156,20 +186,33 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
             Cell::from(sync_text).style(Style::default().fg(sync_color)),
             Cell::from(merge_text).style(Style::default().fg(merge_color)),
             Cell::from(b.age.clone()).style(theme.warning),
-            Cell::from(author_str).style(theme.soft),
         ];
+        // Narrow terminals (< NARROW_WIDTH) drop the author column (UI_GUIDE §3).
+        if !narrow {
+            cells.push(Cell::from(author_str).style(theme.soft));
+        }
 
         rows.push(Row::new(cells).style(row_style));
     }
 
-    let widths = [
-        Constraint::Length(COL_SEL_W),
-        Constraint::Percentage(COL_FLEX_PCT),
-        Constraint::Length(COL_SYNC_W),
-        Constraint::Length(COL_MERGE_W),
-        Constraint::Length(COL_AGE_W),
-        Constraint::Percentage(COL_FLEX_PCT),
-    ];
+    let widths: Vec<Constraint> = if narrow {
+        vec![
+            Constraint::Length(COL_SEL_W),
+            Constraint::Percentage(COL_FLEX_NARROW_PCT),
+            Constraint::Length(COL_SYNC_W),
+            Constraint::Length(COL_MERGE_W),
+            Constraint::Length(COL_AGE_W),
+        ]
+    } else {
+        vec![
+            Constraint::Length(COL_SEL_W),
+            Constraint::Percentage(COL_FLEX_PCT),
+            Constraint::Length(COL_SYNC_W),
+            Constraint::Length(COL_MERGE_W),
+            Constraint::Length(COL_AGE_W),
+            Constraint::Percentage(COL_FLEX_PCT),
+        ]
+    };
 
     let sort_hint = match app.ui.branch_sort_mode {
         crate::state::ui::BranchSortMode::Recent => loc.branches.sort_recent,
@@ -177,16 +220,19 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         crate::state::ui::BranchSortMode::Alphabetical => loc.branches.sort_alphabetical,
     };
 
+    let mut header_cells = vec![
+        loc.branches.header_sel,
+        loc.branches.header_branch,
+        loc.branches.header_sync,
+        loc.branches.header_merge_health,
+        loc.branches.header_age,
+    ];
+    if !narrow {
+        header_cells.push(loc.branches.header_last_commit);
+    }
     let table = Table::new(rows, widths)
         .header(
-            Row::new(vec![
-                loc.branches.header_sel,
-                loc.branches.header_branch,
-                loc.branches.header_sync,
-                loc.branches.header_merge_health,
-                loc.branches.header_age,
-                loc.branches.header_last_commit,
-            ])
+            Row::new(header_cells)
             .style(theme.header)
             .bottom_margin(1),
         )

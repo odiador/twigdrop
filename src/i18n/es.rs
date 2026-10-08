@@ -63,6 +63,8 @@ pub static ES: Locale = Locale {
         confirm_unique_msg: "Las siguientes ramas tienen commits únicos no subidos al remoto:",
         confirm_data_loss: "Eliminar estas ramas resultará en PÉRDIDA PERMANENTE de datos.",
         confirm_prompt: "¿Estás absolutamente seguro? (y/n)",
+        empty_title: "Ninguna rama coincide con el filtro",
+        empty_hint: "Esc: limpiar filtro · Ctrl+C: nueva rama",
     },
     modals: ModalStrings {
         main_menu_quick_actions: "1. Paleta de Acciones Rápidas",

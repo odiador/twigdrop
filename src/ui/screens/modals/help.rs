@@ -64,7 +64,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(52), Constraint::Percentage(48)])
+        .constraints([Constraint::Percentage(crate::ui::layout::HELP_COLS.0), Constraint::Percentage(crate::ui::layout::HELP_COLS.1)])
         .split(Rect::new(
             body_area.x + 2,
             body_area.y,

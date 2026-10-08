@@ -94,23 +94,16 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
         chunks[0],
     );
 
-    // 2. Recent Commits vs main
+    // 2. Recent Commits vs main (cached in update — no git in render)
     let mut commit_lines = vec![];
     if let Some(&idx) = app.ui.filtered_indices.get(app.ui.selected_branch_idx)
         && let Some(b) = app.repo.branches.get(idx)
         && !b.name.starts_with('*')
     {
-        // Query recent 3 commits on this branch
-        let log_out = crate::git::commands::run_git(
-            ".",
-            &["log", "-n", "4", "--format=%h %s", &b.name],
-        )
-        .unwrap_or_default();
-
-        if log_out.trim().is_empty() {
+        if app.repo.inspector_commits.is_empty() {
             commit_lines.push(Line::from("No commits found"));
         } else {
-            for line in log_out.lines().take(4) {
+            for line in &app.repo.inspector_commits {
                 let parts: Vec<&str> = line.splitn(2, ' ').collect();
                 if parts.len() == 2 {
                     commit_lines.push(Line::from(vec![
