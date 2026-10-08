@@ -1,22 +1,24 @@
 use crate::models::{BranchStatus, MergeStatus};
+use crate::ui::theme::Theme;
 use ratatui::style::Color;
 
 pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
+    let theme = Theme::dark_default();
     let mut icons = String::new();
-    let mut color = Color::Rgb(161, 229, 193);
+    let mut color = theme.merged.fg.unwrap_or(Color::Green);
 
     if status.contains(&BranchStatus::HasUniqueCommits) {
-        color = Color::Rgb(245, 194, 231);
+        color = theme.unique.fg.unwrap_or(color);
     } else if status.contains(&BranchStatus::Gone) {
-        color = Color::Rgb(140, 143, 161);
+        color = theme.dim.fg.unwrap_or(color);
     } else if status.contains(&BranchStatus::Ahead) {
-        color = Color::Rgb(249, 226, 175);
+        color = theme.warning.fg.unwrap_or(color);
     } else if status.contains(&BranchStatus::Behind) {
-        color = Color::Rgb(180, 190, 254);
+        color = theme.nav.fg.unwrap_or(color);
     } else if status.contains(&BranchStatus::Merged) || status.contains(&BranchStatus::Stashed) {
-        color = Color::Rgb(161, 229, 193);
+        color = theme.merged.fg.unwrap_or(color);
     } else if status.contains(&BranchStatus::Local) {
-        color = Color::Rgb(180, 190, 254);
+        color = theme.nav.fg.unwrap_or(color);
     }
 
     for s in status {
@@ -37,11 +39,16 @@ pub fn get_status_icons(status: &[BranchStatus]) -> (String, Color) {
 }
 
 pub fn get_merge_status_display(status: &MergeStatus, locale: &crate::i18n::Locale) -> (String, Color) {
+    let theme = Theme::dark_default();
+    let dim = theme.dim.fg.unwrap_or(Color::Gray);
+    let warning = theme.warning.fg.unwrap_or(Color::Yellow);
+    let merged = theme.merged.fg.unwrap_or(Color::Green);
+    let unique = theme.unique.fg.unwrap_or(Color::Magenta);
     match status {
-        MergeStatus::NotAnalyzed => (locale.branches.merge_not_analyzed.to_string(), Color::Rgb(140, 143, 161)),
-        MergeStatus::Checking => (locale.branches.merge_checking.to_string(), Color::Rgb(249, 226, 175)),
-        MergeStatus::Clean => (locale.branches.merge_clean.to_string(), Color::Rgb(161, 229, 193)),
-        MergeStatus::Conflict(_) => (locale.branches.merge_conflict.to_string(), Color::Rgb(245, 194, 231)),
+        MergeStatus::NotAnalyzed => (locale.branches.merge_not_analyzed.to_string(), dim),
+        MergeStatus::Checking => (locale.branches.merge_checking.to_string(), warning),
+        MergeStatus::Clean => (locale.branches.merge_clean.to_string(), merged),
+        MergeStatus::Conflict(_) => (locale.branches.merge_conflict.to_string(), unique),
         MergeStatus::SafeLimit(safe, total) => {
             let total_f = *total as f32;
             let safe_f = *safe as f32;
@@ -60,7 +67,7 @@ pub fn get_merge_status_display(status: &MergeStatus, locale: &crate::i18n::Loca
             }
             (
                 format!("{} {}/{}", bar, safe, total),
-                Color::Rgb(249, 226, 175),
+                Theme::dark_default().warning.fg.unwrap_or(Color::Yellow),
             )
         }
     }
@@ -91,11 +98,12 @@ pub fn centered_rect(
 }
 
 pub fn apply_dimmed_backdrop(buf: &mut ratatui::buffer::Buffer, area: ratatui::layout::Rect) {
+    let theme = Theme::dark_default();
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
             let cell = &mut buf[(x, y)];
-            cell.set_fg(Color::Rgb(88, 91, 112));
-            cell.set_bg(Color::Rgb(17, 17, 27));
+            cell.set_fg(theme.backdrop_fg);
+            cell.set_bg(theme.backdrop_bg);
         }
     }
 }
@@ -115,8 +123,8 @@ mod tests {
         apply_dimmed_backdrop(&mut buf, area);
 
         assert_eq!(buf[(2, 2)].symbol(), "A");
-        assert_eq!(buf[(2, 2)].fg, Color::Rgb(88, 91, 112));
-        assert_eq!(buf[(2, 2)].bg, Color::Rgb(17, 17, 27));
+        assert_eq!(buf[(2, 2)].fg, Theme::dark_default().backdrop_fg);
+        assert_eq!(buf[(2, 2)].bg, Theme::dark_default().backdrop_bg);
     }
 }
 

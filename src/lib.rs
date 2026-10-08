@@ -6,6 +6,7 @@ pub mod events;
 pub mod git;
 pub mod handlers;
 pub mod i18n;
+pub mod input;
 pub mod models;
 pub mod runtime;
 pub mod state;

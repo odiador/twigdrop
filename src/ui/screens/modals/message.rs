@@ -1,35 +1,17 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::Alignment,
     style::{Color, Style},
     text::Line,
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-pub fn render_message(f: &mut Frame, msg: &str) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(30),
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
+use crate::ui::theme::Theme;
 
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(15),
-                Constraint::Percentage(70),
-                Constraint::Percentage(15),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
+pub fn render_message(f: &mut Frame, msg: &str) {
+    let theme = Theme::dark_default();
+    let (mx, my) = crate::ui::theme::MODAL_MD;
+    let inner = crate::ui::components::centered_rect(mx, my, f.area());
 
     f.render_widget(Clear, inner);
 
@@ -38,7 +20,7 @@ pub fn render_message(f: &mut Frame, msg: &str) {
         .title(Line::from(" [X] ").alignment(Alignment::Right))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow))
-        .style(Style::default().bg(Color::Rgb(20, 20, 20)));
+        .style(Style::default().bg(theme.msg_bg));
 
     let p = Paragraph::new(msg)
         .block(block)

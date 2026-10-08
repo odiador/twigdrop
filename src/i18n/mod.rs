@@ -128,12 +128,15 @@ pub struct FileStrings {
 
 pub struct FooterStrings {
     pub branches_normal: &'static str,
-    pub branches_shift: &'static str,
-    pub branches_alt: &'static str,
     pub files_normal: &'static str,
     pub commits_normal: &'static str,
     pub stashes_normal: &'static str,
     pub status_tag: &'static str,
+    pub preview: &'static str,
+    pub diff: &'static str,
+    pub commits_view: &'static str,
+    pub switcher: &'static str,
+    pub commit_files: &'static str,
 }
 
 pub struct Locale {
@@ -209,6 +212,14 @@ mod tests {
 
             // Footer
             assert!(!loc.footer.branches_normal.is_empty());
+            assert!(!loc.footer.files_normal.is_empty());
+            assert!(!loc.footer.commits_normal.is_empty());
+            assert!(!loc.footer.stashes_normal.is_empty());
+            assert!(!loc.footer.preview.is_empty());
+            assert!(!loc.footer.diff.is_empty());
+            assert!(!loc.footer.commits_view.is_empty());
+            assert!(!loc.footer.switcher.is_empty());
+            assert!(!loc.footer.commit_files.is_empty());
             assert!(!loc.footer.status_tag.is_empty());
 
             // Formatting

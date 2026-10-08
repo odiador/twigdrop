@@ -1,21 +1,24 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
 };
 
 use crate::app::App;
+use crate::ui::theme::Theme;
 
 pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
+    use crate::ui::layout::STASH_SPLIT;
+    let theme = Theme::dark_default();
     f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+        .constraints([Constraint::Percentage(STASH_SPLIT.0), Constraint::Percentage(STASH_SPLIT.1)].as_ref())
         .split(area);
     let mut stash_items = vec![];
     for (i, stash) in app.repo.stashes.iter().enumerate() {
-        let mut style = Style::default().fg(Color::Rgb(205, 214, 244));
+        let mut style = theme.base;
         if i == app.ui.selected_stash_idx {
             style = style
                 .bg(Color::White)
@@ -36,7 +39,7 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
 
     let detail_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(30), Constraint::Percentage(70)].as_ref())
+        .constraints([Constraint::Percentage(STASH_SPLIT.0), Constraint::Percentage(STASH_SPLIT.1)].as_ref())
         .split(chunks[1]);
     let files_p = Paragraph::new(app.repo.stash_files.join("\n")).block(
         Block::default()

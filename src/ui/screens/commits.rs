@@ -9,11 +9,17 @@ use ratatui::{
 use crate::app::App;
 use crate::git::files::{FileEntry, FileStatus};
 use crate::state::ui::RebaseAction;
+use crate::ui::theme::Theme;
+
+/// Commits split: graph list / details.
+const COMMITS_LIST_PCT: u16 = 60;
+const COMMITS_DETAILS_PCT: u16 = 40;
 
 pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
+    let theme = Theme::dark_default();
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(60), Constraint::Percentage(40)].as_ref())
+        .constraints([Constraint::Percentage(COMMITS_LIST_PCT), Constraint::Percentage(COMMITS_DETAILS_PCT)].as_ref())
         .split(area);
 
     let list_area = chunks[0];
@@ -35,7 +41,7 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
             for ch in commit.graph.chars() {
                 let color = match ch {
                     '*' => Color::Magenta,
-                    '|' | '/' | '\\' | '_' => Color::Rgb(100, 100, 120),
+                    '|' | '/' | '\\' | '_' => theme.graph.fg.unwrap_or(Color::Gray),
                     _ => Color::Gray,
                 };
                 graph_spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
@@ -62,7 +68,7 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
                 ),
                 Span::styled(
                     format!(" [{}] ", commit.author),
-                    Style::default().fg(Color::Rgb(180, 180, 200)),
+                    theme.muted2,
                 ),
                 Span::styled(commit.message.clone(), Style::default().fg(Color::White)),
             ]);
@@ -72,7 +78,7 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
 
             let mut line_style = Style::default();
             if is_selected {
-                line_style = line_style.bg(Color::Rgb(80, 80, 100));
+                line_style = theme.select_hi;
             }
 
             items.push(ListItem::new(Line::from(all_spans)).style(line_style));
@@ -167,28 +173,9 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
 }
 
 pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(30),
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(25),
-                Constraint::Percentage(50),
-                Constraint::Percentage(25),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
+    let theme = Theme::dark_default();
+    let (mx, my) = crate::ui::layout::COMMIT_ACTION_MODAL;
+    let inner = crate::ui::components::centered_rect(mx, my, f.area());
     f.render_widget(Clear, inner);
 
     let options = [
@@ -203,10 +190,7 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.settings_state.selected {
-            style = style
-                .bg(Color::Rgb(80, 80, 100))
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD);
+            style = theme.select_hi.add_modifier(Modifier::BOLD);
         }
 
         let text = if i == app.ui.settings_state.selected && app.ui.settings_state.editing && i == 0
@@ -228,14 +212,16 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
     f.render_widget(list, inner);
 }
 
-pub fn render_interactive_rebase(f: &mut Frame, app: &mut App) {
-    let area = crate::ui::components::centered_rect(80, 80, f.area());
+pub fn render_interactive_rebase(f: &mut Frame, app: &App) {
+    let theme = Theme::dark_default();
+    let (mx, my) = crate::ui::layout::REBASE_MODAL;
+    let area = crate::ui::components::centered_rect(mx, my, f.area());
     f.render_widget(Clear, area);
 
     let block = Block::default()
         .title(" Interactive Rebase ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)));
+        .border_style(theme.accent);
 
     let items: Vec<ListItem> = app
         .ui
@@ -275,7 +261,7 @@ pub fn render_interactive_rebase(f: &mut Frame, app: &mut App) {
 
             let mut style = Style::default();
             if i == app.ui.rebase_state.selected {
-                style = style.bg(Color::Rgb(49, 50, 68)).fg(Color::White);
+                style = theme.highlight;
             } else {
                 style = style.fg(action_color);
             }
@@ -292,23 +278,9 @@ pub fn render_interactive_rebase(f: &mut Frame, app: &mut App) {
 }
 
 pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEntry]) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(20),
-            Constraint::Percentage(60),
-            Constraint::Percentage(20),
-        ])
-        .split(f.area())[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(20),
-            Constraint::Percentage(60),
-            Constraint::Percentage(20),
-        ])
-        .split(area)[1];
+    let theme = Theme::dark_default();
+    let (mx, my) = crate::ui::layout::COMMIT_FILES_MODAL;
+    let inner = crate::ui::components::centered_rect(mx, my, f.area());
 
     f.render_widget(Clear, inner);
 
@@ -331,10 +303,7 @@ pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEn
             };
 
             if is_selected {
-                style = style
-                    .bg(Color::Rgb(80, 80, 100))
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD);
+                style = theme.select_hi.add_modifier(Modifier::BOLD);
             }
 
             let text = Line::from(vec![
@@ -359,7 +328,7 @@ pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEn
     // Footer for this modal
     let footer_area = Rect::new(inner.x + 1, inner.y + inner.height - 1, inner.width - 2, 1);
     f.render_widget(
-        Paragraph::new(" ↑/↓: navigate │ u: Move changes forward │ Esc: close ")
+        Paragraph::new(app.locale().footer.commit_files)
             .style(Style::default().fg(Color::DarkGray)),
         footer_area,
     );

@@ -9,8 +9,10 @@ use ratatui::{
 use crate::app::App;
 use crate::state::ui::FilePanel;
 use crate::ui::layout::calculate_diff_layout;
+use crate::ui::theme::Theme;
 
 pub fn render_diff_overlay(f: &mut Frame, area: Rect, app: &App) {
+    let theme = Theme::dark_default();
     let diff_layout = calculate_diff_layout(area);
     f.render_widget(Clear, diff_layout.inner_area);
 
@@ -22,7 +24,7 @@ pub fn render_diff_overlay(f: &mut Frame, area: Rect, app: &App) {
             let bg = if app.ui.diff_panel == FilePanel::Directory {
                 Color::White
             } else {
-                Color::Rgb(45, 45, 65)
+                theme.panel_bg
             };
             let fg = if app.ui.diff_panel == FilePanel::Directory {
                 Color::Black
@@ -61,7 +63,7 @@ pub fn render_diff_overlay(f: &mut Frame, area: Rect, app: &App) {
         let border_color = if app.ui.diff_panel == FilePanel::Preview {
             Color::Green
         } else {
-            Color::Rgb(74, 79, 106)
+            theme.border.fg.unwrap_or(Color::DarkGray)
         };
         let mut final_lines = Vec::new();
         let visible_rows = diff_layout.preview_area.height.saturating_sub(2) as usize;
@@ -71,7 +73,7 @@ pub fn render_diff_overlay(f: &mut Frame, area: Rect, app: &App) {
         for i in start_idx..end_idx {
             let mut line_style = Style::default();
             if i == state.cursor_y && app.ui.diff_panel == FilePanel::Preview {
-                line_style = line_style.bg(Color::Rgb(60, 60, 80));
+                line_style = line_style.bg(theme.cursor_line);
             }
             final_lines.push(state.highlighted_lines[i].clone().style(line_style));
         }

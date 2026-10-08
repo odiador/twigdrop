@@ -77,18 +77,23 @@ pub fn render_main_menu(f: &mut Frame, app: &App) {
  \__\_\\___/|___| |_|  
 "#;
 
-    let total_height = 8 + 2 + 6 + 5 + 5;
+    use crate::ui::layout::{
+        MAIN_MENU_GAP_H, MAIN_MENU_HELP_H, MAIN_MENU_LOGO_H, MAIN_MENU_OPTIONS_H,
+        MAIN_MENU_QUIT_H,
+    };
+    let total_height =
+        MAIN_MENU_LOGO_H + MAIN_MENU_GAP_H + MAIN_MENU_OPTIONS_H + MAIN_MENU_HELP_H + MAIN_MENU_QUIT_H;
     let v_margin = area.height.saturating_sub(total_height) / 2;
 
     let v_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(v_margin),
-            Constraint::Length(8),
-            Constraint::Length(2),
-            Constraint::Length(6),
-            Constraint::Length(5),
-            Constraint::Length(5),
+            Constraint::Length(MAIN_MENU_LOGO_H),
+            Constraint::Length(MAIN_MENU_GAP_H),
+            Constraint::Length(MAIN_MENU_OPTIONS_H),
+            Constraint::Length(MAIN_MENU_HELP_H),
+            Constraint::Length(MAIN_MENU_QUIT_H),
             Constraint::Min(0),
         ])
         .split(area);
@@ -101,7 +106,7 @@ pub fn render_main_menu(f: &mut Frame, app: &App) {
         let color = if is_selected {
             Color::White
         } else {
-            Color::Rgb(60, 60, 80)
+            crate::ui::theme::Theme::dark_default().cursor_line
         };
 
         render_transparent_ascii(buf, opt, v_chunks[3 + i], color);

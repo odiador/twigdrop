@@ -10,23 +10,8 @@ use crate::app::App;
 use crate::state::ui::{DatePickerField, DatePickerState};
 
 pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(30),
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-        ])
-        .split(f.area())[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(20),
-            Constraint::Percentage(60),
-            Constraint::Percentage(20),
-        ])
-        .split(area)[1];
+    let (mx, my) = crate::ui::layout::DATE_PICKER_MODAL;
+    let inner = crate::ui::components::centered_rect(mx, my, f.area());
 
     f.render_widget(Clear, inner);
 
@@ -37,15 +22,10 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
 
     f.render_widget(block, inner);
 
+    // Five equal wheels: Year / Month / Day / Hour / Min.
     let picker_area = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-            Constraint::Percentage(20),
-        ])
+        .constraints([Constraint::Ratio(1, 5); 5])
         .margin(1)
         .split(inner);
 
@@ -149,7 +129,9 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
             if idx == 1 {
                 style = style.fg(Color::White).add_modifier(Modifier::BOLD);
                 if is_focused {
-                    style = style.bg(Color::Rgb(80, 80, 100)).fg(Color::Cyan);
+                    style = crate::ui::theme::Theme::dark_default()
+                        .select_cyan
+                        .add_modifier(Modifier::BOLD);
                     text = format!(" {} ◄", text);
                 } else {
                     text = format!(" {}  ", text);

@@ -2,6 +2,7 @@ pub mod animations;
 pub mod components;
 pub mod layout;
 pub mod screens;
+pub mod theme;
 
 use ratatui::{
     Frame,
@@ -103,28 +104,16 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         }
     };
 
-    // 4. Footer shortcuts
+    // 4. Footer shortcuts — static per (View, Modal) context.
+    // Never reactive to a held modifier (no stored shift/alt state).
     let footer_shortcuts = if let AppMode::CodePreview(_) = app.ui.current_mode() {
-        " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar "
+        loc.footer.preview
     } else if *app.ui.current_mode() == AppMode::Diff {
-        " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back "
+        loc.footer.diff
     } else if *app.ui.current_mode() == AppMode::CommitsView {
-        " ↑/k, ↓/j: navigate │ Enter: select │ Esc: close "
+        loc.footer.commits_view
     } else if *app.ui.current_mode() == AppMode::Switcher {
-        " ↑/k, ↓/j: navigate │ Enter: confirm │ Esc/q: cancel "
-    } else if app.ui.shift_pressed {
-        match app.ui.primary_mode {
-            PrimaryMode::Branches => loc.footer.branches_shift,
-            _ => " S: Stash Mgr │ C: Commit Tree │ h: Legend │ q: quit ",
-        }
-    } else if app.ui.alt_pressed {
-        match app.ui.primary_mode {
-            PrimaryMode::Branches => loc.footer.branches_alt,
-            PrimaryMode::Files => {
-                " ↑/↓: move │ Alt+D: switch view │ v: IDE (Path) │ a: Alt IDE (Path) │ Alt+T: Ext TTY │ Alt+J: TTY "
-            }
-            _ => " ↑/↓: move │ Alt+D: switch view │ Alt+T: Ext TTY │ Alt+J: TTY ",
-        }
+        loc.footer.switcher
     } else {
         match app.ui.primary_mode {
             PrimaryMode::Branches => loc.footer.branches_normal,
@@ -134,12 +123,11 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
         }
     };
 
+    let theme = crate::ui::theme::Theme::dark_default();
     let footer_line = ratatui::text::Line::from(vec![
         ratatui::text::Span::styled(
             status_prefix,
-            ratatui::style::Style::default()
-                .fg(ratatui::style::Color::Rgb(180, 190, 254))
-                .add_modifier(ratatui::style::Modifier::BOLD),
+            theme.nav.add_modifier(ratatui::style::Modifier::BOLD),
         ),
         ratatui::text::Span::styled(
             footer_shortcuts,
@@ -150,12 +138,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     let footer = ratatui::widgets::Paragraph::new(footer_line);
     f.render_widget(footer, chunks[1]);
 
-    // 5. Modals and Overlays
+    // 5. Modals and Overlays (overlay set owned by `AppMode::is_overlay`)
     let is_modal = !app.ui.modal_stack.is_empty();
-    let is_overlay_modal = matches!(
-        app.ui.current_mode(),
-        AppMode::CommandPalette(_) | AppMode::MainMenu | AppMode::Manage | AppMode::Help | AppMode::ConfirmDelete(_)
-    );
+    let is_overlay_modal = app.ui.current_mode().is_overlay();
     if is_modal && !is_overlay_modal {
         let overlay = Rect::new(0, 0, f.area().width, f.area().height);
         f.render_widget(ratatui::widgets::Clear, overlay);
@@ -314,8 +299,9 @@ mod tests {
 
         // Verify dimming on a corner cell outside the modal window
         let corner_cell = &buffer[(0, 0)];
-        assert_eq!(corner_cell.bg, ratatui::style::Color::Rgb(17, 17, 27));
-        assert_eq!(corner_cell.fg, ratatui::style::Color::Rgb(88, 91, 112));
+        let theme = crate::ui::theme::Theme::dark_default();
+        assert_eq!(corner_cell.bg, theme.backdrop_bg);
+        assert_eq!(corner_cell.fg, theme.backdrop_fg);
     }
 }
 

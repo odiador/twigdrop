@@ -7,17 +7,17 @@ use ratatui::{
 };
 
 use crate::app::App;
+use crate::ui::theme::Theme;
 
 pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
+    let theme = Theme::dark_default();
     let block = Block::default()
         .title(" ◀ Inspector [←/Esc] ")
         .title_style(
-            Style::default()
-                .fg(Color::Rgb(137, 220, 235))
-                .add_modifier(Modifier::BOLD),
+            theme.accent2.add_modifier(Modifier::BOLD),
         )
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(69, 71, 90)));
+        .border_style(theme.border_soft);
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -25,9 +25,9 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(7), // Branch overview
-            Constraint::Min(5),    // Commits vs main
-            Constraint::Length(5), // Background workers status
+            Constraint::Length(crate::ui::layout::INSPECTOR_OVERVIEW_H),
+            Constraint::Min(crate::ui::layout::INSPECTOR_COMMITS_MIN_H),
+            Constraint::Length(crate::ui::layout::INSPECTOR_WORKERS_H),
         ])
         .split(inner);
 
@@ -49,9 +49,7 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
         overview_lines.push(Line::from(vec![
             Span::styled(
                 &b.name,
-                Style::default()
-                    .fg(Color::Rgb(137, 180, 250))
-                    .add_modifier(Modifier::BOLD),
+                theme.info.add_modifier(Modifier::BOLD),
             ),
             Span::styled(
                 tag,
@@ -70,7 +68,7 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
 
         overview_lines.push(Line::from(vec![
             Span::styled("Updated: ", Style::default().fg(Color::DarkGray)),
-            Span::styled(&b.age, Style::default().fg(Color::Rgb(250, 179, 135))),
+            Span::styled(&b.age, theme.peach),
             Span::styled(format!(" ({})", b.commit_date), Style::default().fg(Color::DarkGray)),
         ]));
 
@@ -78,7 +76,7 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
             Span::styled("Sync: ", Style::default().fg(Color::DarkGray)),
             Span::styled(
                 format!("↑{} ↓{}", b.ahead_count, b.behind_count),
-                Style::default().fg(Color::Rgb(137, 220, 235)),
+                theme.accent2,
             ),
         ]));
     } else {
@@ -91,7 +89,7 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
                 .title(" Overview ")
                 .title_style(Style::default().fg(Color::Gray))
                 .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::Rgb(49, 50, 68))),
+                .border_style(theme.divider),
         ),
         chunks[0],
     );
@@ -116,9 +114,9 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
                 let parts: Vec<&str> = line.splitn(2, ' ').collect();
                 if parts.len() == 2 {
                     commit_lines.push(Line::from(vec![
-                        Span::styled(parts[0].to_string(), Style::default().fg(Color::Rgb(137, 220, 235))),
+                        Span::styled(parts[0].to_string(), theme.accent2),
                         Span::raw(" "),
-                        Span::styled(parts[1].to_string(), Style::default().fg(Color::Rgb(205, 214, 244))),
+                        Span::styled(parts[1].to_string(), theme.base),
                     ]));
                 } else {
                     commit_lines.push(Line::from(line.to_string()));
@@ -135,7 +133,7 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
                 .title(" Recent Commits ")
                 .title_style(Style::default().fg(Color::Gray))
                 .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::Rgb(49, 50, 68))),
+                .border_style(theme.divider),
         ),
         chunks[1],
     );
@@ -148,12 +146,12 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
             Span::styled("Idle (Up to date)", Style::default().fg(Color::White)),
         ]),
         Line::from(vec![
-            Span::styled("● ", Style::default().fg(Color::Rgb(137, 220, 235))),
+            Span::styled("● ", theme.accent2),
             Span::styled("File Watcher: ", Style::default().fg(Color::Gray)),
             Span::styled("Active", Style::default().fg(Color::White)),
         ]),
         Line::from(vec![
-            Span::styled("● ", Style::default().fg(Color::Rgb(203, 166, 247))),
+            Span::styled("● ", theme.accent),
             Span::styled("AI Engine: ", Style::default().fg(Color::Gray)),
             Span::styled(
                 format!("Ready ({})", app.config.ai_provider),

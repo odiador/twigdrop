@@ -35,7 +35,8 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('e') => {
-            let target_path = if app.ui.alt_pressed
+            let alt = key.modifiers.contains(ratatui::crossterm::event::KeyModifiers::ALT);
+            let target_path = if alt
                 && let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx)
             {
                 std::path::PathBuf::from(path).join(&entry.path)
@@ -47,7 +48,8 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('v') => {
             if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
-                let target_path = if app.ui.alt_pressed {
+                let alt = key.modifiers.contains(ratatui::crossterm::event::KeyModifiers::ALT);
+                let target_path = if alt {
                     std::path::PathBuf::from(path).join(&entry.path)
                 } else {
                     std::path::PathBuf::from(path)
@@ -58,7 +60,8 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('a') => {
             if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
-                let target_path = if app.ui.alt_pressed {
+                let alt = key.modifiers.contains(ratatui::crossterm::event::KeyModifiers::ALT);
+                let target_path = if alt {
                     std::path::PathBuf::from(path).join(&entry.path)
                 } else {
                     std::path::PathBuf::from(path)

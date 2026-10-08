@@ -14,8 +14,8 @@ use crate::state::ui::{
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
-    app.ui.alt_pressed = key.modifiers.contains(KeyModifiers::ALT);
-    app.ui.shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
+    // NOTE: modifiers are matched per-event below (see `key.modifiers`).
+    // Do NOT store them in UiState (unreliable in tmux/SSH; see docs/ARCHITECTURE.md §4).
 
     // Global quit (Ctrl+Q)
     if (key.code == KeyCode::Char('q') || key.code == KeyCode::Char('Q'))
@@ -162,19 +162,23 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             return false;
         }
-        KeyCode::Char('C') if app.ui.shift_pressed => {
+        // Shift-letter layer: crossterm delivers these as uppercase Char + SHIFT,
+        // but some terminals strip the flag — accept bare uppercase too
+        // (mirrors `crate::input::from_key`). Lowercase variants stay reserved
+        // for type-to-filter.
+        KeyCode::Char('C') => {
             app.set_primary_mode(PrimaryMode::Commits);
             app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
             app.ui.selected_commit_idx = 0;
             app.ui.track_history(AppMode::CommitsView);
             return false;
         }
-        KeyCode::Char('R') if app.ui.shift_pressed => {
+        KeyCode::Char('R') => {
             app.load_rebase_commits(path);
             app.ui.push_modal(AppMode::InteractiveRebase);
             return false;
         }
-        KeyCode::Char('S') if app.ui.shift_pressed => {
+        KeyCode::Char('S') => {
             app.load_stashes(path);
             app.load_stash_detail(path);
             app.ui.push_modal(AppMode::StashDetail);

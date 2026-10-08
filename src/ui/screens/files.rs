@@ -10,8 +10,10 @@ use crate::app::App;
 use crate::git::files::FileStatus;
 use crate::models::GutterStatus;
 use crate::state::ui::{AppMode, FilePanel, PreviewState};
+use crate::ui::theme::Theme;
 
 pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
+    let theme = Theme::dark_default();
     let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = app.ui.current_mode() {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -31,9 +33,9 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
     let sidebar_border_color = if app.ui.active_panel == FilePanel::Directory
         && matches!(app.ui.current_mode(), AppMode::CodePreview(_))
     {
-        Color::Rgb(180, 190, 254)
+        theme.nav.fg.unwrap_or(Color::Blue)
     } else {
-        Color::Rgb(74, 79, 106)
+        theme.border.fg.unwrap_or(Color::DarkGray)
     };
 
     let block = Block::default()
@@ -55,23 +57,23 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         };
         let name = entry.path.file_name().unwrap_or_default().to_string_lossy();
         let status_color = match entry.status {
-            FileStatus::Modified => Color::Rgb(249, 226, 175),
-            FileStatus::Added => Color::Rgb(161, 229, 193),
-            FileStatus::Staged => Color::Rgb(137, 180, 250),
-            FileStatus::Untracked => Color::Rgb(245, 194, 231),
-            FileStatus::Ignored => Color::Rgb(140, 143, 161),
-            FileStatus::Deleted => Color::Rgb(243, 139, 168),
-            FileStatus::Conflict => Color::Rgb(210, 15, 57),
-            FileStatus::Normal => Color::Rgb(205, 214, 244),
+            FileStatus::Modified => theme.warning.fg.unwrap_or(Color::Yellow),
+            FileStatus::Added => theme.merged.fg.unwrap_or(Color::Green),
+            FileStatus::Staged => theme.info.fg.unwrap_or(Color::Blue),
+            FileStatus::Untracked => theme.unique.fg.unwrap_or(Color::Magenta),
+            FileStatus::Ignored => theme.dim.fg.unwrap_or(Color::Gray),
+            FileStatus::Deleted => theme.danger.fg.unwrap_or(Color::Red),
+            FileStatus::Conflict => theme.conflict.fg.unwrap_or(Color::Red),
+            FileStatus::Normal => theme.base.fg.unwrap_or(Color::White),
         };
 
         let mut style = Style::default().fg(status_color);
 
         let status_bg = match entry.status {
-            FileStatus::Modified => Some(Color::Rgb(35, 48, 65)),
-            FileStatus::Added => Some(Color::Rgb(35, 60, 48)),
-            FileStatus::Conflict => Some(Color::Rgb(65, 35, 35)),
-            FileStatus::Staged => Some(Color::Rgb(45, 60, 75)),
+            FileStatus::Modified => Some(theme.tint_modified),
+            FileStatus::Added => Some(theme.tint_added),
+            FileStatus::Conflict => Some(theme.tint_conflict),
+            FileStatus::Staged => Some(theme.tint_staged),
             _ => None,
         };
 
@@ -83,7 +85,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
             let bg = if app.ui.active_panel == FilePanel::Directory {
                 Color::White
             } else {
-                Color::Rgb(54, 58, 79)
+                theme.select_soft
             };
             let fg = if app.ui.active_panel == FilePanel::Directory {
                 Color::Black
@@ -111,10 +113,11 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
 }
 
 pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &PreviewState) {
+    let theme = Theme::dark_default();
     let border_color = if app.ui.active_panel == FilePanel::Preview {
-        Color::Rgb(180, 190, 254)
+        theme.nav.fg.unwrap_or(Color::Blue)
     } else {
-        Color::Rgb(74, 79, 106)
+        theme.border.fg.unwrap_or(Color::DarkGray)
     };
     let block = Block::default()
         .title(format!(" Preview: {} (Tab: switch) ", state.file_path))
@@ -154,21 +157,21 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
         let is_cursor = i == state.cursor_y;
         let mut line_style = Style::default();
         if is_cursor && app.ui.active_panel == FilePanel::Preview {
-            line_style = line_style.bg(Color::Rgb(255, 255, 0)).fg(Color::Black);
+            line_style = theme.search_hit;
         } else if is_cursor {
-            line_style = line_style.bg(Color::Rgb(40, 40, 60));
+            line_style = line_style.bg(theme.cursor_unfocused);
         } else if is_selected {
-            line_style = line_style.bg(Color::Rgb(30, 50, 80));
+            line_style = line_style.bg(theme.select_range);
         }
 
         for span in &h_line.spans {
             let mut s = span.style;
             if is_cursor && app.ui.active_panel == FilePanel::Preview {
-                s = s.bg(Color::Rgb(255, 255, 0)).fg(Color::Black);
+                s = theme.search_hit;
             } else if is_cursor {
-                s = s.bg(Color::Rgb(40, 40, 60));
+                s = s.bg(theme.cursor_unfocused);
             } else if is_selected {
-                s = s.bg(Color::Rgb(30, 50, 80));
+                s = s.bg(theme.select_range);
             }
             spans.push(Span::styled(span.content.clone(), s));
         }

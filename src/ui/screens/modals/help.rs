@@ -1,12 +1,13 @@
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
 use crate::app::App;
+use crate::ui::theme::{MODAL_LG, Theme};
 
 pub const ASCII_LOGO: &str = r#"
  ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
@@ -20,34 +21,33 @@ pub const ASCII_LOGO: &str = r#"
 pub fn render_help(f: &mut Frame, app: &App) {
     let full_area = f.area();
     crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
-    let area = crate::ui::components::centered_rect(84, 86, full_area);
+    let area = crate::ui::components::centered_rect(MODAL_LG.0, MODAL_LG.1, full_area);
     render_help_content(f, area, app);
 }
 
 pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
     let loc = app.locale();
+    let theme = Theme::dark_default();
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(7), // ASCII Banner
-            Constraint::Min(12),   // 2-Column Content
-            Constraint::Length(2), // Footer
+            Constraint::Length(crate::ui::layout::HELP_BANNER_H),
+            Constraint::Min(crate::ui::layout::HELP_BODY_MIN_H),
+            Constraint::Length(crate::ui::layout::HELP_FOOTER_H),
         ])
         .split(area);
 
     // 1. Logo Banner
     let logo_block = Block::default()
         .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
-        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)))
-        .style(Style::default().bg(Color::Rgb(24, 24, 37)));
+        .border_style(theme.active_border)
+        .style(Style::default().bg(theme.surface_alt));
 
     let logo = Paragraph::new(ASCII_LOGO.trim_matches('\n'))
         .style(
-            Style::default()
-                .fg(Color::Rgb(137, 220, 235))
-                .add_modifier(Modifier::BOLD),
+            theme.accent2.add_modifier(Modifier::BOLD),
         )
         .alignment(Alignment::Center)
         .block(logo_block);
@@ -56,8 +56,8 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     // 2. Main 2-Column Body
     let body_block = Block::default()
         .borders(Borders::LEFT | Borders::RIGHT)
-        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)))
-        .style(Style::default().bg(Color::Rgb(30, 30, 46)));
+        .border_style(theme.active_border)
+        .style(Style::default().bg(theme.surface));
 
     let body_area = chunks[1];
     f.render_widget(body_block, body_area);
@@ -73,18 +73,17 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         ));
 
     // Left Column: Branch Operations & Status
-    let key_style = Style::default()
-        .fg(Color::Rgb(249, 226, 175))
-        .add_modifier(Modifier::BOLD);
-    let desc_style = Style::default().fg(Color::Rgb(205, 214, 244));
-    let header_style = Style::default()
-        .fg(Color::Rgb(203, 166, 247))
-        .add_modifier(Modifier::BOLD);
+    // Key labels come from the canonical table (`crate::input::keys`) —
+    // never hardcode them here, or help drifts from actual bindings.
+    let key = |id: &str| format!("  {:<18}", crate::input::keys(id));
+    let key_style = theme.warning.add_modifier(Modifier::BOLD);
+    let desc_style = theme.base;
+    let header_style = theme.accent.add_modifier(Modifier::BOLD);
 
     let left_lines = vec![
         Line::from(Span::styled(loc.modals.help_branch_ops_title, header_style)),
         Line::from(vec![
-            Span::styled("  Type [a-z0-9]  ", key_style),
+            Span::styled(key("branches.type_filter"), key_style),
             Span::styled(format!("{} {}", loc.branches.type_to_filter, loc.branches.esc_to_clear), desc_style),
         ]),
         Line::from(vec![
@@ -92,39 +91,39 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             Span::styled("Navigate branches", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Space          ", key_style),
+            Span::styled(key("branches.toggle_select"), key_style),
             Span::styled("Toggle selection (bulk)", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Enter          ", key_style),
+            Span::styled(key("branches.manage"), key_style),
             Span::styled("Manage branch (Spotlight overlay)", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  → / ←          ", key_style),
+            Span::styled("  → / ←              ", key_style),
             Span::styled("Inspector drawer / Sidebar", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+P         ", key_style),
+            Span::styled(key("branches.prune"), key_style),
             Span::styled(loc.branches.act_checkout_desc, desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+D         ", key_style),
+            Span::styled(key("branches.safe_delete"), key_style),
             Span::styled("Safe delete (with confirmation)", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+S         ", key_style),
+            Span::styled(key("branches.cycle_sort"), key_style),
             Span::styled("Cycle sort (Recent, Prunable, A-Z)", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+C         ", key_style),
+            Span::styled(key("branches.create"), key_style),
             Span::styled(loc.modals.cmd_create_branch, desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+F         ", key_style),
+            Span::styled(key("branches.filter"), key_style),
             Span::styled("Open Filters modal", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+I         ", key_style),
+            Span::styled(key("ai.analyze"), key_style),
             Span::styled("AI Intelligence Analysis", desc_style),
         ]),
         Line::from(""),
@@ -132,100 +131,90 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled(
                 "  ▲ (Red)        ",
-                Style::default()
-                    .fg(Color::Rgb(243, 139, 168))
-                    .add_modifier(Modifier::BOLD),
+                theme.danger.add_modifier(Modifier::BOLD),
             ),
             Span::styled(loc.branches.legend_unique_commits, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
                 "  ⨯ (Gray)       ",
-                Style::default()
-                    .fg(Color::Rgb(147, 153, 178))
-                    .add_modifier(Modifier::BOLD),
+                theme.muted.add_modifier(Modifier::BOLD),
             ),
             Span::styled(loc.branches.legend_gone, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
                 "  ↑ / ↓          ",
-                Style::default()
-                    .fg(Color::Rgb(249, 226, 175))
-                    .add_modifier(Modifier::BOLD),
+                theme.warning.add_modifier(Modifier::BOLD),
             ),
             Span::styled(loc.branches.legend_ahead_behind, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
                 "  ✓ (Green)      ",
-                Style::default()
-                    .fg(Color::Rgb(166, 227, 161))
-                    .add_modifier(Modifier::BOLD),
+                theme.success.add_modifier(Modifier::BOLD),
             ),
             Span::styled(loc.branches.legend_merged, desc_style),
         ]),
         Line::from(vec![
             Span::styled(
-                "  [P] (Yellow)   ",
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD),
+                "  [P] (Yellow)         ",
+                theme.warning.add_modifier(Modifier::BOLD),
             ),
             Span::styled(loc.branches.legend_protected, desc_style),
         ]),
     ];
     f.render_widget(Paragraph::new(left_lines), cols[0]);
 
-    // Right Column: Global Shortcuts & Views
+    // Right Column: Global Shortcuts & Views (labels from BINDINGS)
     let right_lines = vec![
         Line::from(Span::styled(loc.modals.help_global_shortcuts_title, header_style)),
         Line::from(vec![
-            Span::styled("  Ctrl+K         ", key_style),
+            Span::styled(key("global.palette"), key_style),
             Span::styled("Spotlight Command Palette", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+H / ?     ", key_style),
+            Span::styled(format!("  {:<18}", format!("{} / ?", crate::input::keys("global.help_toggle_ctrl"))), key_style),
             Span::styled("Toggle Help & Legend", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Ctrl+Q         ", key_style),
+            Span::styled(key("global.quit"), key_style),
             Span::styled("Quit application safely", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Shift+Tab      ", key_style),
+            Span::styled(key("global.switcher"), key_style),
             Span::styled("App View Switcher", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Alt+D          ", key_style),
+            Span::styled(key("global.toggle_view"), key_style),
             Span::styled("Toggle Branches / Files view", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Esc            ", key_style),
+            Span::styled(key("global.close_back"), key_style),
             Span::styled("Clear search / Drawers / Main Menu", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Shift+C        ", key_style),
+            Span::styled(key("global.commits"), key_style),
             Span::styled("Unpushed Commits Manager", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Shift+S        ", key_style),
+            Span::styled(key("global.stash_mgr"), key_style),
             Span::styled("Stash Manager", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Shift+R        ", key_style),
+            Span::styled(key("global.rebase"), key_style),
             Span::styled("Interactive Rebase", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  Shift+F        ", key_style),
+            Span::styled(key("diff.ai_autofix"), key_style),
             Span::styled("AI Auto-Fix (in Diff mode)", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  :              ", key_style),
+            Span::styled(key("global.quick_actions"), key_style),
             Span::styled("Git Quick Actions Palette", desc_style),
         ]),
         Line::from(vec![
-            Span::styled("  !              ", key_style),
+            Span::styled(key("global.shell"), key_style),
             Span::styled("Execute Shell command", desc_style),
         ]),
         Line::from(""),
@@ -252,31 +241,29 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     // 3. Footer Banner
     let footer_block = Block::default()
         .borders(Borders::BOTTOM | Borders::LEFT | Borders::RIGHT)
-        .border_style(Style::default().fg(Color::Rgb(203, 166, 247)))
-        .style(Style::default().bg(Color::Rgb(24, 24, 37)));
+        .border_style(theme.active_border)
+        .style(Style::default().bg(theme.surface_alt));
 
     let footer_line = Line::from(vec![
         Span::styled(
-            " [Esc / Ctrl+H / q] ",
-            Style::default()
-                .fg(Color::Rgb(243, 139, 168))
-                .add_modifier(Modifier::BOLD),
+            format!(
+                " [{} / {} / q] ",
+                crate::input::keys("global.close_back"),
+                crate::input::keys("global.help_toggle_ctrl")
+            ),
+            theme.danger.add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!("{}  •  ", loc.modals.help_footer_close), Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(format!("{}  •  ", loc.modals.help_footer_close), theme.muted),
         Span::styled(
             "twigdrop ",
-            Style::default()
-                .fg(Color::Rgb(137, 220, 235))
-                .add_modifier(Modifier::BOLD),
+            theme.accent2.add_modifier(Modifier::BOLD),
         ),
-        Span::styled("by ", Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled("by ", theme.muted),
         Span::styled(
             "odiador",
-            Style::default()
-                .fg(Color::Rgb(245, 194, 231))
-                .add_modifier(Modifier::BOLD),
+            theme.unique.add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!(" ❤️ {}", loc.modals.help_footer_credit), Style::default().fg(Color::Rgb(147, 153, 178))),
+        Span::styled(format!(" ❤️ {}", loc.modals.help_footer_credit), theme.muted),
     ]);
 
     let footer_p = Paragraph::new(footer_line)

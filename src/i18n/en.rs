@@ -97,12 +97,15 @@ pub static EN: Locale = Locale {
         resize_sidebar: "Expand / Contract sidebar width",
     },
     footer: FooterStrings {
-        branches_normal: " ↑/↓: move │ Type: filter │ Esc: clear/menu │ ↵: manage │ Ctrl+F: filter │ Ctrl+P: prune │ Ctrl+D: delete │ Ctrl+C: new │ Ctrl+K: palette │ Ctrl+H: help │ Ctrl+Q: quit ",
-        branches_shift: " Shift+S: Stash Mgr │ Shift+C: Commit Tree │ Shift+R: Rebase │ Ctrl+D: Delete │ Shift+Tab: Switcher │ Ctrl+Q: quit ",
-        branches_alt: " ↑/↓: move │ Alt+D: switch view │ Alt+T: Ext TTY │ Alt+J: TTY ",
+        branches_normal: " ↑/↓: move │ Type: filter │ Esc: clear/menu │ ↵: manage │ Ctrl+F: filter │ Ctrl+P: prune │ Ctrl+D: delete │ Ctrl+C: new │ Ctrl+K: palette │ Shift+S: stash │ Shift+C: commits │ Alt+D: view │ Ctrl+Q: quit ",
         files_normal: " ↑/↓: move │ Shift+Tab: switcher │ d: commits │ e: explorer │ v: IDE │ s: stage/unstage │ !: shell │ t: TTY (Alt+j toggle) │ ?: help │ q: quit ",
         commits_normal: " ↑/↓: move │ Shift+Tab: switcher │ d: stashes │ Enter: details │ ?: help │ q: quit ",
         stashes_normal: " ↑/↓: move │ Shift+Tab: switcher │ d: branches │ a: apply │ ?: help │ q: quit ",
         status_tag: "branches",
+        preview: " hjkl: navigate │ Esc: close │ [ / ]: resize sidebar ",
+        diff: " Shift+F: AI Auto-Fix Conflicts │ q/Esc: Back ",
+        commits_view: " ↑/k, ↓/j: navigate │ Enter: select │ Esc: close ",
+        switcher: " ↑/k, ↓/j: navigate │ Enter: confirm │ Esc/q: cancel ",
+        commit_files: " ↑/↓: navigate │ u: Move changes forward │ Esc: close ",
     },
 };

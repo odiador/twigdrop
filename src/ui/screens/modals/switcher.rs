@@ -1,31 +1,18 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::Alignment,
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Clear, List, ListItem},
 };
 
 use crate::app::App;
 use crate::state::ui::AppMode;
+use crate::ui::theme::Theme;
 
 pub fn render_switcher(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Percentage(25),
-            Constraint::Percentage(50),
-            Constraint::Percentage(25),
-        ])
-        .split(f.area());
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(30),
-            Constraint::Percentage(40),
-            Constraint::Percentage(30),
-        ])
-        .split(area[1])[1];
+    let theme = Theme::dark_default();
+    let (mx, my) = crate::ui::layout::SWITCHER_MODAL;
+    let inner = crate::ui::components::centered_rect(mx, my, f.area());
 
     f.render_widget(Clear, inner);
 
@@ -42,10 +29,7 @@ pub fn render_switcher(f: &mut Frame, app: &App) {
         let mut style = Style::default().fg(Color::Gray);
 
         if i == app.ui.switcher_index {
-            style = style
-                .bg(Color::Rgb(80, 80, 100))
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD);
+            style = theme.select_hi.add_modifier(Modifier::BOLD);
         }
         items.push(ListItem::new(text).style(style));
     }

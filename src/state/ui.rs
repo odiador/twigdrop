@@ -86,6 +86,59 @@ pub enum PrimaryMode {
     Stashes,
 }
 
+/// Canonical view: exactly one visible at a time. Replaces the legacy
+/// `AppMode::{BranchesView, FilesView, CommitsView, StashDetail-as-view}`
+/// quartet (kept as deprecated aliases until handlers/ui migrate).
+/// Spec: `docs/ARCHITECTURE.md` §3.
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum View {
+    Branches,
+    Files,
+    Commits,
+    Stashes,
+}
+
+impl View {
+    #[must_use]
+    pub const fn from_primary(mode: PrimaryMode) -> Self {
+        match mode {
+            PrimaryMode::Branches => Self::Branches,
+            PrimaryMode::Files => Self::Files,
+            PrimaryMode::Commits => Self::Commits,
+            PrimaryMode::Stashes => Self::Stashes,
+        }
+    }
+}
+
+impl AppMode {
+    /// Spotlight-style overlays that dim + trap focus. Replaces the
+    /// hard-coded `is_overlay_modal` list in `ui::draw`.
+    #[must_use]
+    pub const fn is_overlay(&self) -> bool {
+        matches!(
+            self,
+            Self::CommandPalette(_)
+                | Self::MainMenu
+                | Self::Manage
+                | Self::Help
+                | Self::ConfirmDelete(_)
+        )
+    }
+
+    /// Legacy view markers kept for compat. Prefer `View` for new code.
+    #[must_use]
+    pub const fn as_view(&self) -> Option<View> {
+        match self {
+            Self::BranchesView => Some(View::Branches),
+            Self::FilesView => Some(View::Files),
+            Self::CommitsView => Some(View::Commits),
+            // Debt: StashDetail doubles as the Stashes view.
+            Self::StashDetail => Some(View::Stashes),
+            _ => None,
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum CommandAction {
     CheckoutBranch,
@@ -194,9 +247,7 @@ pub struct UiState {
     pub show_nav_sidebar: bool,
     pub nav_sidebar_selected: usize,
 
-    // Interaction State
-    pub alt_pressed: bool,
-    pub shift_pressed: bool,
+    // Interaction State (modifiers are matched per-KeyEvent, never stored)
     pub last_click_time: Instant,
     pub last_click_row: Option<usize>,
 
@@ -247,8 +298,6 @@ impl UiState {
             show_inspector_drawer: false,
             show_nav_sidebar: false,
             nav_sidebar_selected: 0,
-            alt_pressed: false,
-            shift_pressed: false,
             last_click_time: Instant::now(),
             last_click_row: None,
             open_paths: HashSet::new(),
@@ -346,6 +395,52 @@ impl UiState {
             &mut self.mode
         }
     }
+
+    /// Canonical visible view derived from `primary_mode`.
+    /// New code should branch on this instead of `AppMode::*View`.
+    #[must_use]
+    pub const fn view(&self) -> View {
+        View::from_primary(self.primary_mode)
+    }
+
+    /// Pure centered-viewport math: `(start, visible_count)` for `selected`
+    /// inside `total` rows with `height` visible slots. Keeps the selection
+    /// vertically centered and clamps at both ends. `render_main_list` must
+    /// use this instead of inline scroll math (tested below).
+    #[must_use]
+    pub const fn branch_viewport(selected: usize, total: usize, height: usize) -> (usize, usize) {
+        if height == 0 || total == 0 {
+            return (0, 0);
+        }
+        let mut start = 0;
+        if total > height {
+            let half = height / 2;
+            if selected > half {
+                start = selected - half;
+            }
+            let end = start + height;
+            if end > total {
+                start = total.saturating_sub(height);
+            }
+        }
+        let visible = if height < total.saturating_sub(start) {
+            height
+        } else {
+            total.saturating_sub(start)
+        };
+        (start, visible)
+    }
+
+    /// Sync scroll cache for the branches table. Returns `(start, visible)`.
+    /// Also resets per-frame mouse hit positions (rebuilt during render —
+    /// see `ARCHITECTURE.md` debt note on `draw(&mut App)`).
+    pub fn sync_branch_viewport(&mut self, total: usize, height: usize) -> (usize, usize) {
+        let (start, visible) =
+            Self::branch_viewport(self.selected_branch_idx, total, height);
+        self.list_start_index = start;
+        self.branch_screen_positions.clear();
+        (start, visible)
+    }
 }
 
 #[cfg(test)]
@@ -367,6 +462,60 @@ mod tests {
         assert!(state.show_inspector_drawer);
         state.show_inspector_drawer = false;
         assert!(!state.show_inspector_drawer);
+    }
+
+    #[test]
+    fn test_view_from_primary() {
+        assert_eq!(
+            UiState::new(PrimaryMode::Branches, 30).view(),
+            View::Branches
+        );
+        assert_eq!(UiState::new(PrimaryMode::Files, 30).view(), View::Files);
+        assert_eq!(
+            UiState::new(PrimaryMode::Commits, 30).view(),
+            View::Commits
+        );
+        assert_eq!(
+            UiState::new(PrimaryMode::Stashes, 30).view(),
+            View::Stashes
+        );
+    }
+
+    #[test]
+    fn test_overlay_set() {
+        assert!(AppMode::Manage.is_overlay());
+        assert!(AppMode::Help.is_overlay());
+        assert!(!AppMode::Normal.is_overlay());
+        assert!(!AppMode::Diff.is_overlay());
+        assert_eq!(AppMode::BranchesView.as_view(), Some(View::Branches));
+        assert_eq!(AppMode::StashDetail.as_view(), Some(View::Stashes));
+        assert_eq!(AppMode::Manage.as_view(), None);
+    }
+
+    #[test]
+    fn test_branch_viewport_centering() {
+        use UiState as U;
+        assert_eq!(U::branch_viewport(0, 0, 10), (0, 0));
+        assert_eq!(U::branch_viewport(0, 5, 0), (0, 0));
+        // Fits entirely.
+        assert_eq!(U::branch_viewport(2, 5, 10), (0, 5));
+        // Pinned to top.
+        assert_eq!(U::branch_viewport(0, 87, 20), (0, 20));
+        // Centered in the middle.
+        assert_eq!(U::branch_viewport(43, 87, 20), (33, 20));
+        // Clamped at the end.
+        assert_eq!(U::branch_viewport(86, 87, 20), (67, 20));
+        assert_eq!(U::branch_viewport(100, 87, 20), (67, 20));
+    }
+
+    #[test]
+    fn test_sync_branch_viewport_resets_hits() {
+        let mut state = UiState::new(PrimaryMode::Branches, 30);
+        state.branch_screen_positions.push((0, 3));
+        let (start, visible) = state.sync_branch_viewport(87, 20);
+        assert_eq!((start, visible), (0, 20));
+        assert_eq!(state.list_start_index, start);
+        assert!(state.branch_screen_positions.is_empty());
     }
 }
 

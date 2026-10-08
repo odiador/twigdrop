@@ -1,36 +1,18 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Rect},
     style::{Color, Modifier, Style},
     text::Line,
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
 };
 
 use crate::app::App;
+use crate::ui::theme::Theme;
 
 pub fn render_settings(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(15),
-                Constraint::Percentage(70),
-                Constraint::Percentage(15),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(15),
-                Constraint::Percentage(70),
-                Constraint::Percentage(15),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
+    let theme = Theme::dark_default();
+    let (mx, my) = crate::ui::layout::SETTINGS_MODAL;
+    let inner = crate::ui::components::centered_rect(mx, my, f.area());
     f.render_widget(Clear, inner);
 
     let options = [
@@ -76,9 +58,7 @@ pub fn render_settings(f: &mut Frame, app: &App) {
     for (i, opt) in options.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.settings_state.selected {
-            style = style
-                .bg(Color::Rgb(80, 80, 100))
-                .add_modifier(Modifier::BOLD);
+            style = theme.select_hi.add_modifier(Modifier::BOLD);
         }
 
         let text = if i == app.ui.settings_state.selected {
@@ -133,10 +113,7 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         for (i, choice) in app.ui.settings_state.choices.iter().enumerate() {
             let mut style = Style::default().fg(Color::Gray);
             if i == app.ui.settings_state.choice_idx {
-                style = style
-                    .bg(Color::Rgb(80, 80, 100))
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD);
+                style = theme.select_hi.add_modifier(Modifier::BOLD);
             }
             choice_items.push(ListItem::new(format!(" {} ", choice)).style(style));
         }

@@ -1,6 +1,6 @@
 use ratatui::{
     Frame,
-    layout::{Alignment, Constraint, Direction, Layout},
+    layout::Alignment,
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
 };
@@ -8,29 +8,16 @@ use ratatui::{
 use crate::app::App;
 
 pub fn render_shell(f: &mut Frame, input: &str) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(40),
-                Constraint::Length(3),
-                Constraint::Percentage(40),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(10),
-                Constraint::Percentage(80),
-                Constraint::Percentage(10),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
+    use crate::ui::layout::{SHELL_INPUT_H, SHELL_INPUT_W};
+    use ratatui::layout::Rect;
+    let full = f.area();
+    let w = full.width * SHELL_INPUT_W / 100;
+    let inner = Rect::new(
+        full.x + full.width.saturating_sub(w) / 2,
+        full.y + full.height.saturating_sub(SHELL_INPUT_H) / 2,
+        w,
+        SHELL_INPUT_H,
+    );
 
     f.render_widget(Clear, inner);
 
@@ -46,29 +33,8 @@ pub fn render_shell(f: &mut Frame, input: &str) {
 }
 
 pub fn render_quick_actions(f: &mut Frame, app: &App) {
-    let area = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints(
-            [
-                Constraint::Percentage(25),
-                Constraint::Percentage(50),
-                Constraint::Percentage(25),
-            ]
-            .as_ref(),
-        )
-        .split(f.area())[1];
-
-    let inner = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(30),
-                Constraint::Percentage(40),
-                Constraint::Percentage(30),
-            ]
-            .as_ref(),
-        )
-        .split(area)[1];
+    let (mx, my) = crate::ui::layout::QUICK_ACTIONS_MODAL;
+    let inner = crate::ui::components::centered_rect(mx, my, f.area());
 
     f.render_widget(Clear, inner);
 
@@ -76,9 +42,8 @@ pub fn render_quick_actions(f: &mut Frame, app: &App) {
     for (i, action) in app.ui.quick_actions_state.actions.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.quick_actions_state.selected {
-            style = style
-                .bg(Color::Rgb(80, 80, 100))
-                .fg(Color::White)
+            style = crate::ui::theme::Theme::dark_default()
+                .select_hi
                 .add_modifier(Modifier::BOLD);
         }
         items.push(ListItem::new(format!(" {} ", action)).style(style));

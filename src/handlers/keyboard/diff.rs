@@ -53,7 +53,9 @@ pub fn handle_diff_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::Char('F') if app.ui.shift_pressed => {
+        // Shift+F arrives as uppercase 'F' (+SHIFT on most terminals).
+        // Accept bare uppercase like the global Shift-letter layer.
+        KeyCode::Char('F') => {
             let branch = app
                 .get_filtered_branches()
                 .get(app.ui.selected_branch_idx)

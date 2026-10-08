@@ -8,17 +8,17 @@ use ratatui::{
 
 use crate::app::App;
 use crate::state::ui::PrimaryMode;
+use crate::ui::theme::Theme;
 
 pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
+    let theme = Theme::dark_default();
     let block = Block::default()
         .title(" ◀ Menu [→/Esc] ")
         .title_style(
-            Style::default()
-                .fg(Color::Rgb(203, 166, 247))
-                .add_modifier(Modifier::BOLD),
+            theme.accent.add_modifier(Modifier::BOLD),
         )
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(69, 71, 90)));
+        .border_style(theme.border_soft);
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -26,9 +26,9 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(8), // Views
-            Constraint::Length(6), // Filter scopes
-            Constraint::Min(4),    // Worktrees
+            Constraint::Length(crate::ui::layout::SIDEBAR_VIEWS_H),
+            Constraint::Length(crate::ui::layout::SIDEBAR_FILTERS_H),
+            Constraint::Min(crate::ui::layout::SIDEBAR_WORKTREES_MIN_H),
         ])
         .split(inner);
 
@@ -46,16 +46,11 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
         let is_hovered = app.ui.nav_sidebar_selected == i;
 
         let style = if is_hovered {
-            Style::default()
-                .bg(Color::Rgb(49, 50, 68))
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD)
+            theme.highlight.add_modifier(Modifier::BOLD)
         } else if is_active {
-            Style::default()
-                .fg(Color::Rgb(137, 180, 250))
-                .add_modifier(Modifier::BOLD)
+            theme.info.add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Rgb(166, 173, 200))
+            theme.soft
         };
 
         let prefix = if is_hovered {
@@ -77,7 +72,7 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
                 .title(" Views ")
                 .title_style(Style::default().fg(Color::Gray))
                 .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::Rgb(49, 50, 68))),
+                .border_style(theme.divider),
         ),
         chunks[0],
     );
@@ -88,12 +83,9 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
     for (idx, name) in filters.iter().enumerate() {
         let is_hovered = app.ui.nav_sidebar_selected == (4 + idx);
         let style = if is_hovered {
-            Style::default()
-                .bg(Color::Rgb(49, 50, 68))
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD)
+            theme.highlight.add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::Rgb(166, 173, 200))
+            theme.soft
         };
         let prefix = if is_hovered { "▎ " } else { "  " };
         filter_lines.push(Line::from(vec![
@@ -108,7 +100,7 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
                 .title(" Filters ")
                 .title_style(Style::default().fg(Color::Gray))
                 .borders(Borders::BOTTOM)
-                .border_style(Style::default().fg(Color::Rgb(49, 50, 68))),
+                .border_style(theme.divider),
         ),
         chunks[1],
     );
@@ -130,7 +122,7 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
                 Span::styled(current_wt.clone(), Style::default().fg(Color::White)),
                 Span::styled(
                     format!(" [{}]", branch),
-                    Style::default().fg(Color::Rgb(137, 220, 235)),
+                    theme.accent2,
                 ),
             ]));
         }

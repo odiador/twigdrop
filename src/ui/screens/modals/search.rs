@@ -10,7 +10,13 @@ use crate::app::App;
 pub fn render_search(f: &mut Frame, app: &App) {
     let area = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+        .constraints(
+            [
+                Constraint::Length(crate::ui::layout::SEARCH_BAR_H),
+                Constraint::Min(0),
+            ]
+            .as_ref(),
+        )
         .split(f.area())[0];
     f.render_widget(Clear, area);
     f.render_widget(

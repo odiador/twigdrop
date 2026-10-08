@@ -97,12 +97,15 @@ pub static ES: Locale = Locale {
         resize_sidebar: "Expandir / Contraer barra lateral",
     },
     footer: FooterStrings {
-        branches_normal: " ↑/↓: mover │ Escribe: filtrar │ Esc: limpiar/menú │ ↵: gestionar │ Ctrl+F: filtro │ Ctrl+P: podar │ Ctrl+D: eliminar │ Ctrl+C: nueva │ Ctrl+K: paleta │ Ctrl+H: ayuda │ Ctrl+Q: salir ",
-        branches_shift: " Shift+S: Stash Mgr │ Shift+C: Árbol Commits │ Shift+R: Rebase │ Ctrl+D: Eliminar │ Shift+Tab: Selector │ Ctrl+Q: salir ",
-        branches_alt: " ↑/↓: mover │ Alt+D: cambiar vista │ Alt+T: TTY Externa │ Alt+J: TTY ",
+        branches_normal: " ↑/↓: mover │ Escribe: filtrar │ Esc: limpiar/menú │ ↵: gestionar │ Ctrl+F: filtro │ Ctrl+P: podar │ Ctrl+D: eliminar │ Ctrl+C: nueva │ Ctrl+K: paleta │ Shift+S: stash │ Shift+C: commits │ Alt+D: vista │ Ctrl+Q: salir ",
         files_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: commits │ e: explorador │ v: IDE │ s: stage/unstage │ !: consola │ t: TTY │ ?: ayuda │ q: salir ",
         commits_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: stashes │ Enter: detalles │ ?: ayuda │ q: salir ",
         stashes_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: ramas │ a: aplicar │ ?: ayuda │ q: salir ",
         status_tag: "ramas",
+        preview: " hjkl: navegar │ Esc: cerrar │ [ / ]: redimensionar barra ",
+        diff: " Shift+F: Auto-arreglo IA │ q/Esc: Atrás ",
+        commits_view: " ↑/k, ↓/j: navegar │ Enter: seleccionar │ Esc: cerrar ",
+        switcher: " ↑/k, ↓/j: navegar │ Enter: confirmar │ Esc/q: cancelar ",
+        commit_files: " ↑/↓: navegar │ u: Mover cambios │ Esc: cerrar ",
     },
 };
