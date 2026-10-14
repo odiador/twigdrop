@@ -5,6 +5,34 @@
 //! Default values preserve the current Catppuccin Mocha look.
 
 use ratatui::style::{Color, Modifier, Style};
+use serde::{Deserialize, Serialize};
+
+/// Color scheme selector (persisted in config).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    #[default]
+    Dark,
+    Light,
+}
+
+impl ThemeMode {
+    #[must_use]
+    pub fn resolve(self) -> Theme {
+        match self {
+            Self::Dark => Theme::dark_default(),
+            Self::Light => Theme::light(),
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+        }
+    }
+}
 
 /// Modal size tokens as `(percent_x, percent_y)` for `centered_rect`.
 pub const MODAL_SM: (u16, u16) = (52, 48);
@@ -18,6 +46,10 @@ pub const NARROW_WIDTH: u16 = 100;
 
 pub const PADDING_XS: u16 = 1;
 pub const PADDING_SM: u16 = 2;
+
+/// Braille spinner frames for background work (status bar).
+pub const SPINNER_FRAMES: [char; 10] =
+    ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /// Full palette. Field names are semantic — never `mauve`/`pink` in screens.
 #[derive(Debug, Clone, Copy)]
@@ -101,8 +133,7 @@ impl Default for Theme {
 impl Theme {
     /// Current Catppuccin Mocha look, frozen as default so migration is visual-noop.
     #[must_use]
-    pub fn dark_default() -> Self {
-        Self {
+    pub fn dark_default() -> Self {        Self {
             base: Style::default().fg(Color::Rgb(205, 214, 244)),
             muted: Style::default().fg(Color::Rgb(147, 153, 178)),
             subtle: Style::default().fg(Color::Rgb(108, 112, 134)),
@@ -155,6 +186,67 @@ impl Theme {
             backdrop_fg: Color::Rgb(88, 91, 112),
             surface: Color::Rgb(30, 30, 46),
             surface_alt: Color::Rgb(24, 24, 37),
+        }
+    }
+
+    /// Catppuccin Latte look for light terminals (`theme_mode = "light"`).
+    #[must_use]
+    pub fn light() -> Self {
+        Self {
+            base: Style::default().fg(Color::Rgb(76, 79, 105)),
+            muted: Style::default().fg(Color::Rgb(108, 111, 133)),
+            subtle: Style::default().fg(Color::Rgb(140, 143, 161)),
+            accent: Style::default().fg(Color::Rgb(136, 57, 239)),
+            accent2: Style::default().fg(Color::Rgb(4, 165, 213)),
+            success: Style::default().fg(Color::Rgb(64, 160, 43)),
+            warning: Style::default().fg(Color::Rgb(223, 142, 29)),
+            danger: Style::default().fg(Color::Rgb(210, 15, 57)),
+            info: Style::default().fg(Color::Rgb(30, 102, 245)),
+            border: Style::default().fg(Color::Rgb(172, 178, 191)),
+            active_border: Style::default().fg(Color::Rgb(136, 57, 239)),
+            highlight: Style::default()
+                .bg(Color::Rgb(136, 57, 239))
+                .fg(Color::White),
+            header: Style::default()
+                .fg(Color::Rgb(108, 111, 133))
+                .add_modifier(Modifier::BOLD),
+            unique: Style::default().fg(Color::Rgb(234, 118, 203)),
+            merged: Style::default().fg(Color::Rgb(23, 146, 153)),
+            nav: Style::default().fg(Color::Rgb(114, 135, 253)),
+            soft: Style::default().fg(Color::Rgb(92, 95, 119)),
+            faint: Style::default().fg(Color::Rgb(140, 143, 161)),
+            dim: Style::default().fg(Color::Rgb(156, 160, 176)),
+            sync: Style::default().fg(Color::Rgb(4, 165, 213)),
+            danger_surface: Color::Rgb(250, 215, 220),
+            conflict: Style::default().fg(Color::Rgb(210, 15, 57)),
+            peach: Style::default().fg(Color::Rgb(254, 100, 11)),
+            graph: Style::default().fg(Color::Rgb(172, 178, 191)),
+            muted2: Style::default().fg(Color::Rgb(124, 128, 156)),
+            select_hi: Style::default()
+                .bg(Color::Rgb(136, 57, 239))
+                .fg(Color::White),
+            select_cyan: Style::default()
+                .bg(Color::Rgb(4, 165, 213))
+                .fg(Color::White),
+            border_soft: Style::default().fg(Color::Rgb(186, 194, 207)),
+            search_hit: Style::default()
+                .bg(Color::Rgb(30, 102, 245))
+                .fg(Color::White),
+            select_soft: Color::Rgb(204, 208, 218),
+            panel_bg: Color::Rgb(186, 194, 207),
+            cursor_line: Color::Rgb(204, 208, 218),
+            cursor_unfocused: Color::Rgb(230, 233, 239),
+            select_range: Color::Rgb(172, 178, 191),
+            tint_modified: Color::Rgb(250, 240, 215),
+            tint_added: Color::Rgb(223, 240, 223),
+            tint_staged: Color::Rgb(215, 232, 245),
+            tint_conflict: Color::Rgb(245, 215, 220),
+            divider: Style::default().fg(Color::Rgb(204, 208, 218)),
+            msg_bg: Color::Rgb(239, 241, 245),
+            backdrop_bg: Color::Rgb(17, 17, 27),
+            backdrop_fg: Color::Rgb(88, 91, 112),
+            surface: Color::Rgb(230, 233, 239),
+            surface_alt: Color::Rgb(239, 241, 245),
         }
     }
 

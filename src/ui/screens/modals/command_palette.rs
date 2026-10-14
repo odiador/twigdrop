@@ -9,11 +9,15 @@ use ratatui::{
 use crate::state::ui::CommandPaletteState;
 use crate::ui::theme::Theme;
 
-pub fn render_command_palette(f: &mut Frame, state: &CommandPaletteState, locale: &crate::i18n::Locale) {
-    let theme = Theme::dark_default();
+pub fn render_command_palette(
+    f: &mut Frame,
+    state: &CommandPaletteState,
+    locale: &crate::i18n::Locale,
+    theme: &Theme,
+) {
     let full_area = f.area();
     // 1. Dim the underlying terminal screen without clearing it
-    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area, theme);
 
     // 2. Centered Spotlight floating window (PALETTE_MODAL token)
     let (mx, my) = crate::ui::layout::PALETTE_MODAL;

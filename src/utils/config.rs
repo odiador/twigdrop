@@ -21,6 +21,12 @@ pub struct Config {
     pub default_sidebar_width: usize,
     #[serde(default = "crate::i18n::detect_system_language")]
     pub language: crate::i18n::Language,
+    /// Extra protected branches beyond the built-in defaults.
+    #[serde(default)]
+    pub protected_branches: Vec<String>,
+    /// Color scheme (`dark` default; `"light"` for light terminals).
+    #[serde(default)]
+    pub theme_mode: crate::ui::theme::ThemeMode,
 }
 
 impl Default for Config {
@@ -69,9 +75,11 @@ impl Default for Config {
             last_primary_mode: 0,
             ai_provider: "ollama".to_string(),
             providers,
-            enable_animations: false,
+            enable_animations: true,
             default_sidebar_width: 30,
             language: crate::i18n::detect_system_language(),
+            protected_branches: Vec::new(),
+            theme_mode: crate::ui::theme::ThemeMode::Dark,
         }
     }
 }
@@ -85,6 +93,11 @@ static FALLBACK_PROVIDER: std::sync::LazyLock<ProviderConfig> = std::sync::LazyL
 impl Config {
     pub fn locale(&self) -> &'static crate::i18n::Locale {
         crate::i18n::get_locale(self.language)
+    }
+
+    /// Built-in defaults plus user-configured `protected_branches`.
+    pub fn is_protected(&self, name: &str) -> bool {
+        crate::actions::commands::is_protected_branch_with(name, &self.protected_branches)
     }
 
     pub fn current_provider(&self) -> &ProviderConfig {
@@ -224,6 +237,30 @@ mod tests {
         assert_eq!(provider.model, "");
         assert_eq!(provider.api_key, "");
         assert_eq!(provider.url, "");
+    }
+
+    #[test]
+    fn test_protected_branches_config() {
+        let config = Config::default();
+        assert!(config.is_protected("main"));
+        assert!(!config.is_protected("feature/x"));
+        let config = Config {
+            protected_branches: vec!["release".to_string()],
+            ..Default::default()
+        };
+        assert!(config.is_protected("release"));
+        assert!(config.is_protected("main"));
+    }
+
+    #[test]
+    fn test_theme_mode_labels() {
+        use crate::ui::theme::ThemeMode;
+        assert_eq!(ThemeMode::Dark.label(), "dark");
+        assert_eq!(ThemeMode::Light.label(), "light");
+        assert_ne!(
+            ThemeMode::Dark.resolve().base,
+            ThemeMode::Light.resolve().base
+        );
     }
 
     #[test]

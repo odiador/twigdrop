@@ -58,14 +58,14 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
                     app.ui.push_modal(AppMode::ConfirmDelete(names));
                 } else if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx)
                     && !branch.name.starts_with('*')
-                    && !crate::actions::commands::is_protected_branch(&branch.name)
+                    && !app.config.is_protected(&branch.name)
                 {
                     app.ui.push_modal(AppMode::ConfirmDelete(vec![branch.name.clone()]));
                 }
                 return false;
             }
             KeyCode::Char('p') | KeyCode::Char('P') => {
-                let msg = prune_branches(path, &app.repo.branches, &app.repo.current_branch);
+                let msg = prune_branches(path, &app.repo.branches, &app.repo.current_branch, &app.config.protected_branches);
                 app.refresh_branches(path);
                 app.ui.push_modal(AppMode::Message(msg));
                 return false;
@@ -86,6 +86,7 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
                         branch_name.clone(),
                     ));
                     app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
+                    app.mark_ai_dispatched();
                     app.repo.branch_info = git::get_branch_info(path, &branch_name);
                     app.ui.info_scroll = 0;
 
@@ -167,6 +168,10 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
                 app.refresh_filtered_branches();
                 return false;
             }
+            false
+        }
+        KeyCode::Char('u') if app.ui.undoable_toast().is_some() => {
+            app.undo_delete(path);
             false
         }
         KeyCode::Char(c) if c.is_alphanumeric() || c == '-' || c == '_' || c == '/' || c == '.' => {

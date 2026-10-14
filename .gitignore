@@ -4,10 +4,10 @@ scratch_debug
 scratch_debug.rs
 
 .agents/
+.claude/
 
 research/
 GEMINI.md
-docs/
 
 CONTEXT.md
 sessions/

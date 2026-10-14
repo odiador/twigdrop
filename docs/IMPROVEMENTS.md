@@ -1,32 +1,37 @@
 # 🚀 Twigdrop Roadmap
 
+> Estado: actualizado tras las fases TUI/UX + seguridad. `[x]` = hecho y
+> cubierto por tests; `[ ]` = pendiente.
+
 ## 🛡️ Seguridad y Prevención
-- **Backup de SHAs:** Guardar SHAs en `~/.twigdrop/backups/<repo>/` antes de borrar para permitir restauraciones.
-- **Ramas Protegidas:** Configuración en `~/.config/twigdrop/config.toml` (e.g., `protected = ["main", "master"]`).
-- **Confirmación Crítica:** Modal de confirmación explícita para ramas con commits únicos (▲).
+- [x] **Backup de SHAs:** `actions::backup_branch_sha` guarda `<repo>/<fecha>.log` con `<hora> <rama> <sha>` en `~/.twigdrop/backups/<slug>/` antes de cada `branch -D` (best-effort, nunca bloquea el borrado).
+- [x] **Ramas Protegidas:** `protected_branches = [...]` en `config.toml` se suma a los defaults (`Config::is_protected`); enforced en bulk-delete, prune, guards de UI y ordenación.
+- [x] **Confirmación Crítica:** modal explícito para ramas con commits únicos (▲).
 
 ## 🔍 Funcionalidades de Navegación
-- **Búsqueda Filtrada:** Modo `/` para filtrar la lista de ramas en tiempo real.
-- **Ordenamiento Inteligente:** Tecla `s` para rotar entre nombre, recencia (comit) y status.
-- **Columnas de Contexto:** Mostrar fecha del último commit y autor en la lista principal.
+- [x] **Búsqueda Filtrada:** type-to-filter en tiempo real + modal `/` legacy.
+- [x] **Ordenamiento Inteligente:** `Ctrl+S` rota Recencia / Podables / A-Z.
+- [x] **Columnas de Contexto:** fecha, autor, sync `↑↓` y salud de merge en la tabla (colapso responsive <100 cols).
 
 ## 🗂️ Gestión de Ramas (Menú Manage)
-- **Operaciones Expandidas:** Rename, Push, Set Upstream, Rebase/Merge.
-- **Utilidades:** Copiar nombre al portapapeles y ver diff de stashes.
+- [x] **Operaciones Expandidas:** Rename (modal dedicado `git branch -m`), Push, Set Upstream (`push -u`), Merge into current.
+- [x] **Utilidades:** copiar nombre al portapapeles (arboard) y ver diff de stashes.
+- [x] **Undo de borrado:** toast con `[u] undo` (8s) que recrea ramas desde los SHAs respaldados; cubierto por test E2E `delete_then_undo_restores_branch`.
+- [ ] **Rebase/Merge desde Manage:** hoy vive en `Shift+R` (rebase interactivo); falta atajo directo merge-into-current.
 
 ## 🎨 Experiencia de Usuario (UI/UX)
-- **Diff Enriquecido:** Colores (Verde/Rojo) para sintaxis básica del diff.
-- **Feedback Visual:** Spinner de carga y barra de estado dinámica.
-- **Temas:** Soporte para modo claro/oscuro.
+- [x] **Diff Enriquecido:** syntax highlighting (syntect) + gutter `+/|/~`.
+- [x] **Feedback Visual:** spinner braille en la barra de estado durante IA/animaciones (`App::is_busy`); empty-state diseñado; viewport `1-20/87`.
+- [x] **Temas:** `dark` (Mocha) + `light` (Latte) vía `theme_mode` en config y selector en Settings.
 
 ## 🔧 Excelencia Técnica
-- **Robustez:** Reemplazar `.expect()` por gestión de errores `Result` en `git/commands.rs`.
-- **Refactor:** Unificar constantes de layout entre `screens.rs` y `mouse.rs`.
+- [x] **Robustez:** cero `.expect()`/`.unwrap()` en código de producción (`git/`, `actions/`); solo en tests.
+- [x] **Refactor:** tokens únicos de layout (`ui::layout`) y color (`ui::theme::Theme`); `calculate_modal_rect` delega en `modal_size` (render y ratón coinciden).
 
 ---
 
 ### 📅 Plan de Acción Sugerido
-1. **Seguridad:** Backups y protección de ramas.
-2. **Core UX:** Búsqueda (`/`) y manejo de errores.
-3. **Visual:** Columnas informativas y colores en Diff.
-
+1. **Seguridad:** Backups y protección de ramas. ✅
+2. **Core UX:** Búsqueda y manejo de errores. ✅
+3. **Visual:** Columnas informativas y colores en Diff. ✅
+4. **Siguiente:** toast system con undo (`u`), tests de `draw` en modo claro.

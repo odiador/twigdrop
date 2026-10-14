@@ -7,10 +7,9 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::theme::Theme;
 
 pub fn render_settings(f: &mut Frame, app: &App) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let (mx, my) = crate::ui::layout::SETTINGS_MODAL;
     let inner = crate::ui::components::centered_rect(mx, my, f.area());
     f.render_widget(Clear, inner);
@@ -47,6 +46,10 @@ pub fn render_settings(f: &mut Frame, app: &App) {
         format!(
             "[ UI ]     Enable Animations    : {}",
             app.config.enable_animations
+        ),
+        format!(
+            "[ UI ]     Theme                : {}",
+            app.config.theme_mode.label()
         ),
         format!(
             "[ UI ]     Default Sidebar Width: {}",

@@ -1,4 +1,4 @@
-.PHONY: setup dev build format lint check test install release help
+.PHONY: setup dev build format lint check test install release quit-tuis help
 
 # Default target
 all: help
@@ -15,6 +15,7 @@ help:
 	@echo "  make check    - Checks compilation without generating a binary"
 	@echo "  make test     - Runs unit tests"
 	@echo "  make install  - Installs the binary locally via Cargo"
+	@echo "  make quit-tuis - Terminates active twigdrop TUI processes"
 	@echo "  make release VERSION=v0.1.0 - Creates a GitHub release and tag using the gh cli"
 
 setup:
@@ -51,6 +52,19 @@ test:
 
 install: build
 	cargo install --path .
+
+# Terminates active twigdrop TUI processes.
+# Matches the binary name exactly (pgrep -x) so IDE language servers or
+# other tools with "twigdrop" in their arguments are never touched.
+# twigdrop traps SIGTERM/SIGINT and restores the terminal on exit.
+quit-tuis:
+	@echo "Looking for active twigdrop TUIs..."
+	@if pgrep -x twigdrop > /dev/null; then \
+		pkill -x twigdrop; \
+		echo "Terminate signal sent to twigdrop process(es)."; \
+	else \
+		echo "No active twigdrop TUIs found."; \
+	fi
 
 # Creates a tag and release on GitHub
 # Usage: make release VERSION=v0.1.0

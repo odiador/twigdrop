@@ -1,9 +1,7 @@
 use ratatui::style::Color;
 
-#[allow(dead_code)]
 pub const DENSITY_CHARS: [char; 5] = ['·', '░', '▒', '▓', '█'];
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Particle {
     pub x: f32,
@@ -16,7 +14,6 @@ pub struct Particle {
     pub lifetime: u8,
 }
 
-#[allow(dead_code)]
 impl Particle {
     pub fn new(x: u16, y: u16, color: Color) -> Self {
         Self {
@@ -40,13 +37,11 @@ impl Particle {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Default)]
 pub struct ParticleSystem {
     pub particles: Vec<Particle>,
 }
 
-#[allow(dead_code)]
 impl ParticleSystem {
     pub fn new() -> Self {
         Self {

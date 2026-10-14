@@ -9,7 +9,7 @@ use ratatui::{
 use crate::app::App;
 use crate::state::ui::{DatePickerField, DatePickerState};
 
-pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
+pub fn render_date_picker(f: &mut Frame, app: &App, state: &DatePickerState) {
     let (mx, my) = crate::ui::layout::DATE_PICKER_MODAL;
     let inner = crate::ui::components::centered_rect(mx, my, f.area());
 
@@ -129,7 +129,8 @@ pub fn render_date_picker(f: &mut Frame, _app: &App, state: &DatePickerState) {
             if idx == 1 {
                 style = style.fg(Color::White).add_modifier(Modifier::BOLD);
                 if is_focused {
-                    style = crate::ui::theme::Theme::dark_default()
+                    style = app
+                        .theme()
                         .select_cyan
                         .add_modifier(Modifier::BOLD);
                     text = format!(" {} ◄", text);

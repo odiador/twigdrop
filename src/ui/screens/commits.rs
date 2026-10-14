@@ -9,14 +9,13 @@ use ratatui::{
 use crate::app::App;
 use crate::git::files::{FileEntry, FileStatus};
 use crate::state::ui::RebaseAction;
-use crate::ui::theme::Theme;
 
 /// Commits split: graph list / details.
 const COMMITS_LIST_PCT: u16 = 60;
 const COMMITS_DETAILS_PCT: u16 = 40;
 
 pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(COMMITS_LIST_PCT), Constraint::Percentage(COMMITS_DETAILS_PCT)].as_ref())
@@ -173,7 +172,7 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
 }
 
 pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let (mx, my) = crate::ui::layout::COMMIT_ACTION_MODAL;
     let inner = crate::ui::components::centered_rect(mx, my, f.area());
     f.render_widget(Clear, inner);
@@ -213,7 +212,7 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
 }
 
 pub fn render_interactive_rebase(f: &mut Frame, app: &App) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let (mx, my) = crate::ui::layout::REBASE_MODAL;
     let area = crate::ui::components::centered_rect(mx, my, f.area());
     f.render_widget(Clear, area);
@@ -278,7 +277,7 @@ pub fn render_interactive_rebase(f: &mut Frame, app: &App) {
 }
 
 pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEntry]) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let (mx, my) = crate::ui::layout::COMMIT_FILES_MODAL;
     let inner = crate::ui::components::centered_rect(mx, my, f.area());
 

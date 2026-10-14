@@ -9,7 +9,7 @@ pub use diff::update_diff_preview;
 
 use crate::app::App;
 use crate::state::ui::{
-    AppMode, CommandAction, CommandPaletteState, FilePanel, PrimaryMode,
+    AppMode, CommandAction, CommandPaletteState, FilePanel, PrimaryMode, SwitchTarget, View,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
@@ -29,25 +29,12 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     if key.code == KeyCode::BackTab && key.kind == KeyEventKind::Press {
         if *app.ui.current_mode() != AppMode::Switcher {
             app.ui.push_modal(AppMode::Switcher);
-            let modes = [
-                AppMode::FilesView,
-                AppMode::BranchesView,
-                AppMode::CommitsView,
-                AppMode::Help,
-            ];
-            app.ui.switcher_index = modes
+            let current = SwitchTarget::View(View::from_primary(app.ui.primary_mode));
+            app.ui.switcher_index = app
+                .ui
+                .switcher_order()
                 .iter()
-                .position(|m| {
-                    if let AppMode::FilesView = m {
-                        app.ui.primary_mode == PrimaryMode::Files
-                    } else if let AppMode::BranchesView = m {
-                        app.ui.primary_mode == PrimaryMode::Branches
-                    } else if let AppMode::CommitsView = m {
-                        app.ui.primary_mode == PrimaryMode::Commits
-                    } else {
-                        false
-                    }
-                })
+                .position(|t| *t == current)
                 .unwrap_or(0);
         }
         return false;
@@ -156,10 +143,8 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.toggle_primary_mode();
             if app.ui.primary_mode == PrimaryMode::Files {
                 app.load_file_tree(path);
-                app.ui.track_history(AppMode::FilesView);
-            } else {
-                app.ui.track_history(AppMode::BranchesView);
             }
+            app.ui.track_history(app.ui.view());
             return false;
         }
         // Shift-letter layer: crossterm delivers these as uppercase Char + SHIFT,
@@ -170,7 +155,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.set_primary_mode(PrimaryMode::Commits);
             app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
             app.ui.selected_commit_idx = 0;
-            app.ui.track_history(AppMode::CommitsView);
+            app.ui.track_history(View::Commits);
             return false;
         }
         KeyCode::Char('R') => {
@@ -179,9 +164,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             return false;
         }
         KeyCode::Char('S') => {
+            app.set_primary_mode(PrimaryMode::Stashes);
             app.load_stashes(path);
             app.load_stash_detail(path);
-            app.ui.push_modal(AppMode::StashDetail);
+            app.ui.selected_stash_idx = 0;
+            app.ui.track_history(View::Stashes);
             return false;
         }
 

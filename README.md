@@ -5,10 +5,13 @@ Twigdrop is a fast, interactive Terminal User Interface (TUI) tool written in Ru
 ## Features
 
 - **Visual Branch Status**: Quickly see if a branch is merged, ahead of upstream, has unique commits, or if its upstream is gone.
-- **Batch Deletion**: Mark multiple branches and delete them all at once.
-- **Detailed Diff & Info**: View the `git log --stat -p` of any branch inside a side-by-side terminal pane to know exactly what you are deleting.
-- **Quick Checkout**: Switch between branches with a single keystroke or a mouse click.
-- **Accessibility & Safety**: Uses distinct unicode icons and colors to denote danger (e.g., branches with unique local commits are marked in red with `▲`).
+- **Batch Deletion**: Mark multiple branches and delete them all at once — with SHA backups (`~/.twigdrop/backups/`) and `[u] undo` toast.
+- **Manage Menu**: Checkout, diff/AI analysis, safe delete, rename, push, set upstream, merge into current, copy name, stash.
+- **Detailed Diff & Info**: Inspector drawer, commit graph, stash browser and side-by-side diff with syntax highlighting.
+- **Dark + Light Themes**: `theme_mode` in config or Settings (`dark` default).
+- **Accessibility & Safety**: Status is never color-only (`▲ ⨯ ↑↓ ✓ [P]` + labels); protected branches can be extended in config.
+
+## 🚀 Installation
 
 ## 🚀 Installation
 
@@ -46,19 +49,26 @@ You can also pass a path to a specific repository:
 twigdrop /path/to/your/repo
 ```
 
+Options: `--help` / `--version`.
+
 ### Keybindings
 
-| Key / Mouse  | Action                                                |
-| ------------ | ----------------------------------------------------- |
-| `↑` / `k`    | Move selection up (or scroll up in info panel)        |
-| `↓` / `j`    | Move selection down (or scroll down in info panel)    |
-| `Space`      | Toggle mark on the selected branch for batch deletion |
-| `d`          | Delete all marked branches                            |
-| `c`          | Checkout the currently selected branch                |
-| `Tab`        | Toggle the Info/Diff panel for the selected branch    |
-| `Left Click` | Jump to a specific branch in the list                 |
-| `h`          | Toggle the Help & Legend modal                        |
-| `q` / `Esc`  | Quit the application (or close opened modals)         |
+Source of truth: `docs/KEYBINDINGS.md` (generated from `src/input/keybind.rs`).
+Press `?` in-app for the full reference.
+
+| Key              | Action                                              |
+| ---------------- | --------------------------------------------------- |
+| `↑`/`k`,`↓`/`j`  | Move selection                                      |
+| `Space`          | Toggle mark for batch deletion                      |
+| `Enter`          | Manage branch (spotlight: checkout/delete/rename/push/…) |
+| type `[a-z0-9]`  | Instant filter · `Esc` clears                       |
+| `u`              | Undo last delete (while the toast is live)          |
+| `Ctrl+D`         | Safe delete (with confirmation)                     |
+| `Ctrl+C`         | New branch · `Ctrl+P` prune · `Ctrl+S` cycle sort   |
+| `Ctrl+I`         | AI analysis · `Ctrl+F` filters · `Ctrl+K` palette   |
+| `Shift+S/C/R`    | Stashes / Commits / Rebase · `Alt+D` toggle view    |
+| `Shift+Tab`      | App switcher · `Ctrl+H`/`?` help · `Ctrl+Q` quit    |
+| `Left Click`     | Select / double-click to manage                     |
 
 ### Legend
 

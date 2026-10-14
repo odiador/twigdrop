@@ -10,7 +10,6 @@ use crate::app::App;
 use crate::models::BranchStatus;
 use crate::state::ui::AppMode;
 use crate::ui::components::get_status_icons;
-use crate::ui::theme::Theme;
 
 /// Branches table columns: selector / branch / sync / merge-health / age / last-commit.
 /// Fixed widths are single source here; branch + last-commit share the remainder.
@@ -23,7 +22,7 @@ const COL_FLEX_PCT: u16 = 30;
 /// Branch column share in narrow mode (author column collapsed).
 const COL_FLEX_NARROW_PCT: u16 = 40;
 
-pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
+pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
     use crate::ui::layout::{INSPECTOR_SPLIT, SIDEBAR_SPLIT};
     let (table_area, maybe_inspector, maybe_sidebar) = if app.ui.show_inspector_drawer {
         let chunks = Layout::default()
@@ -58,7 +57,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 
     let loc = app.locale();
     // Frozen Catppuccin default: visual-noop vs previous Rgb() literals.
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     // Narrow terminals collapse the author column (UI_GUIDE §3).
     let narrow = table_area.width < crate::ui::theme::NARROW_WIDTH;
 
@@ -89,9 +88,12 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
     }
 
     // Scroll math lives in `UiState::branch_viewport` (pure + tested);
-    // positions below are per-frame mouse hit data rebuilt each render.
-    let (start, branch_items_to_show) =
-        app.ui.sync_branch_viewport(branches_len, inner_height);
+    // positions below are per-frame mouse hit data in `FrameCache`.
+    let (start, branch_items_to_show) = app.frame_cache.borrow_mut().sync_branches(
+        app.ui.selected_branch_idx,
+        branches_len,
+        inner_height,
+    );
 
     let mut rows: Vec<Row> = vec![];
 
@@ -106,16 +108,17 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
         let selected = branch_idx == app.ui.selected_branch_idx;
         let is_current = b.name == app.repo.current_branch;
 
-        app.ui
+        app.frame_cache
+            .borrow_mut()
             .branch_screen_positions
             .push((actual_idx, table_area.y + 3 + i as u16));
 
-        let (icons, color) = get_status_icons(&b.status);
+        let (icons, color) = get_status_icons(&b.status, &theme);
         let (merge_text, merge_color) =
-            crate::ui::components::get_merge_status_display(&b.merge_status, loc);
+            crate::ui::components::get_merge_status_display(&b.merge_status, loc, &theme);
 
         let current_tag = if is_current { " (HEAD)" } else { "" };
-        let is_protected = crate::actions::commands::is_protected_branch(&b.name);
+        let is_protected = app.config.is_protected(&b.name);
         let is_bulk_selected = app.ui.bulk_selected.contains(&b.name);
         let checkbox = if is_protected {
             "[P]"
@@ -276,8 +279,9 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &mut App) {
 }
 
 pub fn render_filter(f: &mut Frame, app: &App) {
+    let theme = app.theme();
     let full_area = f.area();
-    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area, &theme);
     let (mx, my) = crate::ui::theme::MODAL_MD;
     let inner = crate::ui::components::centered_rect(mx, my, full_area);
     f.render_widget(Clear, inner);
@@ -294,7 +298,6 @@ pub fn render_filter(f: &mut Frame, app: &App) {
         "8. Remote Tracked (R)",
         "9. Remote Untracked (U)",
     ];
-    let theme = Theme::dark_default();
     let mut items = vec![];
     for (i, opt) in options.iter().enumerate() {
         let mut style = theme.base;
@@ -313,9 +316,14 @@ pub fn render_filter(f: &mut Frame, app: &App) {
     f.render_widget(list, inner);
 }
 
-pub fn render_confirm_delete(f: &mut Frame, names: &[String], locale: &crate::i18n::Locale) {
+pub fn render_confirm_delete(
+    f: &mut Frame,
+    names: &[String],
+    locale: &crate::i18n::Locale,
+    theme: &crate::ui::theme::Theme,
+) {
     let full_area = f.area();
-    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area, theme);
 
     let (mx, my) = crate::ui::theme::MODAL_MD;
     let inner = crate::ui::components::centered_rect(mx, my, full_area);
@@ -328,7 +336,6 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String], locale: &crate::i1
         names.join(", ")
     };
 
-    let theme = Theme::dark_default();
     let block = Block::default()
         .title(Line::from(locale.branches.confirm_unpushed_title).alignment(Alignment::Center))
         .borders(Borders::ALL)
@@ -356,15 +363,14 @@ pub fn render_confirm_delete(f: &mut Frame, names: &[String], locale: &crate::i1
     f.render_widget(p, inner);
 }
 
-pub fn render_create_branch(f: &mut Frame, input: &str) {
+pub fn render_create_branch(f: &mut Frame, input: &str, theme: &crate::ui::theme::Theme) {
     let full_area = f.area();
-    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area, theme);
     let (mx, my) = crate::ui::theme::MODAL_SM;
     let inner = crate::ui::components::centered_rect(mx, my, full_area);
 
     f.render_widget(Clear, inner);
 
-    let theme = Theme::dark_default();
     let block = Block::default()
         .title(Line::from(" Create New Branch ").alignment(Alignment::Left))
         .borders(Borders::ALL)
@@ -379,13 +385,40 @@ pub fn render_create_branch(f: &mut Frame, input: &str) {
     f.render_widget(p, inner);
 }
 
+pub fn render_rename_branch(
+    f: &mut Frame,
+    old: &str,
+    input: &str,
+    theme: &crate::ui::theme::Theme,
+) {
+    let full_area = f.area();
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area, theme);
+    let (mx, my) = crate::ui::theme::MODAL_SM;
+    let inner = crate::ui::components::centered_rect(mx, my, full_area);
+
+    f.render_widget(Clear, inner);
+
+    let block = Block::default()
+        .title(Line::from(format!(" Rename Branch: {} ", old)).alignment(Alignment::Left))
+        .borders(Borders::ALL)
+        .border_style(theme.accent2);
+
+    let p = Paragraph::new(format!(
+        "\nNew name: {}\n\n(Enter to rename, Esc to cancel)",
+        input
+    ))
+    .block(block)
+    .alignment(Alignment::Center);
+    f.render_widget(p, inner);
+}
+
 pub fn render_manage(f: &mut Frame, app: &App) {
     let full_area = f.area();
     let loc = app.locale();
-    let theme = Theme::dark_default();
+    let theme = app.theme();
 
     // 1. Dim background
-    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area, &theme);
 
     // 2. Centered Spotlight floating window (MODAL_SM token)
     let inner = crate::ui::components::centered_rect(
@@ -410,7 +443,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
         .map(|b| b.name.as_str())
         .unwrap_or(loc.common.none);
 
-    let is_protected = crate::actions::commands::is_protected_branch(b_name);
+    let is_protected = app.config.is_protected(b_name);
 
     let header_block = Block::default()
         .title(Line::from(vec![
@@ -478,6 +511,26 @@ pub fn render_manage(f: &mut Frame, app: &App) {
             loc.branches.act_rename,
             loc.branches.act_rename_desc,
             theme.warning.fg.unwrap_or(Color::Yellow),
+        ),
+        (
+            loc.branches.act_push,
+            loc.branches.act_push_desc,
+            theme.accent2.fg.unwrap_or(Color::Cyan),
+        ),
+        (
+            loc.branches.act_upstream,
+            loc.branches.act_upstream_desc,
+            theme.info.fg.unwrap_or(Color::Blue),
+        ),
+        (
+            loc.branches.act_merge,
+            loc.branches.act_merge_desc,
+            theme.success.fg.unwrap_or(Color::Green),
+        ),
+        (
+            loc.branches.act_copy_name,
+            loc.branches.act_copy_name_desc,
+            theme.soft.fg.unwrap_or(Color::White),
         ),
         (
             loc.branches.act_stash,

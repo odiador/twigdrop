@@ -27,7 +27,7 @@ Priority order:
 
 - [x] Extracted and unit tested pure git log & status parsers (`parse_ahead_behind`, `parse_branch_metadata_line`, `parse_stashed_branch_line`, `parse_commit_tree_line`).
 - [x] Extracted and unit tested destructive branch pruning filter (`get_prunable_branches` in `src/actions/commands.rs`), verifying active branches, stashed branches, and branches with unique commits are never pruned.
-- [ ] Integration tests with temp git repo fixture (`tempfile` + `git2::Repository::init`) for live git commands.
+- [x] Integration tests with temp git repo fixture (`tempfile` + `git2::Repository::init`) for live git commands (`tests/integration_git.rs`: `build_branches` current/new branch, inspector cache, prunable filter).
 
 ## 3. God files — split by domain (DONE — 2026-09-16)
 

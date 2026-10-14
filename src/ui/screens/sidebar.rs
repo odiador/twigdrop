@@ -8,10 +8,9 @@ use ratatui::{
 
 use crate::app::App;
 use crate::state::ui::PrimaryMode;
-use crate::ui::theme::Theme;
 
 pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let block = Block::default()
         .title(" ◀ Menu [→/Esc] ")
         .title_style(

@@ -10,10 +10,9 @@ use crate::app::App;
 use crate::git::files::FileStatus;
 use crate::models::GutterStatus;
 use crate::state::ui::{AppMode, FilePanel, PreviewState};
-use crate::ui::theme::Theme;
 
 pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = app.ui.current_mode() {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
@@ -113,7 +112,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
 }
 
 pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &PreviewState) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let border_color = if app.ui.active_panel == FilePanel::Preview {
         theme.nav.fg.unwrap_or(Color::Blue)
     } else {

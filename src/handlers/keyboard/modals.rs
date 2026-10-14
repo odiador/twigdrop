@@ -2,7 +2,7 @@ use crate::app::App;
 use crate::git;
 use crate::state::ui::{
     AppMode, CommandAction, DatePickerField, DatePickerState, FilePanel, PreviewState,
-    PrimaryMode, RebaseAction,
+    PrimaryMode, RebaseAction, SwitchTarget, View,
 };
 use crate::ui::animations::SnapAnimation;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -129,28 +129,6 @@ pub fn handle_date_picker_keyboard(
     false
 }
 
-pub fn handle_search_keyboard(app: &mut App, key: KeyEvent) -> bool {
-    match key.code {
-        KeyCode::Enter | KeyCode::Esc => {
-            app.ui.pop_modal();
-        }
-        KeyCode::Char(c) => {
-            app.ui.search_query.push(c);
-            app.refresh_filtered_branches();
-        }
-        KeyCode::Backspace => {
-            if key.modifiers.contains(KeyModifiers::ALT) {
-                app.ui.search_query.clear();
-            } else {
-                app.ui.search_query.pop();
-            }
-            app.refresh_filtered_branches();
-        }
-        _ => {}
-    }
-    false
-}
-
 pub fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
     if app.ui.settings_state.editing {
         match key.code {
@@ -170,11 +148,10 @@ pub fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                     5 => {
                         app.config.current_provider_mut().url = app.ui.settings_state.input.clone()
                     }
-                    7 => {
+                    8 => {
                         app.config.default_sidebar_width =
                             app.ui.settings_state.input.parse().unwrap_or(30)
-                    }
-                    _ => {}
+                    }                    _ => {}
                 }
                 app.ui.settings_state.editing = false;
                 crate::utils::config::save_config(&app.config);
@@ -238,7 +215,7 @@ pub fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
         KeyCode::Up | KeyCode::Char('k') if app.ui.settings_state.selected > 0 => {
             app.ui.settings_state.selected -= 1;
         }
-        KeyCode::Down | KeyCode::Char('j') if app.ui.settings_state.selected < 8 => {
+        KeyCode::Down | KeyCode::Char('j') if app.ui.settings_state.selected < 9 => {
             app.ui.settings_state.selected += 1;
         }
         KeyCode::Enter | KeyCode::Right | KeyCode::Char('l') => {
@@ -286,7 +263,15 @@ pub fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                     app.config.enable_animations = !app.config.enable_animations;
                     crate::utils::config::save_config(&app.config);
                 }
-                8 => {
+                7 => {
+                    use crate::ui::theme::ThemeMode;
+                    app.config.theme_mode = match app.config.theme_mode {
+                        ThemeMode::Dark => ThemeMode::Light,
+                        ThemeMode::Light => ThemeMode::Dark,
+                    };
+                    crate::utils::config::save_config(&app.config);
+                }
+                9 => {
                     crate::utils::config::save_config(&app.config);
                     app.ui.pop_modal();
                 }
@@ -299,7 +284,7 @@ pub fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                             &app.config.current_provider().api_key,
                         ),
                         5 => app.config.current_provider().url.clone(),
-                        7 => app.config.default_sidebar_width.to_string(),
+                        8 => app.config.default_sidebar_width.to_string(),
                         _ => String::new(),
                     };
                 }
@@ -346,7 +331,7 @@ pub fn handle_filter_keyboard(app: &mut App, _key: KeyEvent) -> bool {
 }
 
 pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
-    const MANAGE_OPTIONS_COUNT: usize = 8;
+    const MANAGE_OPTIONS_COUNT: usize = 11;
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             app.ui.manage_selected = app.ui.manage_selected.saturating_sub(1);
@@ -377,6 +362,7 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                             branch_name.clone(),
                         ));
                         app.ai_state.ai_analysis = Some("Initializing AI analysis...".to_string());
+                        app.mark_ai_dispatched();
                         app.repo.branch_info = git::get_branch_info(path, &branch_name);
                         app.ui.info_scroll = 0;
 
@@ -405,7 +391,7 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                         app.ui.push_modal(AppMode::Diff);
                     }
                     2 => {
-                        if crate::actions::commands::is_protected_branch(&b.name) {
+                        if app.config.is_protected(&b.name) {
                             let clean = b.name.trim().trim_start_matches('*').trim().to_string();
                             app.ui.pop_modal();
                             app.ui.push_modal(AppMode::Message(format!(
@@ -426,11 +412,47 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                         }
                     }
                     3 => {
+                        let old = b.name.clone();
                         app.ui.pop_modal();
-                        app.ui
-                            .push_modal(AppMode::Message("Rename branch coming soon!".to_string()));
+                        app.ui.push_modal(AppMode::RenameBranch(old.clone(), old));
+                        app.ui.manage_selected = 0;
                     }
                     4 => {
+                        let msg = crate::git::commands::run_git(path, &["push", "origin", &b.name])
+                            .unwrap_or_else(|e| e.to_string());
+                        app.refresh_branches(path);
+                        app.ui.pop_modal();
+                        app.ui.push_modal(AppMode::Message(msg));
+                    }
+                    5 => {
+                        let msg = crate::git::commands::run_git(
+                            path,
+                            &["push", "-u", "origin", &b.name],
+                        )
+                        .unwrap_or_else(|e| e.to_string());
+                        app.refresh_branches(path);
+                        app.ui.pop_modal();
+                        app.ui.push_modal(AppMode::Message(msg));
+                    }
+                    6 => {
+                        let msg = crate::git::commands::run_git(path, &["merge", &b.name])
+                            .unwrap_or_else(|e| e.to_string());
+                        app.refresh_branches(path);
+                        app.repo.current_branch = git::get_current_branch(path);
+                        app.ui.pop_modal();
+                        app.ui.push_modal(AppMode::Message(msg));
+                    }
+                    7 => {
+                        let msg = match arboard::Clipboard::new()
+                            .and_then(|mut cb| cb.set_text(b.name.clone()))
+                        {
+                            Ok(()) => format!("Copied '{}' to clipboard", b.name),
+                            Err(e) => format!("Clipboard unavailable: {}", e),
+                        };
+                        app.ui.pop_modal();
+                        app.ui.push_modal(AppMode::Message(msg));
+                    }
+                    8 => {
                         let msg = crate::git::commands::run_git(
                             path,
                             &[
@@ -444,14 +466,7 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
                     }
-                    5 => {
-                        app.set_primary_mode(PrimaryMode::Commits);
-                        app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
-                        app.ui.selected_commit_idx = 0;
-                        app.ui.pop_modal();
-                        app.ui.track_history(AppMode::CommitsView);
-                    }
-                    6 => {
+                    9 => {
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Help);
                     }
@@ -473,36 +488,39 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
     let current_mode = app.ui.current_mode().clone();
     match current_mode {
         AppMode::Switcher => {
-            let modes = [
-                AppMode::FilesView,
-                AppMode::BranchesView,
-                AppMode::CommitsView,
-                AppMode::Help,
-            ];
             match key.code {
                 KeyCode::Enter => {
-                    let selected_mode = modes[app.ui.switcher_index].clone();
+                    let order = app.ui.switcher_order();
+                    let target = order
+                        .get(app.ui.switcher_index)
+                        .copied()
+                        .unwrap_or(SwitchTarget::View(View::Branches));
                     app.ui.pop_modal();
                     app.ui.modal_stack.clear();
-                    match selected_mode {
-                        AppMode::BranchesView => {
+                    match target {
+                        SwitchTarget::View(View::Branches) => {
                             app.set_primary_mode(PrimaryMode::Branches);
-                            app.ui.track_history(AppMode::BranchesView);
+                            app.ui.track_history(View::Branches);
                         }
-                        AppMode::FilesView => {
+                        SwitchTarget::View(View::Files) => {
                             app.set_primary_mode(PrimaryMode::Files);
-                            app.ui.track_history(AppMode::FilesView);
+                            app.ui.track_history(View::Files);
                         }
-                        AppMode::CommitsView => {
+                        SwitchTarget::View(View::Commits) => {
                             app.set_primary_mode(PrimaryMode::Commits);
                             app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
                             app.ui.selected_commit_idx = 0;
-                            app.ui.track_history(AppMode::CommitsView);
+                            app.ui.track_history(View::Commits);
                         }
-                        AppMode::Help => {
+                        SwitchTarget::View(View::Stashes) => {
+                            app.set_primary_mode(PrimaryMode::Stashes);
+                            app.load_stashes(path);
+                            app.load_stash_detail(path);
+                            app.ui.track_history(View::Stashes);
+                        }
+                        SwitchTarget::Help => {
                             app.ui.push_modal(AppMode::Help);
                         }
-                        _ => {}
                     }
                 }
                 KeyCode::Esc | KeyCode::Char('q') => {
@@ -511,7 +529,7 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.ui.switcher_index = app.ui.switcher_index.saturating_sub(1);
                 }
-                KeyCode::Down | KeyCode::Char('j') if app.ui.switcher_index + 1 < modes.len() => {
+                KeyCode::Down | KeyCode::Char('j') if app.ui.switcher_index + 1 < app.ui.switcher_order().len() => {
                     app.ui.switcher_index += 1;
                 }
                 _ => {}
@@ -523,7 +541,6 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
             Some(false)
         }
         AppMode::Settings => Some(handle_settings_keyboard(app, key)),
-        AppMode::Search => Some(handle_search_keyboard(app, key)),
         AppMode::Filter => Some(handle_filter_keyboard(app, key)),
         AppMode::Manage => Some(handle_manage_keyboard(app, key, path)),
         AppMode::ConfirmDelete(names) => {
@@ -539,7 +556,6 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
             }
             Some(false)
         }
-        AppMode::CommitsView => Some(super::commits::handle_commits_keyboard(app, key, path)),
         AppMode::DatePicker(mut state) => {
             let res = handle_date_picker_keyboard(app, key, &mut state, path);
             if let AppMode::DatePicker(current_state) = app.ui.current_mode_mut() {
@@ -767,6 +783,47 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
             }
             Some(false)
         }
+        AppMode::RenameBranch(old, input) => {
+            match key.code {
+                KeyCode::Enter => {
+                    if !input.is_empty() && input != old {
+                        match crate::git::commands::run_git(path, &["branch", "-m", &old, &input])
+                        {
+                            Ok(_) => {
+                                app.refresh_branches(path);
+                                app.repo.current_branch = git::get_current_branch(path);
+                                app.ui.pop_modal();
+                                app.ui.push_modal(AppMode::Message(format!(
+                                    "Renamed {} to {}",
+                                    old, input
+                                )));
+                            }
+                            Err(e) => {
+                                app.ui.pop_modal();
+                                app.ui.push_modal(AppMode::Message(format!("Error: {}", e)));
+                            }
+                        }
+                    } else {
+                        app.ui.pop_modal();
+                    }
+                }
+                KeyCode::Esc => {
+                    app.ui.pop_modal();
+                }
+                KeyCode::Char(c) => {
+                    if let AppMode::RenameBranch(_, inp) = app.ui.current_mode_mut() {
+                        inp.push(c);
+                    }
+                }
+                KeyCode::Backspace => {
+                    if let AppMode::RenameBranch(_, inp) = app.ui.current_mode_mut() {
+                        inp.pop();
+                    }
+                }
+                _ => {}
+            }
+            Some(false)
+        }
         AppMode::CodePreview(mut state) => {
             if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
                 app.ui.pop_modal();
@@ -875,9 +932,6 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
                 app.ui.pop_modal();
             }
             Some(false)
-        }
-        AppMode::StashDetail => {
-            Some(super::stashes::handle_stashes_keyboard(app, key, path))
         }
         _ => None,
     }

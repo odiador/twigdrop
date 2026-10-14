@@ -18,8 +18,7 @@ pub enum Context {
 /// Intent derived from a key press. Handlers dispatch on this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    Quit,
-    OpenPalette,
+    Quit,    OpenPalette,
     OpenHelp,
     ToggleHelp,
     CloseOrBack,
@@ -43,6 +42,7 @@ pub enum Action {
     Shell,
     Switcher,
     ClearSearch,
+    UndoDelete,
 }
 
 /// One row of the canonical table.
@@ -157,6 +157,13 @@ pub static BINDINGS: &[Binding] = &[
         i18n_key: "branches.type_to_filter",
     },
     Binding {
+        id: "branches.undo",
+        action: Action::UndoDelete,
+        context: Context::Branches,
+        keys: "u",
+        i18n_key: "branches.toast_undo_hint",
+    },
+    Binding {
         id: "global.close_back",
         action: Action::CloseOrBack,
         context: Context::Global,
@@ -263,6 +270,10 @@ pub fn keys(id: &str) -> &'static str {
 }
 
 /// Pure mapping: `(modifiers, code)` → `Action`. No state access.
+///
+/// NOTE: `branches.undo` (`u`) is intentionally absent here — it is
+/// context-gated on a live undo toast (`UiState::undoable_toast`) and
+/// otherwise types into the instant filter. See `handle_branches_keyboard`.
 #[must_use]
 pub fn from_key(key: KeyEvent) -> Option<Action> {
     use Action as A;
@@ -443,6 +454,7 @@ mod tests {
             "diff.ai_autofix",
             "global.quick_actions",
             "global.shell",
+            "branches.undo",
         ] {
             let label = keys(id);
             assert_ne!(label, "?", "missing binding {id}");

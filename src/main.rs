@@ -27,6 +27,29 @@ async fn main() -> Result<()> {
     }));
 
     let args: Vec<String> = env::args().collect();
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!(
+            "{name} {version}\n\
+             {desc}\n\
+             \n\
+             Usage: {name} [PATH]\n\
+             \n\
+             Arguments:\n  \
+             [PATH]  Repository to manage (default: .)\n\
+             \n\
+             Options:\n  \
+             -h, --help     Show this help\n  \
+             -V, --version  Show version",
+            name = env!("CARGO_PKG_NAME"),
+            version = env!("CARGO_PKG_VERSION"),
+            desc = env!("CARGO_PKG_DESCRIPTION"),
+        );
+        return Ok(());
+    }
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     let path = args.get(1).cloned().unwrap_or_else(|| ".".to_string());
 
     if !git::commands::is_inside_git_work_tree(&path) {
@@ -120,7 +143,6 @@ async fn main() -> Result<()> {
 
     std::process::exit(0);
 }
-
 fn process_event(app: &mut App, event: &Event, path: &str) -> bool {
     match event {
         Event::Key(key) => handlers::keyboard::handle_keyboard(app, *key, path),
@@ -132,12 +154,41 @@ fn process_event(app: &mut App, event: &Event, path: &str) -> bool {
     }
 }
 
+/// Completes when the process receives SIGTERM or SIGINT (unix).
+/// On other platforms it never completes, so the event loop is unaffected.
+async fn wait_for_signal(
+    #[cfg(unix)] sigterm: &mut tokio::signal::unix::Signal,
+    #[cfg(unix)] sigint: &mut tokio::signal::unix::Signal,
+) {
+    #[cfg(unix)]
+    {
+        tokio::select! {
+            _ = sigterm.recv() => {},
+            _ = sigint.recv() => {},
+        }
+    }
+    #[cfg(not(unix))]
+    std::future::pending::<()>().await
+}
+
 async fn run_app(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     app: &mut App,
     path: &str,
     event_rx: &mut mpsc::Receiver<Event>,
 ) -> io::Result<()> {
+    // Graceful shutdown: SIGTERM/SIGINT return from the loop so `main`
+    // runs the terminal-restore path (raw mode, alternate screen, mouse).
+    // Without this, `pkill twigdrop` would leave the shell unusable.
+    #[cfg(unix)]
+    let mut sigterm =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("sigterm handler");
+    #[cfg(unix)]
+    let mut sigint =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+            .expect("sigint handler");
+
     // Initial draw
     terminal.draw(|f| ui::draw(f, app, path))?;
 
@@ -162,17 +213,52 @@ async fn run_app(
                 _ = tokio::time::sleep(std::time::Duration::from_millis(16)) => {
                     should_draw = true;
                 }
-            }
-        } else {
-            // Idle state: wait for events reactively without burning CPU cycles
-            if let Some(event) = event_rx.recv().await {
-                if process_event(app, &event, path) {
+                _ = wait_for_signal(&mut sigterm, &mut sigint) => {
                     return Ok(());
                 }
-                app.update(event);
-                should_draw = true;
+            }
+        } else {
+            // Idle state: sleep until an event arrives — unless transient
+            // UI (toast TTL, busy spinner) needs ticks to advance.
+            let needs_tick =
+                app.is_busy() || app.ui.toast.as_ref().is_some_and(|t| t.is_live());
+            if needs_tick {
+                tokio::select! {
+                    maybe_event = event_rx.recv() => {
+                        if let Some(event) = maybe_event {
+                            if process_event(app, &event, path) {
+                                return Ok(());
+                            }
+                            app.update(event);
+                            should_draw = true;
+                        } else {
+                            return Ok(());
+                        }
+                    }
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(250)) => {
+                        should_draw = true;
+                    }
+                    _ = wait_for_signal(&mut sigterm, &mut sigint) => {
+                        return Ok(());
+                    }
+                }
             } else {
-                return Ok(());
+                tokio::select! {
+                    maybe_event = event_rx.recv() => {
+                        if let Some(event) = maybe_event {
+                            if process_event(app, &event, path) {
+                                return Ok(());
+                            }
+                            app.update(event);
+                            should_draw = true;
+                        } else {
+                            return Ok(());
+                        }
+                    }
+                    _ = wait_for_signal(&mut sigterm, &mut sigint) => {
+                        return Ok(());
+                    }
+                }
             }
         }
 

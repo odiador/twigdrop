@@ -9,10 +9,9 @@ use ratatui::{
 use crate::app::App;
 use crate::state::ui::FilePanel;
 use crate::ui::layout::calculate_diff_layout;
-use crate::ui::theme::Theme;
 
 pub fn render_diff_overlay(f: &mut Frame, area: Rect, app: &App) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let diff_layout = calculate_diff_layout(area);
     f.render_widget(Clear, diff_layout.inner_area);
 

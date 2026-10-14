@@ -23,19 +23,11 @@ pub fn handle_stashes_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool
             if let Some(stash) = app.repo.stashes.get(app.ui.selected_stash_idx) {
                 let msg = apply_stash(path, &stash.id);
                 app.refresh_branches(path);
-                if *app.ui.current_mode() == AppMode::StashDetail {
-                    app.ui.pop_modal();
-                }
                 app.ui.push_modal(AppMode::Message(msg));
             }
             false
         }
-        KeyCode::Esc | KeyCode::Char('q') => {
-            if *app.ui.current_mode() == AppMode::StashDetail {
-                app.ui.pop_modal();
-            }
-            false
-        }
+        KeyCode::Esc | KeyCode::Char('q') => false,
         _ => false,
     }
 }

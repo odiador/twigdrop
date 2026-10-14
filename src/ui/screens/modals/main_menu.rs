@@ -41,10 +41,11 @@ pub fn render_transparent_ascii(
 }
 
 pub fn render_main_menu(f: &mut Frame, app: &App) {
+    let theme = app.theme();
     let area = f.area();
     let buf = f.buffer_mut();
 
-    crate::ui::components::apply_dimmed_backdrop(buf, area);
+    crate::ui::components::apply_dimmed_backdrop(buf, area, &theme);
 
     let ascii_logo = r#"
  ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
@@ -106,7 +107,7 @@ pub fn render_main_menu(f: &mut Frame, app: &App) {
         let color = if is_selected {
             Color::White
         } else {
-            crate::ui::theme::Theme::dark_default().cursor_line
+            app.theme().cursor_line
         };
 
         render_transparent_ascii(buf, opt, v_chunks[3 + i], color);

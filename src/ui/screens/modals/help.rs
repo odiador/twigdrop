@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::theme::{MODAL_LG, Theme};
+use crate::ui::theme::MODAL_LG;
 
 pub const ASCII_LOGO: &str = r#"
  ████████╗██╗    ██╗██╗ ██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
@@ -19,8 +19,9 @@ pub const ASCII_LOGO: &str = r#"
 "#;
 
 pub fn render_help(f: &mut Frame, app: &App) {
+    let theme = app.theme();
     let full_area = f.area();
-    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area);
+    crate::ui::components::apply_dimmed_backdrop(f.buffer_mut(), full_area, &theme);
     let area = crate::ui::components::centered_rect(MODAL_LG.0, MODAL_LG.1, full_area);
     render_help_content(f, area, app);
 }
@@ -28,7 +29,7 @@ pub fn render_help(f: &mut Frame, app: &App) {
 pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
     let loc = app.locale();
-    let theme = Theme::dark_default();
+    let theme = app.theme();
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)

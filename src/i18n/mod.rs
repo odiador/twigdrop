@@ -80,6 +80,14 @@ pub struct BranchStrings {
     pub act_delete_desc: &'static str,
     pub act_rename: &'static str,
     pub act_rename_desc: &'static str,
+    pub act_push: &'static str,
+    pub act_push_desc: &'static str,
+    pub act_upstream: &'static str,
+    pub act_upstream_desc: &'static str,
+    pub act_merge: &'static str,
+    pub act_merge_desc: &'static str,
+    pub act_copy_name: &'static str,
+    pub act_copy_name_desc: &'static str,
     pub act_stash: &'static str,
     pub act_stash_desc: &'static str,
     pub act_help: &'static str,
@@ -92,6 +100,10 @@ pub struct BranchStrings {
     pub confirm_prompt: &'static str,
     pub empty_title: &'static str,
     pub empty_hint: &'static str,
+    pub toast_deleted: &'static str,
+    pub toast_restored: &'static str,
+    pub toast_restore_empty: &'static str,
+    pub toast_undo_hint: &'static str,
 }
 
 pub struct ModalStrings {
@@ -136,7 +148,6 @@ pub struct FooterStrings {
     pub status_tag: &'static str,
     pub preview: &'static str,
     pub diff: &'static str,
-    pub commits_view: &'static str,
     pub switcher: &'static str,
     pub commit_files: &'static str,
 }
@@ -205,9 +216,18 @@ mod tests {
             assert!(!loc.branches.title_branches.is_empty());
             assert!(!loc.branches.type_to_filter.is_empty());
             assert!(!loc.branches.act_checkout.is_empty());
+            assert!(!loc.branches.act_push.is_empty());
+            assert!(!loc.branches.act_upstream.is_empty());
+            assert!(!loc.branches.act_merge.is_empty());
+            assert!(!loc.branches.act_copy_name.is_empty());
+            assert!(!loc.branches.act_rename.is_empty());
             assert!(!loc.branches.confirm_unpushed_title.is_empty());
             assert!(!loc.branches.empty_title.is_empty());
             assert!(!loc.branches.empty_hint.is_empty());
+            assert!(!loc.branches.toast_deleted.is_empty());
+            assert!(!loc.branches.toast_restored.is_empty());
+            assert!(!loc.branches.toast_restore_empty.is_empty());
+            assert!(!loc.branches.toast_undo_hint.is_empty());
 
             // Modals
             assert!(!loc.modals.command_palette_title.is_empty());
@@ -221,7 +241,6 @@ mod tests {
             assert!(!loc.footer.stashes_normal.is_empty());
             assert!(!loc.footer.preview.is_empty());
             assert!(!loc.footer.diff.is_empty());
-            assert!(!loc.footer.commits_view.is_empty());
             assert!(!loc.footer.switcher.is_empty());
             assert!(!loc.footer.commit_files.is_empty());
             assert!(!loc.footer.status_tag.is_empty());

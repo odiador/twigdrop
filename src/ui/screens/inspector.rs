@@ -7,10 +7,9 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::theme::Theme;
 
 pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     let block = Block::default()
         .title(" ◀ Inspector [←/Esc] ")
         .title_style(

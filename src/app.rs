@@ -1,7 +1,8 @@
 use crate::events::{Event, GitEvent, TaskEvent};
 use crate::models::{Branch, ConflictBlock};
 use crate::state::ui::RebaseAction;
-use crate::state::{AppMode, PreviewState, PrimaryMode, RepositoryState, UiState};
+use crate::state::{AppMode, FrameCache, PreviewState, PrimaryMode, RepositoryState, UiState};
+use std::cell::RefCell;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use std::sync::Arc;
@@ -13,6 +14,9 @@ pub struct App {
     pub repo: RepositoryState,
     pub ui: UiState,
     pub ai_state: AIState,
+    /// Per-frame render cache (scroll position, mouse hit rows).
+    /// Behind a `RefCell` so `ui::render` only needs `&App`.
+    pub frame_cache: RefCell<FrameCache>,
 
     pub config: crate::utils::config::Config,
 
@@ -29,6 +33,9 @@ pub struct App {
 pub struct AIState {
     pub db: Option<crate::db::Database>,
     pub ai_analysis: Option<String>,
+    /// True between AI request dispatch and completion/failure.
+    /// Drives the status-bar spinner together with `snap_animation`.
+    pub ai_pending: bool,
 }
 
 impl App {
@@ -56,7 +63,9 @@ impl App {
             ai_state: AIState {
                 db: None,
                 ai_analysis: None,
+                ai_pending: false,
             },
+            frame_cache: RefCell::new(FrameCache::default()),
             config,
             ps: Arc::new(SyntaxSet::load_defaults_newlines()),
             ts: Arc::new(ThemeSet::load_defaults()),
@@ -152,6 +161,7 @@ impl App {
                     }
                 }
                 TaskEvent::AiAnalysisComplete(analysis) => {
+                    self.ai_state.ai_pending = false;
                     if analysis.starts_with("Commit Msg Suggestion:\n") {
                         if matches!(self.ui.current_mode(), AppMode::InteractiveRebase) {
                             let msg = analysis
@@ -192,6 +202,7 @@ impl App {
                     }
                 }
                 TaskEvent::TaskFailed(err) => {
+                    self.ai_state.ai_pending = false;
                     self.ui
                         .push_modal(AppMode::Message(format!("Task Error: {}", err)));
                 }
@@ -203,21 +214,27 @@ impl App {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn apply_snap_deletion(&mut self, path: &str) -> String {
-        if let Some(ref anim) = self.ui.snap_animation {
-            let names: Vec<String> = anim.rows.iter().map(|r| r.branch_name.clone()).collect();
-            let msg = crate::actions::bulk_delete_branches(path, &names);
-            self.refresh_branches(path);
-            self.ui.bulk_selected.clear();
-            msg
-        } else {
-            String::new()
-        }
-    }
-
     pub fn locale(&self) -> &'static crate::i18n::Locale {
         self.config.locale()
+    }
+
+    /// Active color scheme from config (`App::theme`, never `dark_default`
+    /// directly in render paths).
+    pub fn theme(&self) -> crate::ui::theme::Theme {
+        self.config.theme_mode.resolve()
+    }
+
+    /// Background work in flight (AI request or delete animation).
+    /// Drives the status-bar spinner.
+    pub fn is_busy(&self) -> bool {
+        self.ai_state.ai_pending
+            || self.ui.rebase_state.ai_analyzing
+            || self.ui.snap_animation.is_some()
+    }
+
+    /// Mark an AI request as dispatched (spinner on).
+    pub fn mark_ai_dispatched(&mut self) {
+        self.ai_state.ai_pending = true;
     }
 
     pub fn cycle_branch_sort(&mut self) {
@@ -284,9 +301,9 @@ impl App {
                 }
                 crate::state::ui::BranchSortMode::PrunableFirst => {
                     let a_prunable = a.status.contains(&crate::models::BranchStatus::Gone)
-                        && !crate::actions::commands::is_protected_branch(&a.name);
+                        && !self.config.is_protected(&a.name);
                     let b_prunable = b.status.contains(&crate::models::BranchStatus::Gone)
-                        && !crate::actions::commands::is_protected_branch(&b.name);
+                        && !self.config.is_protected(&b.name);
                     b_prunable
                         .cmp(&a_prunable)
                         .then_with(|| b.commit_date.cmp(&a.commit_date))
@@ -552,7 +569,7 @@ impl App {
     pub fn toggle_selection(&mut self) {
         if let Some(&idx) = self.ui.filtered_indices.get(self.ui.selected_branch_idx) {
             let name = self.repo.branches[idx].name.clone();
-            if crate::actions::commands::is_protected_branch(&name) {
+            if self.config.is_protected(&name) {
                 return;
             }
             if self.ui.bulk_selected.contains(&name) {
@@ -678,10 +695,87 @@ impl App {
         }
     }
 
-    pub fn delete_selected_branches(&mut self, path: &str) {
-        let names: Vec<String> = self.ui.bulk_selected.iter().cloned().collect();
-        crate::actions::bulk_delete_branches(path, &names);
-        self.ui.bulk_selected.clear();
+    /// Snapshot pre-delete SHAs for undo (skips protected/unresolvable).
+    fn snapshot_shas(&self, path: &str, names: &[String]) -> Vec<(String, String)> {
+        names
+            .iter()
+            .filter(|n| !self.config.is_protected(n))
+            .filter_map(|n| {
+                crate::actions::commands::resolve_branch_sha(path, n).map(|sha| (n.clone(), sha))
+            })
+            .collect()
+    }
+
+    /// Delete an explicit name list (snap-confirmed flow): backups run
+    /// inside `bulk_delete_branches`; survivors feed the undo toast.
+    /// Fixes the legacy path that deleted the bulk set instead of the
+    /// confirmed names.
+    pub fn delete_branches_by_name(&mut self, path: &str, names: &[String]) {
+        if names.is_empty() {
+            self.refresh_branches(path);
+            return;
+        }
+        let undo_items = self.snapshot_shas(path, names);
+        let extra = self.config.protected_branches.clone();
+        crate::actions::bulk_delete_branches(path, names, &extra);
+        for name in names {
+            self.ui.bulk_selected.remove(name);
+        }
         self.refresh_branches(path);
+        let loc = self.locale();
+        let undo = if undo_items.is_empty() {
+            None
+        } else {
+            Some(crate::state::toast::UndoRestore { branches: undo_items })
+        };
+        self.ui.notify(
+            crate::state::toast::ToastKind::Success,
+            format!("{} {}", names.len(), loc.branches.toast_deleted),
+            undo,
+        );
+    }
+
+    /// Snap-capture completion: deletes the animation's confirmed rows
+    /// (not the bulk set) and arms the undo toast.
+    pub fn complete_snap_deletion(&mut self, path: &str) {
+        let names: Vec<String> = self
+            .ui
+            .snap_animation
+            .as_ref()
+            .map(|anim| {
+                anim.rows
+                    .iter()
+                    .map(|row| row.branch_name.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.delete_branches_by_name(path, &names);
+    }
+
+    /// Recreate branches from the toast's undo data (`u` binding).
+    /// Already-existing names are skipped (reported, not an error).
+    pub fn undo_delete(&mut self, path: &str) {
+        let Some(restore) = self
+            .ui
+            .undoable_toast()
+            .and_then(|t| t.undo.clone())
+        else {
+            return;
+        };
+        let mut restored = 0;
+        for (name, sha) in &restore.branches {
+            if crate::git::commands::run_git(path, &["branch", name, sha]).is_ok() {
+                restored += 1;
+            }
+        }
+        self.refresh_branches(path);
+        let loc = self.locale();
+        let text = if restored > 0 {
+            format!("{} {}", restored, loc.branches.toast_restored)
+        } else {
+            loc.branches.toast_restore_empty.to_string()
+        };
+        self.ui
+            .notify(crate::state::toast::ToastKind::Success, text, None);
     }
 }

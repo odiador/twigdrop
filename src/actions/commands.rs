@@ -12,18 +12,76 @@ pub const DEFAULT_PROTECTED_BRANCHES: &[&str] = &[
 ];
 
 pub fn is_protected_branch(name: &str) -> bool {
-    let clean = name.trim().trim_start_matches('*').trim();
-    DEFAULT_PROTECTED_BRANCHES.iter().any(|&p| clean.eq_ignore_ascii_case(p))
+    is_protected_branch_with(name, &[])
 }
 
-pub fn bulk_delete_branches(path: &str, names: &[String]) -> String {
+/// Protected check with user-configured extras (`Config::protected_branches`).
+/// Matching is case-insensitive and ignores a leading `*` marker.
+pub fn is_protected_branch_with(name: &str, extra: &[String]) -> bool {
+    let clean = name.trim().trim_start_matches('*').trim();
+    DEFAULT_PROTECTED_BRANCHES
+        .iter()
+        .any(|&p| clean.eq_ignore_ascii_case(p))
+        || extra.iter().any(|p| clean.eq_ignore_ascii_case(p.trim()))
+}
+
+/// Resolve the current SHA of `name` without touching the working tree.
+/// Used for pre-delete backups; `None` when unresolvable.
+pub fn resolve_branch_sha(path: &str, name: &str) -> Option<String> {
+    run_git(path, &["rev-parse", name])
+        .ok()
+        .map(|out| out.trim().to_string())
+        .filter(|sha| !sha.is_empty())
+}
+
+/// Filesystem-safe slug for a repo path (`/` and `:` become `_`).
+pub fn repo_slug(path: &str) -> String {
+    path.replace(['/', '\\', ':'], "_")
+        .chars()
+        .take(120)
+        .collect()
+}
+
+/// Append a `<branch> <sha>` backup line. Pure filesystem helper —
+/// takes `base` explicitly so tests never touch the real home dir.
+pub fn write_backup_line(
+    base: &std::path::Path,
+    slug: &str,
+    name: &str,
+    sha: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    let dir = base.join(slug);
+    fs::create_dir_all(&dir)?;
+    let file = dir.join(format!(
+        "{}.log",
+        chrono::Local::now().format("%Y-%m-%d")
+    ));
+    use std::io::Write;
+    let mut f = fs::OpenOptions::new().create(true).append(true).open(&file)?;
+    writeln!(f, "{} {} {}", chrono::Local::now().format("%H:%M:%S"), name, sha)?;
+    Ok(file)
+}
+
+/// Best-effort pre-delete backup into `~/.twigdrop/backups/<slug>/`.
+/// Never fails the delete itself — errors are swallowed by design.
+pub fn backup_branch_sha(path: &str, name: &str) {
+    let (Some(home), Some(sha)) = (directories::BaseDirs::new(), resolve_branch_sha(path, name))
+    else {
+        return;
+    };
+    let base = home.home_dir().join(".twigdrop").join("backups");
+    let _ = write_backup_line(&base, &repo_slug(path), name, &sha);
+}
+
+pub fn bulk_delete_branches(path: &str, names: &[String], extra_protected: &[String]) -> String {
     let mut results = String::new();
     for name in names {
-        if is_protected_branch(name) {
+        if is_protected_branch_with(name, extra_protected) {
             results.push_str(&format!("Skipping protected branch: {}\n", name));
             continue;
         }
 
+        backup_branch_sha(path, name);
         match run_git(path, &["branch", "-D", name]) {
             Ok(output) => {
                 results.push_str(&format!("> git branch -D {}\n{}\n", name, output.trim()))
@@ -37,11 +95,12 @@ pub fn bulk_delete_branches(path: &str, names: &[String]) -> String {
 pub fn get_prunable_branches(
     branches: &[crate::models::Branch],
     current_branch: &str,
+    extra_protected: &[String],
 ) -> Vec<String> {
     branches
         .iter()
         .filter(|b| {
-            if b.name == current_branch || is_protected_branch(&b.name) {
+            if b.name == current_branch || is_protected_branch_with(&b.name, extra_protected) {
                 return false;
             }
 
@@ -61,15 +120,16 @@ pub fn prune_branches(
     path: &str,
     branches: &[crate::models::Branch],
     current_branch: &str,
+    extra_protected: &[String],
 ) -> String {
-    let to_delete = get_prunable_branches(branches, current_branch);
+    let to_delete = get_prunable_branches(branches, current_branch, extra_protected);
 
     if to_delete.is_empty() {
         return "No safe branches found to prune.".to_string();
     }
 
     let count = to_delete.len();
-    let details = bulk_delete_branches(path, &to_delete);
+    let details = bulk_delete_branches(path, &to_delete, extra_protected);
     format!("Pruned {} branches:\n{}", count, details)
 }
 
@@ -320,7 +380,7 @@ mod tests {
             make_test_branch("feature/active", vec![BranchStatus::Local]),
         ];
 
-        let prunable = get_prunable_branches(&branches, "main");
+        let prunable = get_prunable_branches(&branches, "main", &[]);
         assert_eq!(prunable, vec!["feature/done".to_string()]);
     }
 
@@ -331,7 +391,7 @@ mod tests {
             make_test_branch("main", vec![BranchStatus::Local]),
         ];
 
-        let prunable = get_prunable_branches(&branches, "main");
+        let prunable = get_prunable_branches(&branches, "main", &[]);
         assert!(prunable.is_empty());
     }
 
@@ -360,14 +420,49 @@ mod tests {
             make_test_branch("feature/old", vec![BranchStatus::Gone]),
         ];
 
-        let prunable = get_prunable_branches(&branches, "other-branch");
+        let prunable = get_prunable_branches(&branches, "other-branch", &[]);
         assert_eq!(prunable, vec!["feature/old".to_string()]);
     }
 
     #[test]
     fn test_bulk_delete_branches_skips_protected() {
-        let res = bulk_delete_branches(".", &["main".to_string(), "develop".to_string()]);
+        let res = bulk_delete_branches(".", &["main".to_string(), "develop".to_string()], &[]);
         assert!(res.contains("Skipping protected branch: main"));
         assert!(res.contains("Skipping protected branch: develop"));
+    }
+
+    #[test]
+    fn test_extra_protected_branches_respected() {
+        let extra = vec!["release".to_string()];
+        assert!(is_protected_branch_with("release", &extra));
+        assert!(is_protected_branch_with("* release", &extra));
+        assert!(is_protected_branch_with("RELEASE", &extra));
+        assert!(!is_protected_branch_with("feature/x", &extra));
+        // Defaults still apply alongside extras.
+        assert!(is_protected_branch_with("main", &extra));
+
+        let branches = vec![
+            make_test_branch("release", vec![BranchStatus::Gone]),
+            make_test_branch("feature/old", vec![BranchStatus::Gone]),
+        ];
+        let prunable = get_prunable_branches(&branches, "other-branch", &extra);
+        assert_eq!(prunable, vec!["feature/old".to_string()]);
+    }
+
+    #[test]
+    fn test_repo_slug_is_filesystem_safe() {
+        assert_eq!(repo_slug("/Users/a/b"), "_Users_a_b");
+        assert!(repo_slug("/a/b").len() <= 120);
+    }
+
+    #[test]
+    fn test_write_backup_line_appends() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let file = write_backup_line(dir.path(), "slug", "feature-x", "abc123").expect("write");
+        let file2 = write_backup_line(dir.path(), "slug", "feature-y", "def456").expect("write");
+        assert_eq!(file, file2, "same-day backups share one log file");
+        let content = std::fs::read_to_string(&file).expect("read");
+        assert!(content.contains("feature-x abc123"));
+        assert!(content.contains("feature-y def456"));
     }
 }

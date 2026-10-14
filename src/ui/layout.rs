@@ -34,8 +34,6 @@ pub const QUICK_ACTIONS_MODAL: (u16, u16) = (40, 50);
 pub const SHELL_INPUT_H: u16 = 3;
 /// Shell input width (percent).
 pub const SHELL_INPUT_W: u16 = 80;
-/// Search bar height (single-line input + borders).
-pub const SEARCH_BAR_H: u16 = 3;
 /// Main-menu ASCII art slot heights: logo / gap / options / help / quit.
 pub const MAIN_MENU_LOGO_H: u16 = 8;
 pub const MAIN_MENU_GAP_H: u16 = 2;
@@ -66,7 +64,7 @@ pub const fn modal_size(mode: &AppMode) -> (u16, u16) {
     match mode {
         AppMode::Help => MODAL_LG,
         AppMode::Manage => MODAL_SM,
-        AppMode::CreateBranch(_) => MODAL_SM,
+        AppMode::CreateBranch(_) | AppMode::RenameBranch(_, _) => MODAL_SM,
         AppMode::CommandPalette(_) => PALETTE_MODAL,
         AppMode::CommitAction(_) => COMMIT_ACTION_MODAL,
         AppMode::CommitFiles(_, _) => COMMIT_FILES_MODAL,

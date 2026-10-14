@@ -56,13 +56,12 @@ pub enum AppMode {
     Help,
     Manage,
     Filter,
-    StashDetail,
     Settings,
-    Search,
     Diff,
     CodePreview(PreviewState),
     ConfirmDelete(Vec<String>),
     CreateBranch(String),
+    RenameBranch(String, String),
     CommitAction(String),
     InteractiveRebase,
     Shell(String),
@@ -70,9 +69,6 @@ pub enum AppMode {
     MainMenu,
     Message(String),
     Switcher,
-    BranchesView,
-    FilesView,
-    CommitsView,
     DatePicker(DatePickerState),
     CommitFiles(String, Vec<crate::git::files::FileEntry>),
     CommandPalette(CommandPaletteState),
@@ -86,9 +82,7 @@ pub enum PrimaryMode {
     Stashes,
 }
 
-/// Canonical view: exactly one visible at a time. Replaces the legacy
-/// `AppMode::{BranchesView, FilesView, CommitsView, StashDetail-as-view}`
-/// quartet (kept as deprecated aliases until handlers/ui migrate).
+/// Canonical view: exactly one visible at a time.
 /// Spec: `docs/ARCHITECTURE.md` §3.
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum View {
@@ -99,6 +93,9 @@ pub enum View {
 }
 
 impl View {
+    /// All primary views, in sidebar order.
+    pub const ALL: [Self; 4] = [Self::Branches, Self::Files, Self::Commits, Self::Stashes];
+
     #[must_use]
     pub const fn from_primary(mode: PrimaryMode) -> Self {
         match mode {
@@ -106,6 +103,42 @@ impl View {
             PrimaryMode::Files => Self::Files,
             PrimaryMode::Commits => Self::Commits,
             PrimaryMode::Stashes => Self::Stashes,
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Branches => "Branches",
+            Self::Files => "Files",
+            Self::Commits => "Commit Tree",
+            Self::Stashes => "Stashes",
+        }
+    }
+}
+
+/// App-switcher entry: a primary view or the help overlay.
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum SwitchTarget {
+    View(View),
+    Help,
+}
+
+impl SwitchTarget {
+    /// Single source for the switcher list (render + keyboard).
+    pub const ALL: [Self; 5] = [
+        Self::View(View::Files),
+        Self::View(View::Branches),
+        Self::View(View::Commits),
+        Self::View(View::Stashes),
+        Self::Help,
+    ];
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::View(view) => view.label(),
+            Self::Help => "Help",
         }
     }
 }
@@ -123,19 +156,6 @@ impl AppMode {
                 | Self::Help
                 | Self::ConfirmDelete(_)
         )
-    }
-
-    /// Legacy view markers kept for compat. Prefer `View` for new code.
-    #[must_use]
-    pub const fn as_view(&self) -> Option<View> {
-        match self {
-            Self::BranchesView => Some(View::Branches),
-            Self::FilesView => Some(View::Files),
-            Self::CommitsView => Some(View::Commits),
-            // Debt: StashDetail doubles as the Stashes view.
-            Self::StashDetail => Some(View::Stashes),
-            _ => None,
-        }
     }
 }
 
@@ -228,7 +248,6 @@ pub struct UiState {
 
     // Scrolling
     pub info_scroll: u16,
-    pub list_start_index: usize,
 
     // Filtering and Searching
     pub current_filter: Option<BranchStatus>,
@@ -260,13 +279,42 @@ pub struct UiState {
     pub main_menu_state: MainMenuState,
     pub quick_actions_state: QuickActionsState,
 
-    // App Switcher
-    pub mode_history: Vec<AppMode>,
+    // App Switcher (views only — modals never enter history)
+    pub mode_history: Vec<View>,
     pub switcher_index: usize,
+
+    // Transient toast notification (expires automatically).
+    pub toast: Option<crate::state::toast::Toast>,
 
     // Animations
     pub snap_animation: Option<SnapAnimation>,
+}
+
+/// Per-frame render cache. Owned by `App` behind a `RefCell` so render
+/// (`ui::render`, `&App`) can record hit-test data without `&mut`.
+/// Scroll math stays pure in `UiState::branch_viewport`; this only stores
+/// the result plus mouse hit positions rebuilt each frame.
+#[derive(Default)]
+pub struct FrameCache {
+    pub list_start_index: usize,
     pub branch_screen_positions: Vec<(usize, u16)>,
+    /// Spinner frame counter; advanced in `draw` while `App::is_busy()`.
+    pub spinner_tick: u64,
+}
+
+impl FrameCache {
+    /// Sync scroll cache; returns `(start, visible)`. Resets hit positions.
+    pub fn sync_branches(
+        &mut self,
+        selected: usize,
+        total: usize,
+        height: usize,
+    ) -> (usize, usize) {
+        let (start, visible) = UiState::branch_viewport(selected, total, height);
+        self.list_start_index = start;
+        self.branch_screen_positions.clear();
+        (start, visible)
+    }
 }
 
 impl UiState {
@@ -284,7 +332,6 @@ impl UiState {
             selected_commit_idx: 0,
             selected_commit_file_idx: 0,
             info_scroll: 0,
-            list_start_index: 0,
             current_filter: None,
             search_query: String::new(),
             filtered_indices: Vec::new(),
@@ -317,65 +364,68 @@ impl UiState {
                     "git log -n 5".to_string(),
                 ],
             },
-            mode_history: vec![
-                AppMode::BranchesView,
-                AppMode::FilesView,
-                AppMode::CommitsView,
-                AppMode::StashDetail, // We use StashDetail as the view for Stashes mode
-                AppMode::Diff,
-                AppMode::Search,
-                AppMode::Filter,
-                AppMode::Settings,
-                AppMode::QuickActions,
-            ],
+            mode_history: Vec::from(View::ALL),
             switcher_index: 0,
             snap_animation: None,
-            branch_screen_positions: Vec::new(),
+            toast: None,
         }
     }
 
-    pub fn track_history(&mut self, mode: AppMode) {
-        if matches!(
-            mode,
-            AppMode::BranchesView
-                | AppMode::FilesView
-                | AppMode::CommitsView
-                | AppMode::StashDetail
-                | AppMode::Diff
-                | AppMode::Search
-                | AppMode::Filter
-                | AppMode::Settings
-                | AppMode::QuickActions
-        ) {
-            self.mode_history.retain(|m| m != &mode);
-            self.mode_history.insert(0, mode);
+    pub fn track_history(&mut self, view: View) {
+        self.mode_history.retain(|v| *v != view);
+        self.mode_history.insert(0, view);
+    }
+
+    /// Switcher list order: most-recently-used views first, then the
+    /// remaining targets. Render and keyboard share this (single source).
+    #[must_use]
+    pub fn switcher_order(&self) -> Vec<SwitchTarget> {
+        let mut ordered: Vec<SwitchTarget> = self
+            .mode_history
+            .iter()
+            .map(|&view| SwitchTarget::View(view))
+            .collect();
+        for target in SwitchTarget::ALL {
+            if !ordered.contains(&target) {
+                ordered.push(target);
+            }
         }
+        ordered
+    }
+
+    /// Show a transient toast, replacing any previous one.
+    pub fn notify(
+        &mut self,
+        kind: crate::state::toast::ToastKind,
+        text: String,
+        undo: Option<crate::state::toast::UndoRestore>,
+    ) {
+        self.toast = Some(crate::state::toast::Toast::new(kind, text, undo));
+    }
+
+    /// Drop the toast once expired. Called at `draw` entry.
+    pub fn expire_toast(&mut self) {
+        if self.toast.as_ref().is_some_and(|t| !t.is_live()) {
+            self.toast = None;
+        }
+    }
+
+    /// Live toast with undo data (the `u` binding target).
+    pub fn undoable_toast(&self) -> Option<&crate::state::toast::Toast> {
+        self.toast.as_ref().filter(|t| t.can_undo())
     }
 
     pub fn push_modal(&mut self, mode: AppMode) {
         if self.current_mode() == &mode {
             return;
         }
-        self.track_history(mode.clone());
+        self.track_history(self.view());
         self.modal_stack.push(ModalState { mode });
     }
 
     pub fn pop_modal(&mut self) -> Option<ModalState> {
         let popped = self.modal_stack.pop();
-
-        let new_current = self.current_mode().clone();
-        if new_current == AppMode::Normal {
-            let view = match self.primary_mode {
-                PrimaryMode::Branches => AppMode::BranchesView,
-                PrimaryMode::Files => AppMode::FilesView,
-                PrimaryMode::Commits => AppMode::CommitsView,
-                PrimaryMode::Stashes => AppMode::StashDetail,
-            };
-            self.track_history(view);
-        } else {
-            self.track_history(new_current);
-        }
-
+        self.track_history(self.view());
         self.needs_clear = true;
         popped
     }
@@ -431,16 +481,6 @@ impl UiState {
         (start, visible)
     }
 
-    /// Sync scroll cache for the branches table. Returns `(start, visible)`.
-    /// Also resets per-frame mouse hit positions (rebuilt during render —
-    /// see `ARCHITECTURE.md` debt note on `draw(&mut App)`).
-    pub fn sync_branch_viewport(&mut self, total: usize, height: usize) -> (usize, usize) {
-        let (start, visible) =
-            Self::branch_viewport(self.selected_branch_idx, total, height);
-        self.list_start_index = start;
-        self.branch_screen_positions.clear();
-        (start, visible)
-    }
 }
 
 #[cfg(test)]
@@ -487,9 +527,7 @@ mod tests {
         assert!(AppMode::Help.is_overlay());
         assert!(!AppMode::Normal.is_overlay());
         assert!(!AppMode::Diff.is_overlay());
-        assert_eq!(AppMode::BranchesView.as_view(), Some(View::Branches));
-        assert_eq!(AppMode::StashDetail.as_view(), Some(View::Stashes));
-        assert_eq!(AppMode::Manage.as_view(), None);
+        assert!(!AppMode::Message(String::new()).is_overlay());
     }
 
     #[test]
@@ -509,13 +547,40 @@ mod tests {
     }
 
     #[test]
-    fn test_sync_branch_viewport_resets_hits() {
-        let mut state = UiState::new(PrimaryMode::Branches, 30);
-        state.branch_screen_positions.push((0, 3));
-        let (start, visible) = state.sync_branch_viewport(87, 20);
+    fn test_frame_cache_sync_resets_hits() {
+        let mut cache = FrameCache::default();
+        cache.branch_screen_positions.push((0, 3));
+        let (start, visible) = cache.sync_branches(0, 87, 20);
         assert_eq!((start, visible), (0, 20));
-        assert_eq!(state.list_start_index, start);
-        assert!(state.branch_screen_positions.is_empty());
+        assert_eq!(cache.list_start_index, start);
+        assert!(cache.branch_screen_positions.is_empty());
+    }
+
+    #[test]
+    fn test_switcher_targets_cover_views() {
+        use SwitchTarget as T;
+        assert_eq!(SwitchTarget::ALL.len(), 5);
+        for view in View::ALL {
+            assert!(SwitchTarget::ALL.contains(&T::View(view)), "{view:?}");
+        }
+        assert!(!SwitchTarget::View(View::Branches).label().is_empty());
+        assert_eq!(SwitchTarget::Help.label(), "Help");
+    }
+
+    #[test]
+    fn test_switcher_order_mru_first() {
+        use SwitchTarget as T;
+        let mut state = UiState::new(PrimaryMode::Branches, 30);
+        state.track_history(View::Commits);
+        state.track_history(View::Files);
+        let order = state.switcher_order();
+        assert_eq!(order[0], T::View(View::Files));
+        assert_eq!(order[1], T::View(View::Commits));
+        assert_eq!(order.len(), SwitchTarget::ALL.len());
+        // Current view is always reachable.
+        for view in View::ALL {
+            assert!(state.switcher_order().contains(&T::View(view)));
+        }
     }
 }
 

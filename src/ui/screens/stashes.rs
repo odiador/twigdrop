@@ -6,11 +6,10 @@ use ratatui::{
 };
 
 use crate::app::App;
-use crate::ui::theme::Theme;
 
 pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
     use crate::ui::layout::STASH_SPLIT;
-    let theme = Theme::dark_default();
+    let theme = app.theme();
     f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)

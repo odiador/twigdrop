@@ -42,9 +42,7 @@ pub fn render_quick_actions(f: &mut Frame, app: &App) {
     for (i, action) in app.ui.quick_actions_state.actions.iter().enumerate() {
         let mut style = Style::default().fg(Color::Gray);
         if i == app.ui.quick_actions_state.selected {
-            style = crate::ui::theme::Theme::dark_default()
-                .select_hi
-                .add_modifier(Modifier::BOLD);
+            style = app.theme().select_hi.add_modifier(Modifier::BOLD);
         }
         items.push(ListItem::new(format!(" {} ", action)).style(style));
     }

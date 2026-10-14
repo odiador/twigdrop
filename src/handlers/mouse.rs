@@ -329,7 +329,7 @@ fn handle_list_click(app: &mut App, row: usize) {
     }
 
     let relative_row = row - list_top - 3;
-    let start = app.ui.list_start_index;
+    let start = app.frame_cache.borrow().list_start_index;
     let filtered_branches = app.get_filtered_branches();
     let branches_len = filtered_branches.len();
 

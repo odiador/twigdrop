@@ -2,13 +2,10 @@ use super::particles::ParticleSystem;
 use ratatui::style::Color;
 use std::time::{Duration, Instant};
 
-#[allow(dead_code)]
 const FLASH_DURATION: Duration = Duration::from_millis(200);
-#[allow(dead_code)]
 const SETTLE_DURATION: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
 pub enum SnapPhase {
     Flash,
     Dissolve,
@@ -16,7 +13,6 @@ pub enum SnapPhase {
     Done,
 }
 
-#[allow(dead_code)]
 pub struct SnapAnimation {
     pub phase: SnapPhase,
     pub start_time: Instant,
@@ -25,7 +21,6 @@ pub struct SnapAnimation {
     pub particles: ParticleSystem,
 }
 
-#[allow(dead_code)]
 pub struct SnapRow {
     pub branch_name: String,
     pub screen_y: Option<u16>,
@@ -33,11 +28,9 @@ pub struct SnapRow {
     pub progress: f32, // 0.0 to 1.0
 }
 
-#[allow(dead_code)]
 pub struct SnapCell {
     pub x: u16,
-    #[allow(dead_code)]
-    pub ch: char,
+        pub ch: char,
     pub color: Color,
     pub dissolved: bool,
 }
@@ -61,8 +54,7 @@ impl SnapAnimation {
         }
     }
 
-    #[allow(dead_code)]
-    pub fn tick(&mut self) {
+        pub fn tick(&mut self) {
         let elapsed = self.start_time.elapsed();
 
         match self.phase {
@@ -107,5 +99,27 @@ impl SnapAnimation {
             }
             SnapPhase::Done => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_animation_starts_uncaptured_in_flash() {
+        let anim = SnapAnimation::new(vec!["feature/a".to_string()]);
+        assert!(!anim.captured);
+        assert_eq!(anim.phase, SnapPhase::Flash);
+        assert_eq!(anim.rows.len(), 1);
+        assert_eq!(anim.rows[0].screen_y, None);
+        assert!(anim.rows[0].cells.is_empty());
+    }
+
+    #[test]
+    fn tick_stays_in_flash_immediately() {
+        let mut anim = SnapAnimation::new(vec!["feature/a".to_string()]);
+        anim.tick();
+        assert_eq!(anim.phase, SnapPhase::Flash);
     }
 }
