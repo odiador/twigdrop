@@ -55,43 +55,64 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             if key.modifiers.contains(KeyModifiers::CONTROL) =>
         {
             let loc = app.locale();
+            // In-progress rebase/merge actions go first so they are easy to reach.
+            let mut actions = Vec::new();
+            if crate::git::status::is_rebasing(path) {
+                actions.push((
+                    loc.modals.cmd_continue_rebase.to_string(),
+                    CommandAction::ContinueRebase,
+                ));
+                actions.push((
+                    loc.modals.cmd_abort_rebase.to_string(),
+                    CommandAction::AbortRebase,
+                ));
+            }
+            if crate::git::status::is_merging(path) {
+                actions.push((
+                    loc.modals.cmd_abort_merge.to_string(),
+                    CommandAction::AbortMerge,
+                ));
+            }
             app.ui
                 .push_modal(AppMode::CommandPalette(CommandPaletteState {
                     query: String::new(),
                     selected: 0,
-                    actions: vec![
-                        (
-                            loc.modals.cmd_checkout.to_string(),
-                            CommandAction::CheckoutBranch,
-                        ),
-                        (
-                            loc.modals.cmd_create_branch.to_string(),
-                            CommandAction::CreateBranch,
-                        ),
-                        (
-                            loc.modals.cmd_settings.to_string(),
-                            CommandAction::OpenSettings,
-                        ),
-                        (
-                            loc.modals.cmd_rebase.to_string(),
-                            CommandAction::InteractiveRebase,
-                        ),
-                        (
-                            loc.modals.cmd_stash.to_string(),
-                            CommandAction::StashChanges,
-                        ),
-                        (
-                            loc.modals.cmd_pop_stash.to_string(),
-                            CommandAction::PopStash,
-                        ),
-                        (loc.modals.cmd_fetch.to_string(), CommandAction::Fetch),
-                        (loc.modals.cmd_pull.to_string(), CommandAction::Pull),
-                        (loc.modals.cmd_push.to_string(), CommandAction::Push),
-                        (
-                            loc.modals.cmd_commit.to_string(),
-                            CommandAction::CommitChanges,
-                        ),
-                    ],
+                    actions: actions
+                        .into_iter()
+                        .chain([
+                            (
+                                loc.modals.cmd_checkout.to_string(),
+                                CommandAction::CheckoutBranch,
+                            ),
+                            (
+                                loc.modals.cmd_create_branch.to_string(),
+                                CommandAction::CreateBranch,
+                            ),
+                            (
+                                loc.modals.cmd_settings.to_string(),
+                                CommandAction::OpenSettings,
+                            ),
+                            (
+                                loc.modals.cmd_rebase.to_string(),
+                                CommandAction::InteractiveRebase,
+                            ),
+                            (
+                                loc.modals.cmd_stash.to_string(),
+                                CommandAction::StashChanges,
+                            ),
+                            (
+                                loc.modals.cmd_pop_stash.to_string(),
+                                CommandAction::PopStash,
+                            ),
+                            (loc.modals.cmd_fetch.to_string(), CommandAction::Fetch),
+                            (loc.modals.cmd_pull.to_string(), CommandAction::Pull),
+                            (loc.modals.cmd_push.to_string(), CommandAction::Push),
+                            (
+                                loc.modals.cmd_commit.to_string(),
+                                CommandAction::CommitChanges,
+                            ),
+                        ])
+                        .collect(),
                 }));
             return false;
         }

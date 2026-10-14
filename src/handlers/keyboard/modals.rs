@@ -902,6 +902,37 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
                                 app.ui
                                     .push_modal(AppMode::Shell("git commit -m \"\"".to_string()));
                             }
+                            CommandAction::ContinueRebase => {
+                                let msg = match crate::actions::commands::continue_rebase(path) {
+                                    Ok(m) => m,
+                                    Err(e) => {
+                                        let files = crate::git::status::get_conflicting_files(path);
+                                        if files.is_empty() {
+                                            e
+                                        } else {
+                                            format!(
+                                                "{e}\n\n{}:\n{}",
+                                                app.locale().modals.conflicting_files,
+                                                files.join("\n")
+                                            )
+                                        }
+                                    }
+                                };
+                                app.refresh_branches(path);
+                                app.ui.push_modal(AppMode::Message(msg));
+                            }
+                            CommandAction::AbortRebase => {
+                                let msg = crate::actions::commands::abort_rebase(path)
+                                    .unwrap_or_else(|e| e);
+                                app.refresh_branches(path);
+                                app.ui.push_modal(AppMode::Message(msg));
+                            }
+                            CommandAction::AbortMerge => {
+                                let msg = crate::actions::commands::abort_merge(path)
+                                    .unwrap_or_else(|e| e);
+                                app.refresh_branches(path);
+                                app.ui.push_modal(AppMode::Message(msg));
+                            }
                         }
                     } else {
                         app.ui.pop_modal();

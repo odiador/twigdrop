@@ -38,6 +38,9 @@ pub struct AIState {
     pub ai_pending: bool,
 }
 
+/// Number of recent commits shown in the inspector panel.
+const INSPECTOR_COMMIT_LIMIT: usize = 4;
+
 impl App {
     pub fn new(
         repo_path: &str,
@@ -117,6 +120,12 @@ impl App {
 
     pub fn refresh_branches(&mut self, path: &str) {
         self.repo.branches = crate::git::build_branches(path);
+        // The analyzer re-checks every branch on trigger; show that in the UI.
+        if !self.trigger_tx.is_closed() {
+            for b in &mut self.repo.branches {
+                b.merge_status = crate::models::MergeStatus::Checking;
+            }
+        }
         self.refresh_filtered_branches();
         let _ = self.trigger_tx.try_send(());
     }
@@ -369,11 +378,12 @@ impl App {
         if branch == self.repo.inspector_branch {
             return;
         }
-        let out =
-            crate::git::commands::run_git(path, &["log", "-n", "4", "--format=%h %s", &branch])
-                .unwrap_or_default();
+        self.repo.inspector_commits =
+            crate::git::get_branch_commits(path, &branch, INSPECTOR_COMMIT_LIMIT)
+                .into_iter()
+                .map(|c| format!("{} {}", c.hash, c.message))
+                .collect();
         self.repo.inspector_branch = branch;
-        self.repo.inspector_commits = out.lines().take(4).map(str::to_string).collect();
     }
 
     /// Sidebar worktree cache refresh (update phase only — never in render).

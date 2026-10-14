@@ -374,7 +374,12 @@ pub fn fixup_commit(path: &str, hash: &str) -> Result<String, String> {
     .map_err(|e| format!("Autosquash rebase failed: {e}"))
 }
 
-#[allow(dead_code)]
+pub fn abort_merge(path: &str) -> Result<String, String> {
+    run_git(path, &["merge", "--abort"])
+        .map(|out| format!("Merge aborted.\n{}", out.trim()))
+        .map_err(|e| format!("Failed to abort merge: {e}"))
+}
+
 pub fn abort_rebase(path: &str) -> Result<String, String> {
     match run_git(path, &["rebase", "--abort"]) {
         Ok(out) => Ok(format!("Rebase aborted successfully.\n{}", out.trim())),
@@ -382,7 +387,6 @@ pub fn abort_rebase(path: &str) -> Result<String, String> {
     }
 }
 
-#[allow(dead_code)]
 pub fn continue_rebase(path: &str) -> Result<String, String> {
     match run_git(path, &["rebase", "--continue"]) {
         Ok(out) => Ok(format!("Rebase continued.\n{}", out.trim())),

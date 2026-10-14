@@ -171,6 +171,9 @@ pub enum CommandAction {
     Pull,
     Push,
     CommitChanges,
+    ContinueRebase,
+    AbortRebase,
+    AbortMerge,
 }
 
 #[derive(Default, PartialEq, Debug, Clone)]

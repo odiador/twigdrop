@@ -167,15 +167,16 @@ pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
         .unwrap_or_else(|e| format!("Error loading diff: {e}"))
 }
 
-#[allow(dead_code)]
-pub fn get_branch_commits(path: &str, branch: &str) -> Vec<crate::models::Commit> {
+pub fn get_branch_commits(path: &str, branch: &str, limit: usize) -> Vec<crate::models::Commit> {
     let range = if branch == "*Local Changes*" || branch == "*Staged Changes*" {
         "HEAD"
     } else {
         branch
     };
 
-    let out = run_git(path, &["log", range, "--format=%h|%s|%cr|%an"]).unwrap_or_default();
+    let n = limit.to_string();
+    let out =
+        run_git(path, &["log", "-n", &n, range, "--format=%h|%s|%cr|%an"]).unwrap_or_default();
 
     out.lines()
         .map(|line| {

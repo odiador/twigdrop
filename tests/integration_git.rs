@@ -256,3 +256,37 @@ fn resolve_remote_prefers_upstream_then_first_remote() {
         Some("zzz")
     );
 }
+
+#[test]
+fn get_branch_commits_respects_limit() {
+    use std::process::Command;
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().to_str().unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            Command::new("git")
+                .current_dir(p)
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    };
+    git(&["init", "-q", "-b", "main"]);
+    for i in 0..6 {
+        git(&[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            &format!("c{i}"),
+        ]);
+    }
+    let commits = twigdrop::git::get_branch_commits(p, "main", 4);
+    assert_eq!(commits.len(), 4);
+    assert_eq!(commits[0].message, "c5");
+}

@@ -58,7 +58,6 @@ pub fn get_current_branch(path: &str) -> String {
         .to_string()
 }
 
-#[allow(dead_code)]
 pub fn is_merging(path: &str) -> bool {
     if let Some(git_dir) = crate::git::commands::get_git_dir(path) {
         git_dir.join("MERGE_HEAD").exists()
@@ -67,7 +66,6 @@ pub fn is_merging(path: &str) -> bool {
     }
 }
 
-#[allow(dead_code)]
 pub fn is_rebasing(path: &str) -> bool {
     if let Some(git_dir) = crate::git::commands::get_git_dir(path) {
         git_dir.join("rebase-merge").exists() || git_dir.join("rebase-apply").exists()
@@ -76,7 +74,6 @@ pub fn is_rebasing(path: &str) -> bool {
     }
 }
 
-#[allow(dead_code)]
 pub fn get_conflicting_files(path: &str) -> Vec<String> {
     run_git(path, &["diff", "--name-only", "--diff-filter=U"])
         .unwrap_or_default()

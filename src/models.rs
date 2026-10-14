@@ -22,7 +22,6 @@ pub struct ConflictBlock {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum MergeStatus {
-    #[allow(dead_code)]
     Checking,
     Clean,
     Conflict(Vec<ConflictBlock>),
