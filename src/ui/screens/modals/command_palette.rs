@@ -40,10 +40,7 @@ pub fn render_command_palette(
                 format!(" ⚡ {} ", locale.modals.command_palette_title),
                 theme.accent.add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                "(Ctrl+K / Ctrl+P) ",
-                theme.muted,
-            ),
+            Span::styled("(Ctrl+K / Ctrl+P) ", theme.muted),
         ]))
         .borders(Borders::ALL)
         .border_style(theme.active_border)
@@ -51,22 +48,13 @@ pub fn render_command_palette(
 
     let search_line = if state.query.is_empty() {
         Line::from(vec![
-            Span::styled(
-                "   ",
-                theme.warning.add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                locale.modals.command_palette_placeholder,
-                theme.subtle,
-            ),
+            Span::styled("   ", theme.warning.add_modifier(Modifier::BOLD)),
+            Span::styled(locale.modals.command_palette_placeholder, theme.subtle),
             Span::styled("▌", theme.accent),
         ])
     } else {
         Line::from(vec![
-            Span::styled(
-                "   ",
-                theme.warning.add_modifier(Modifier::BOLD),
-            ),
+            Span::styled("   ", theme.warning.add_modifier(Modifier::BOLD)),
             Span::styled(
                 &state.query,
                 Style::default()
@@ -96,15 +84,19 @@ pub fn render_command_palette(
         let success = theme.success.fg.unwrap_or(Color::Green);
         let (tag, tag_color) = match action {
             crate::state::ui::CommandAction::CheckoutBranch
-            | crate::state::ui::CommandAction::CreateBranch => {
-                ("BRANCH", success)
-            }
+            | crate::state::ui::CommandAction::CreateBranch => ("BRANCH", success),
             crate::state::ui::CommandAction::Fetch
             | crate::state::ui::CommandAction::Pull
-            | crate::state::ui::CommandAction::Push => ("SYNC", theme.sync.fg.unwrap_or(Color::Blue)),
+            | crate::state::ui::CommandAction::Push => {
+                ("SYNC", theme.sync.fg.unwrap_or(Color::Blue))
+            }
             crate::state::ui::CommandAction::StashChanges
-            | crate::state::ui::CommandAction::PopStash => ("STASH", theme.unique.fg.unwrap_or(Color::Magenta)),
-            crate::state::ui::CommandAction::OpenSettings => ("CONFIG", theme.warning.fg.unwrap_or(Color::Yellow)),
+            | crate::state::ui::CommandAction::PopStash => {
+                ("STASH", theme.unique.fg.unwrap_or(Color::Magenta))
+            }
+            crate::state::ui::CommandAction::OpenSettings => {
+                ("CONFIG", theme.warning.fg.unwrap_or(Color::Yellow))
+            }
             _ => ("GIT", theme.info.fg.unwrap_or(Color::Blue)),
         };
 
@@ -116,7 +108,7 @@ pub fn render_command_palette(
 
         let prefix = if is_selected { "▎ " } else { "  " };
         let tag_span = Span::styled(
-            format!("[{}] ", tag),
+            format!("[{tag}] "),
             Style::default().fg(tag_color).add_modifier(Modifier::BOLD),
         );
         let name_span = Span::styled(
@@ -131,10 +123,7 @@ pub fn render_command_palette(
         );
 
         let item_line = Line::from(vec![
-            Span::styled(
-                prefix,
-                theme.accent.add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(prefix, theme.accent.add_modifier(Modifier::BOLD)),
             tag_span,
             name_span,
         ]);
@@ -154,26 +143,11 @@ pub fn render_command_palette(
 
     // Footer Help Bar
     let footer_hints = Line::from(vec![
-        Span::styled(
-            "  ↑↓",
-            theme.nav.add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            format!(" {}   ", locale.common.select),
-            theme.muted,
-        ),
-        Span::styled(
-            "↵",
-            theme.success.add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            format!(" {}   ", locale.common.execute),
-            theme.muted,
-        ),
-        Span::styled(
-            "Esc",
-            theme.danger.add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("  ↑↓", theme.nav.add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" {}   ", locale.common.select), theme.muted),
+        Span::styled("↵", theme.success.add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" {}   ", locale.common.execute), theme.muted),
+        Span::styled("Esc", theme.danger.add_modifier(Modifier::BOLD)),
         Span::styled(format!(" {}", locale.common.cancel), theme.muted),
     ]);
     f.render_widget(

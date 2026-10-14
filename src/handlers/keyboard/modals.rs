@@ -1,8 +1,8 @@
 use crate::app::App;
 use crate::git;
 use crate::state::ui::{
-    AppMode, CommandAction, DatePickerField, DatePickerState, FilePanel, PreviewState,
-    PrimaryMode, RebaseAction, SwitchTarget, View,
+    AppMode, CommandAction, DatePickerField, DatePickerState, FilePanel, PreviewState, PrimaryMode,
+    RebaseAction, SwitchTarget, View,
 };
 use crate::ui::animations::SnapAnimation;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -92,8 +92,7 @@ pub fn handle_date_picker_keyboard(
                     .unwrap_or(short_hash.clone());
 
                 let exec_cmd = format!(
-                    "if [ \"$(git rev-parse HEAD)\" = \"{}\" ]; then GIT_COMMITTER_DATE=\"{}\" git commit --amend --no-edit --date=\"{}\"; fi",
-                    full_hash, new_date, new_date
+                    "if [ \"$(git rev-parse HEAD)\" = \"{full_hash}\" ]; then GIT_COMMITTER_DATE=\"{new_date}\" git commit --amend --no-edit --date=\"{new_date}\"; fi"
                 );
 
                 let msg = match crate::git::commands::run_git(
@@ -101,16 +100,16 @@ pub fn handle_date_picker_keyboard(
                     &[
                         "rebase",
                         "--autostash",
-                        &format!("{}^", short_hash),
+                        &format!("{short_hash}^"),
                         "--exec",
                         &exec_cmd,
                     ],
                 ) {
                     Ok(m) => {
                         app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
-                        format!("Date updated to {}.\n{}", new_date, m)
+                        format!("Date updated to {new_date}.\n{m}")
                     }
-                    Err(e) => format!("Failed to update date: {}", e),
+                    Err(e) => format!("Failed to update date: {e}"),
                 };
                 app.ui.pop_modal();
                 app.ui.pop_modal();
@@ -151,7 +150,8 @@ pub fn handle_settings_keyboard(app: &mut App, key: KeyEvent) -> bool {
                     8 => {
                         app.config.default_sidebar_width =
                             app.ui.settings_state.input.parse().unwrap_or(30)
-                    }                    _ => {}
+                    }
+                    _ => {}
                 }
                 app.ui.settings_state.editing = false;
                 crate::utils::config::save_config(&app.config);
@@ -395,8 +395,7 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                             let clean = b.name.trim().trim_start_matches('*').trim().to_string();
                             app.ui.pop_modal();
                             app.ui.push_modal(AppMode::Message(format!(
-                                "Cannot delete protected branch: {}",
-                                clean
+                                "Cannot delete protected branch: {clean}"
                             )));
                             return false;
                         }
@@ -425,11 +424,9 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     5 => {
-                        let msg = crate::git::commands::run_git(
-                            path,
-                            &["push", "-u", "origin", &b.name],
-                        )
-                        .unwrap_or_else(|e| e.to_string());
+                        let msg =
+                            crate::git::commands::run_git(path, &["push", "-u", "origin", &b.name])
+                                .unwrap_or_else(|e| e.to_string());
                         app.refresh_branches(path);
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
@@ -447,7 +444,7 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                             .and_then(|mut cb| cb.set_text(b.name.clone()))
                         {
                             Ok(()) => format!("Copied '{}' to clipboard", b.name),
-                            Err(e) => format!("Clipboard unavailable: {}", e),
+                            Err(e) => format!("Clipboard unavailable: {e}"),
                         };
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
@@ -529,7 +526,9 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
                 KeyCode::Up | KeyCode::Char('k') => {
                     app.ui.switcher_index = app.ui.switcher_index.saturating_sub(1);
                 }
-                KeyCode::Down | KeyCode::Char('j') if app.ui.switcher_index + 1 < app.ui.switcher_order().len() => {
+                KeyCode::Down | KeyCode::Char('j')
+                    if app.ui.switcher_index + 1 < app.ui.switcher_order().len() =>
+                {
                     app.ui.switcher_index += 1;
                 }
                 _ => {}
@@ -563,20 +562,20 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
             }
             Some(res)
         }
-        AppMode::CommitFiles(hash, files) => {
-            Some(super::commits::handle_commit_files_keyboard(app, key, &hash, &files, path))
-        }
-        AppMode::CommitAction(hash) => {
-            Some(super::commits::handle_commit_action_keyboard(app, key, &hash, path))
-        }
+        AppMode::CommitFiles(hash, files) => Some(super::commits::handle_commit_files_keyboard(
+            app, key, &hash, &files, path,
+        )),
+        AppMode::CommitAction(hash) => Some(super::commits::handle_commit_action_keyboard(
+            app, key, &hash, path,
+        )),
         AppMode::Shell(input) => {
             match key.code {
                 KeyCode::Enter => {
                     if !input.is_empty() {
                         let parts: Vec<&str> = input.split_whitespace().collect();
                         let msg = match crate::git::commands::run_git(path, &parts) {
-                            Ok(m) => format!("$ {}\n{}", input, m),
-                            Err(e) => format!("Error: {}", e),
+                            Ok(m) => format!("$ {input}\n{m}"),
+                            Err(e) => format!("Error: {e}"),
                         };
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
@@ -645,8 +644,8 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
                     if parts.len() >= 2 && parts[0] == "git" {
                         let args = &parts[1..];
                         let msg = match crate::git::commands::run_git(path, args) {
-                            Ok(m) => format!("> {}\n{}", action, m),
-                            Err(e) => format!("Error: {}", e),
+                            Ok(m) => format!("> {action}\n{m}"),
+                            Err(e) => format!("Error: {e}"),
                         };
                         app.refresh_branches(path);
                         app.ui.pop_modal();
@@ -755,11 +754,11 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
                                 app.repo.current_branch = git::get_current_branch(path);
                                 app.ui.pop_modal();
                                 app.ui
-                                    .push_modal(AppMode::Message(format!("Created {}", input)));
+                                    .push_modal(AppMode::Message(format!("Created {input}")));
                             }
                             Err(e) => {
                                 app.ui.pop_modal();
-                                app.ui.push_modal(AppMode::Message(format!("Error: {}", e)));
+                                app.ui.push_modal(AppMode::Message(format!("Error: {e}")));
                             }
                         }
                     } else {
@@ -787,20 +786,18 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
             match key.code {
                 KeyCode::Enter => {
                     if !input.is_empty() && input != old {
-                        match crate::git::commands::run_git(path, &["branch", "-m", &old, &input])
-                        {
+                        match crate::git::commands::run_git(path, &["branch", "-m", &old, &input]) {
                             Ok(_) => {
                                 app.refresh_branches(path);
                                 app.repo.current_branch = git::get_current_branch(path);
                                 app.ui.pop_modal();
                                 app.ui.push_modal(AppMode::Message(format!(
-                                    "Renamed {} to {}",
-                                    old, input
+                                    "Renamed {old} to {input}"
                                 )));
                             }
                             Err(e) => {
                                 app.ui.pop_modal();
-                                app.ui.push_modal(AppMode::Message(format!("Error: {}", e)));
+                                app.ui.push_modal(AppMode::Message(format!("Error: {e}")));
                             }
                         }
                     } else {
@@ -919,9 +916,7 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
             }
             Some(false)
         }
-        AppMode::Diff => {
-            Some(super::diff::handle_diff_keyboard(app, key, path))
-        }
+        AppMode::Diff => Some(super::diff::handle_diff_keyboard(app, key, path)),
         AppMode::Help => {
             if key.code == KeyCode::Esc
                 || key.code == KeyCode::Char('q')

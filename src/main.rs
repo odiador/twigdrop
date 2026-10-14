@@ -53,10 +53,7 @@ async fn main() -> Result<()> {
     let path = args.get(1).cloned().unwrap_or_else(|| ".".to_string());
 
     if !git::commands::is_inside_git_work_tree(&path) {
-        eprintln!(
-            "fatal: not a git repository (or any of the parent directories): {}",
-            path
-        );
+        eprintln!("fatal: not a git repository (or any of the parent directories): {path}");
         std::process::exit(1);
     }
 
@@ -137,7 +134,7 @@ async fn main() -> Result<()> {
     terminal.show_cursor()?;
 
     if let Err(err) = res {
-        eprintln!("{:?}", err);
+        eprintln!("{err:?}");
         std::process::exit(1);
     }
 
@@ -181,13 +178,11 @@ async fn run_app(
     // runs the terminal-restore path (raw mode, alternate screen, mouse).
     // Without this, `pkill twigdrop` would leave the shell unusable.
     #[cfg(unix)]
-    let mut sigterm =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("sigterm handler");
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .expect("sigterm handler");
     #[cfg(unix)]
-    let mut sigint =
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-            .expect("sigint handler");
+    let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+        .expect("sigint handler");
 
     // Initial draw
     terminal.draw(|f| ui::draw(f, app, path))?;
@@ -220,8 +215,7 @@ async fn run_app(
         } else {
             // Idle state: sleep until an event arrives — unless transient
             // UI (toast TTL, busy spinner) needs ticks to advance.
-            let needs_tick =
-                app.is_busy() || app.ui.toast.as_ref().is_some_and(|t| t.is_live());
+            let needs_tick = app.is_busy() || app.ui.toast.as_ref().is_some_and(|t| t.is_live());
             if needs_tick {
                 tokio::select! {
                     maybe_event = event_rx.recv() => {

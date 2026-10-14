@@ -68,7 +68,7 @@ pub fn get_merge_status_display(
                 bar.push('░');
             }
             (
-                format!("{} {}/{}", bar, safe, total),
+                format!("{bar} {safe}/{total}"),
                 theme.warning.fg.unwrap_or(Color::Yellow),
             )
         }
@@ -124,7 +124,10 @@ mod tests {
         let theme = Theme::dark_default();
         let area = Rect::new(0, 0, 5, 5);
         let mut buf = Buffer::empty(area);
-        buf[(2, 2)].set_char('A').set_fg(Color::White).set_bg(Color::Black);
+        buf[(2, 2)]
+            .set_char('A')
+            .set_fg(Color::White)
+            .set_bg(Color::Black);
 
         apply_dimmed_backdrop(&mut buf, area, &theme);
 
@@ -142,5 +145,3 @@ mod tests {
         assert_ne!(dark.success, light.success);
     }
 }
-
-

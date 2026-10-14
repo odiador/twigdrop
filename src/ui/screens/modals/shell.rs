@@ -26,7 +26,7 @@ pub fn render_shell(f: &mut Frame, input: &str) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Yellow));
 
-    let p = Paragraph::new(format!("$ {}", input))
+    let p = Paragraph::new(format!("$ {input}"))
         .block(block)
         .alignment(Alignment::Left);
     f.render_widget(p, inner);
@@ -44,7 +44,7 @@ pub fn render_quick_actions(f: &mut Frame, app: &App) {
         if i == app.ui.quick_actions_state.selected {
             style = app.theme().select_hi.add_modifier(Modifier::BOLD);
         }
-        items.push(ListItem::new(format!(" {} ", action)).style(style));
+        items.push(ListItem::new(format!(" {action} ")).style(style));
     }
 
     let list = List::new(items).block(

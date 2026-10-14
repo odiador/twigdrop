@@ -2,9 +2,9 @@ use crate::events::{Event, GitEvent, TaskEvent};
 use crate::models::{Branch, ConflictBlock};
 use crate::state::ui::RebaseAction;
 use crate::state::{AppMode, FrameCache, PreviewState, PrimaryMode, RepositoryState, UiState};
-use std::cell::RefCell;
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
+use std::cell::RefCell;
 use std::sync::Arc;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
@@ -191,7 +191,7 @@ impl App {
                         &resolved_content,
                     );
                     self.ui
-                        .push_modal(AppMode::Message(format!("Fixed conflict in {}", file_path)));
+                        .push_modal(AppMode::Message(format!("Fixed conflict in {file_path}")));
                 }
                 TaskEvent::AiModelsFetched(models) => {
                     if self.ui.settings_state.selecting && self.ui.settings_state.selected == 3 {
@@ -204,7 +204,7 @@ impl App {
                 TaskEvent::TaskFailed(err) => {
                     self.ai_state.ai_pending = false;
                     self.ui
-                        .push_modal(AppMode::Message(format!("Task Error: {}", err)));
+                        .push_modal(AppMode::Message(format!("Task Error: {err}")));
                 }
             },
             Event::Resize => {
@@ -239,9 +239,15 @@ impl App {
 
     pub fn cycle_branch_sort(&mut self) {
         self.ui.branch_sort_mode = match self.ui.branch_sort_mode {
-            crate::state::ui::BranchSortMode::Recent => crate::state::ui::BranchSortMode::PrunableFirst,
-            crate::state::ui::BranchSortMode::PrunableFirst => crate::state::ui::BranchSortMode::Alphabetical,
-            crate::state::ui::BranchSortMode::Alphabetical => crate::state::ui::BranchSortMode::Recent,
+            crate::state::ui::BranchSortMode::Recent => {
+                crate::state::ui::BranchSortMode::PrunableFirst
+            }
+            crate::state::ui::BranchSortMode::PrunableFirst => {
+                crate::state::ui::BranchSortMode::Alphabetical
+            }
+            crate::state::ui::BranchSortMode::Alphabetical => {
+                crate::state::ui::BranchSortMode::Recent
+            }
         };
         self.refresh_filtered_branches();
     }
@@ -296,9 +302,10 @@ impl App {
             }
 
             match sort_mode {
-                crate::state::ui::BranchSortMode::Recent => {
-                    b.commit_date.cmp(&a.commit_date).then_with(|| a.name.cmp(&b.name))
-                }
+                crate::state::ui::BranchSortMode::Recent => b
+                    .commit_date
+                    .cmp(&a.commit_date)
+                    .then_with(|| a.name.cmp(&b.name)),
                 crate::state::ui::BranchSortMode::PrunableFirst => {
                     let a_prunable = a.status.contains(&crate::models::BranchStatus::Gone)
                         && !self.config.is_protected(&a.name);
@@ -373,9 +380,8 @@ impl App {
     /// Also fixes the legacy hardcoded `"."` repo path. Cheap enough to run
     /// whenever the sidebar is visible; skips when hidden.
     pub fn refresh_sidebar_worktrees(&mut self, path: &str) {
-        let out =
-            crate::git::commands::run_git(path, &["worktree", "list", "--porcelain"])
-                .unwrap_or_default();
+        let out = crate::git::commands::run_git(path, &["worktree", "list", "--porcelain"])
+            .unwrap_or_default();
         let mut worktrees = Vec::new();
         let mut current_wt = String::new();
         for line in out.lines() {
@@ -526,7 +532,7 @@ impl App {
         // Instead of getting unpushed commits, we want to get the commits from the hash to HEAD.
         let out = crate::git::commands::run_git(
             path,
-            &["log", "--format=%h|%s", &format!("{}..HEAD", hash)],
+            &["log", "--format=%h|%s", &format!("{hash}..HEAD")],
         )
         .unwrap_or_default();
         let commits: Vec<crate::state::ui::RebaseCommit> = out
@@ -649,7 +655,7 @@ impl App {
 
             state.highlighted_lines.clear();
             for line in &state.lines {
-                let line_with_ending = format!("{}\n", line);
+                let line_with_ending = format!("{line}\n");
                 let ranges = h
                     .highlight_line(&line_with_ending, &self.ps)
                     .unwrap_or_default();
@@ -726,7 +732,9 @@ impl App {
         let undo = if undo_items.is_empty() {
             None
         } else {
-            Some(crate::state::toast::UndoRestore { branches: undo_items })
+            Some(crate::state::toast::UndoRestore {
+                branches: undo_items,
+            })
         };
         self.ui.notify(
             crate::state::toast::ToastKind::Success,
@@ -755,11 +763,7 @@ impl App {
     /// Recreate branches from the toast's undo data (`u` binding).
     /// Already-existing names are skipped (reported, not an error).
     pub fn undo_delete(&mut self, path: &str) {
-        let Some(restore) = self
-            .ui
-            .undoable_toast()
-            .and_then(|t| t.undo.clone())
-        else {
+        let Some(restore) = self.ui.undoable_toast().and_then(|t| t.undo.clone()) else {
             return;
         };
         let mut restored = 0;

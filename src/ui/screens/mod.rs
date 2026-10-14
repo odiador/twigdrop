@@ -7,7 +7,6 @@ pub mod modals;
 pub mod sidebar;
 pub mod stashes;
 
-
 pub use branches::{
     render_confirm_delete, render_create_branch, render_filter, render_main_list, render_manage,
     render_rename_branch,

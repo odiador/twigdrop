@@ -129,16 +129,13 @@ pub fn render_date_picker(f: &mut Frame, app: &App, state: &DatePickerState) {
             if idx == 1 {
                 style = style.fg(Color::White).add_modifier(Modifier::BOLD);
                 if is_focused {
-                    style = app
-                        .theme()
-                        .select_cyan
-                        .add_modifier(Modifier::BOLD);
-                    text = format!(" {} ◄", text);
+                    style = app.theme().select_cyan.add_modifier(Modifier::BOLD);
+                    text = format!(" {text} ◄");
                 } else {
-                    text = format!(" {}  ", text);
+                    text = format!(" {text}  ");
                 }
             } else {
-                text = format!(" {}  ", text);
+                text = format!(" {text}  ");
             }
             spans.push(ListItem::new(
                 Line::from(Span::styled(text, style)).alignment(Alignment::Center),

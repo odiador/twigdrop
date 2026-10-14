@@ -21,16 +21,14 @@ impl<M: rig::completion::CompletionModel + Send + Sync + 'static> TwigdropAI
 {
     async fn summarize_diff(&self, diff: &str) -> Result<String> {
         let prompt = format!(
-            "Summarize this git diff in 3 concise bullet points. Focus on intent and impact:\n\n{}",
-            diff
+            "Summarize this git diff in 3 concise bullet points. Focus on intent and impact:\n\n{diff}"
         );
         Ok(self.agent.prompt(&prompt).await?)
     }
 
     async fn recommend_cleanup(&self, branch_info: &str) -> Result<String> {
         let prompt = format!(
-            "Analyze this branch info. Should it be deleted? Provide a 1-sentence recommendation:\n\n{}",
-            branch_info
+            "Analyze this branch info. Should it be deleted? Provide a 1-sentence recommendation:\n\n{branch_info}"
         );
         Ok(self.agent.prompt(&prompt).await?)
     }
@@ -46,9 +44,8 @@ impl<M: rig::completion::CompletionModel + Send + Sync + 'static> TwigdropAI
             DO NOT include any explanation or prose.
             
             Conflict block:
-            {}
-            ",
-            conflict_block
+            {conflict_block}
+            "
         );
         Ok(self.agent.prompt(&prompt).await?)
     }

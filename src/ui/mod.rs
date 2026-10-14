@@ -145,12 +145,7 @@ pub fn render_views(f: &mut Frame, app: &App, area: Rect) {
 
 /// Chrome over an already-rendered frame: particles + status + footer +
 /// modals. Pure (`&App`); particle animation only reads its state.
-pub fn render_chrome(
-    f: &mut Frame,
-    app: &App,
-    toast_area: Option<Rect>,
-    footer_area: Rect,
-) {
+pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_area: Rect) {
     // 2. Particles (read-only animation state)
     if app.config.enable_animations
         && let Some(ref anim) = app.ui.snap_animation
@@ -175,7 +170,7 @@ pub fn render_chrome(
     let status_prefix = match app.ui.primary_mode {
         PrimaryMode::Branches => {
             let filter_text = if let Some(f) = &app.ui.current_filter {
-                format!("sort: {:?}", f)
+                format!("sort: {f:?}")
             } else {
                 loc.common.none.to_string()
             };
@@ -238,18 +233,21 @@ pub fn render_chrome(
     f.render_widget(footer, footer_area);
 
     // 4b. Toast bar (only while live).
-    if let (Some(area), Some(toast)) = (
-        toast_area,
-        app.ui.toast.as_ref().filter(|t| t.is_live()),
-    ) {
+    if let (Some(area), Some(toast)) = (toast_area, app.ui.toast.as_ref().filter(|t| t.is_live())) {
         use crate::state::toast::ToastKind;
         let (glyph, style) = match toast.kind {
-            ToastKind::Success => ("✓", theme.success.add_modifier(ratatui::style::Modifier::BOLD)),
-            ToastKind::Error => ("✗", theme.danger.add_modifier(ratatui::style::Modifier::BOLD)),
+            ToastKind::Success => (
+                "✓",
+                theme.success.add_modifier(ratatui::style::Modifier::BOLD),
+            ),
+            ToastKind::Error => (
+                "✗",
+                theme.danger.add_modifier(ratatui::style::Modifier::BOLD),
+            ),
             ToastKind::Info => ("ℹ", theme.info.add_modifier(ratatui::style::Modifier::BOLD)),
         };
         let mut spans = vec![
-            ratatui::text::Span::styled(format!(" {} ", glyph), style),
+            ratatui::text::Span::styled(format!(" {glyph} "), style),
             ratatui::text::Span::styled(toast.text.clone(), theme.base),
         ];
         if toast.undo.is_some() {
@@ -301,8 +299,8 @@ mod tests {
     use super::*;
     use crate::models::{Branch, BranchStatus, MergeStatus};
     use crate::state::ui::CommandPaletteState;
-    use ratatui::backend::TestBackend;
     use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use tokio::sync::mpsc;
 
     fn create_test_app() -> App {
@@ -319,7 +317,14 @@ mod tests {
             ahead_count: 0,
             behind_count: 0,
         };
-        let mut app = App::new(".", vec![branch], "main".to_string(), tx, ai_tx, conflict_tx);
+        let mut app = App::new(
+            ".",
+            vec![branch],
+            "main".to_string(),
+            tx,
+            ai_tx,
+            conflict_tx,
+        );
         app.refresh_filtered_branches();
         app
     }
@@ -347,7 +352,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ui_draw_empty_branches() {        let (tx, _) = mpsc::channel(1);
+    fn test_ui_draw_empty_branches() {
+        let (tx, _) = mpsc::channel(1);
         let (ai_tx, _) = mpsc::channel(1);
         let (conflict_tx, _) = mpsc::channel(1);
         let mut app = App::new(".", vec![], "main".to_string(), tx, ai_tx, conflict_tx);
@@ -432,7 +438,8 @@ mod tests {
     }
 
     #[test]
-    fn test_ui_draw_narrow_collapses_author() {        let mut app = create_test_app();
+    fn test_ui_draw_narrow_collapses_author() {
+        let mut app = create_test_app();
         let backend = TestBackend::new(70, 24);
         let mut terminal = Terminal::new(backend).unwrap();
 
@@ -527,11 +534,15 @@ mod tests {
     #[test]
     fn test_ui_draw_command_palette_overlay() {
         let mut app = create_test_app();
-        app.ui.push_modal(AppMode::CommandPalette(CommandPaletteState {
-            query: String::new(),
-            selected: 0,
-            actions: vec![("Test Action".to_string(), crate::state::ui::CommandAction::OpenSettings)],
-        }));
+        app.ui
+            .push_modal(AppMode::CommandPalette(CommandPaletteState {
+                query: String::new(),
+                selected: 0,
+                actions: vec![(
+                    "Test Action".to_string(),
+                    crate::state::ui::CommandAction::OpenSettings,
+                )],
+            }));
 
         let backend = TestBackend::new(120, 30);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -558,4 +569,3 @@ mod tests {
         assert_eq!(corner_cell.fg, theme.backdrop_fg);
     }
 }
-

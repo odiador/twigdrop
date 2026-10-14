@@ -231,7 +231,10 @@ mod tests {
         assert_eq!(parse_stashed_branch_line(line1), Some("main".to_string()));
 
         let line2 = "stash@{1}: On feature/auth: Some message";
-        assert_eq!(parse_stashed_branch_line(line2), Some("feature/auth".to_string()));
+        assert_eq!(
+            parse_stashed_branch_line(line2),
+            Some("feature/auth".to_string())
+        );
 
         let line3 = "stash@{2}: custom stash without on";
         assert_eq!(parse_stashed_branch_line(line3), None);

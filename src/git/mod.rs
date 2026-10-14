@@ -21,7 +21,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
         name: "*Local Changes*".to_string(),
         status: vec![BranchStatus::Local],
         merge_status: MergeStatus::NotAnalyzed,
-        age: "".to_string(),
+        age: String::new(),
         author: "You".to_string(),
         commit_date: "Now".to_string(),
         ahead_count: 0,
@@ -32,7 +32,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
         name: "*Staged Changes*".to_string(),
         status: vec![BranchStatus::Local],
         merge_status: MergeStatus::NotAnalyzed,
-        age: "".to_string(),
+        age: String::new(),
         author: "You".to_string(),
         commit_date: "Now".to_string(),
         ahead_count: 0,
@@ -125,7 +125,7 @@ pub fn get_branch_info(path: &str, branch: &str) -> String {
         path,
         &["log", "-n", "3", "--stat", "-p", "--color=never", branch],
     )
-    .unwrap_or_else(|e| format!("Error loading branch info: {}", e))
+    .unwrap_or_else(|e| format!("Error loading branch info: {e}"))
 }
 
 pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
@@ -157,14 +157,14 @@ pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
 pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
     if branch == "*Local Changes*" {
         return run_git(path, &["diff", "--", file])
-            .unwrap_or_else(|e| format!("Error loading diff: {}", e));
+            .unwrap_or_else(|e| format!("Error loading diff: {e}"));
     } else if branch == "*Staged Changes*" {
         return run_git(path, &["diff", "--cached", "--", file])
-            .unwrap_or_else(|e| format!("Error loading diff: {}", e));
+            .unwrap_or_else(|e| format!("Error loading diff: {e}"));
     }
 
     run_git(path, &["diff", "HEAD", branch, "--", file])
-        .unwrap_or_else(|e| format!("Error loading diff: {}", e))
+        .unwrap_or_else(|e| format!("Error loading diff: {e}"))
 }
 
 #[allow(dead_code)]
@@ -189,10 +189,10 @@ pub fn get_branch_commits(path: &str, branch: &str) -> Vec<crate::models::Commit
                 }
             } else {
                 crate::models::Commit {
-                    hash: "".to_string(),
+                    hash: String::new(),
                     message: line.to_string(),
-                    date: "".to_string(),
-                    author: "".to_string(),
+                    date: String::new(),
+                    author: String::new(),
                 }
             }
         })
@@ -203,7 +203,7 @@ pub fn get_branch_commits(path: &str, branch: &str) -> Vec<crate::models::Commit
 pub fn get_unpushed_commits(path: &str) -> Vec<crate::models::Commit> {
     // Determine the upstream tracking branch or use origin/HEAD
     let upstream =
-        run_git(path, &["rev-parse", "--abbrev-ref", "@{u}"]).unwrap_or_else(|_| "".to_string());
+        run_git(path, &["rev-parse", "--abbrev-ref", "@{u}"]).unwrap_or_else(|_| String::new());
 
     let range = if upstream.trim().is_empty() {
         "HEAD".to_string() // If no upstream, all commits are unpushed technically, or we could just show last 10
@@ -225,10 +225,10 @@ pub fn get_unpushed_commits(path: &str) -> Vec<crate::models::Commit> {
                 }
             } else {
                 crate::models::Commit {
-                    hash: "".to_string(),
+                    hash: String::new(),
                     message: line.to_string(),
-                    date: "".to_string(),
-                    author: "".to_string(),
+                    date: String::new(),
+                    author: String::new(),
                 }
             }
         })
@@ -258,7 +258,7 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
             "log",
             "--reverse",
             "--format=%H",
-            &format!("{}..{}", merge_base, target_branch),
+            &format!("{merge_base}..{target_branch}"),
         ],
     ) {
         Ok(c) => c,
@@ -271,19 +271,17 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
         return MergeStatus::Clean;
     }
 
-    let mut current_tree = match run_git(
-        path,
-        &["rev-parse", &format!("{}^{{tree}}", current_branch)],
-    ) {
-        Ok(t) => t.trim().to_string(),
-        Err(_) => return MergeStatus::SafeLimit(0, 0),
-    };
+    let mut current_tree =
+        match run_git(path, &["rev-parse", &format!("{current_branch}^{{tree}}")]) {
+            Ok(t) => t.trim().to_string(),
+            Err(_) => return MergeStatus::SafeLimit(0, 0),
+        };
 
     let total_commits = commits.len();
     let mut safe_commits = 0;
 
     for commit in commits {
-        let parent = match run_git(path, &["rev-parse", &format!("{}^1", commit)]) {
+        let parent = match run_git(path, &["rev-parse", &format!("{commit}^1")]) {
             Ok(p) => p.trim().to_string(),
             Err(_) => {
                 return MergeStatus::SafeLimit(safe_commits, total_commits);
@@ -295,7 +293,7 @@ pub fn analyze_merge_status(path: &str, target_branch: &str, current_branch: &st
             &[
                 "merge-tree",
                 "--write-tree",
-                &format!("--merge-base={}", parent),
+                &format!("--merge-base={parent}"),
                 &current_tree,
                 commit,
             ],
@@ -331,7 +329,7 @@ fn get_conflicts_from_merge(path: &str, base: &str, our: &str, their: &str) -> V
         &[
             "merge-tree",
             "--write-tree",
-            &format!("--merge-base={}", base),
+            &format!("--merge-base={base}"),
             our,
             their,
         ],

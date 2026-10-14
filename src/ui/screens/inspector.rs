@@ -12,9 +12,7 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let block = Block::default()
         .title(" ◀ Inspector [←/Esc] ")
-        .title_style(
-            theme.accent2.add_modifier(Modifier::BOLD),
-        )
+        .title_style(theme.accent2.add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
         .border_style(theme.border_soft);
 
@@ -46,10 +44,7 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
         };
 
         overview_lines.push(Line::from(vec![
-            Span::styled(
-                &b.name,
-                theme.info.add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(&b.name, theme.info.add_modifier(Modifier::BOLD)),
             Span::styled(
                 tag,
                 Style::default().fg(if is_current {
@@ -68,7 +63,10 @@ pub fn render_inspector_drawer(f: &mut Frame, area: Rect, app: &App) {
         overview_lines.push(Line::from(vec![
             Span::styled("Updated: ", Style::default().fg(Color::DarkGray)),
             Span::styled(&b.age, theme.peach),
-            Span::styled(format!(" ({})", b.commit_date), Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                format!(" ({})", b.commit_date),
+                Style::default().fg(Color::DarkGray),
+            ),
         ]));
 
         overview_lines.push(Line::from(vec![

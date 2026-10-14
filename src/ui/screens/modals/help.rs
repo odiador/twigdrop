@@ -47,9 +47,7 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         .style(Style::default().bg(theme.surface_alt));
 
     let logo = Paragraph::new(ASCII_LOGO.trim_matches('\n'))
-        .style(
-            theme.accent2.add_modifier(Modifier::BOLD),
-        )
+        .style(theme.accent2.add_modifier(Modifier::BOLD))
         .alignment(Alignment::Center)
         .block(logo_block);
     f.render_widget(logo, chunks[0]);
@@ -65,7 +63,10 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
 
     let cols = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(crate::ui::layout::HELP_COLS.0), Constraint::Percentage(crate::ui::layout::HELP_COLS.1)])
+        .constraints([
+            Constraint::Percentage(crate::ui::layout::HELP_COLS.0),
+            Constraint::Percentage(crate::ui::layout::HELP_COLS.1),
+        ])
         .split(Rect::new(
             body_area.x + 2,
             body_area.y,
@@ -85,7 +86,13 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
         Line::from(Span::styled(loc.modals.help_branch_ops_title, header_style)),
         Line::from(vec![
             Span::styled(key("branches.type_filter"), key_style),
-            Span::styled(format!("{} {}", loc.branches.type_to_filter, loc.branches.esc_to_clear), desc_style),
+            Span::styled(
+                format!(
+                    "{} {}",
+                    loc.branches.type_to_filter, loc.branches.esc_to_clear
+                ),
+                desc_style,
+            ),
         ]),
         Line::from(vec![
             Span::styled("  ↑ / ↓          ", key_style),
@@ -128,7 +135,10 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             Span::styled("AI Intelligence Analysis", desc_style),
         ]),
         Line::from(""),
-        Line::from(Span::styled(loc.modals.help_status_badges_title, header_style)),
+        Line::from(Span::styled(
+            loc.modals.help_status_badges_title,
+            header_style,
+        )),
         Line::from(vec![
             Span::styled(
                 "  ▲ (Red)        ",
@@ -169,13 +179,22 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
 
     // Right Column: Global Shortcuts & Views (labels from BINDINGS)
     let right_lines = vec![
-        Line::from(Span::styled(loc.modals.help_global_shortcuts_title, header_style)),
+        Line::from(Span::styled(
+            loc.modals.help_global_shortcuts_title,
+            header_style,
+        )),
         Line::from(vec![
             Span::styled(key("global.palette"), key_style),
             Span::styled("Spotlight Command Palette", desc_style),
         ]),
         Line::from(vec![
-            Span::styled(format!("  {:<18}", format!("{} / ?", crate::input::keys("global.help_toggle_ctrl"))), key_style),
+            Span::styled(
+                format!(
+                    "  {:<18}",
+                    format!("{} / ?", crate::input::keys("global.help_toggle_ctrl"))
+                ),
+                key_style,
+            ),
             Span::styled("Toggle Help & Legend", desc_style),
         ]),
         Line::from(vec![
@@ -219,7 +238,10 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             Span::styled("Execute Shell command", desc_style),
         ]),
         Line::from(""),
-        Line::from(Span::styled(loc.modals.help_files_shortcuts_title, header_style)),
+        Line::from(Span::styled(
+            loc.modals.help_files_shortcuts_title,
+            header_style,
+        )),
         Line::from(vec![
             Span::styled("  s              ", key_style),
             Span::styled(loc.files.stage_unstage, desc_style),
@@ -254,17 +276,17 @@ pub fn render_help_content(f: &mut Frame, area: Rect, app: &App) {
             ),
             theme.danger.add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!("{}  •  ", loc.modals.help_footer_close), theme.muted),
         Span::styled(
-            "twigdrop ",
-            theme.accent2.add_modifier(Modifier::BOLD),
+            format!("{}  •  ", loc.modals.help_footer_close),
+            theme.muted,
         ),
+        Span::styled("twigdrop ", theme.accent2.add_modifier(Modifier::BOLD)),
         Span::styled("by ", theme.muted),
+        Span::styled("odiador", theme.unique.add_modifier(Modifier::BOLD)),
         Span::styled(
-            "odiador",
-            theme.unique.add_modifier(Modifier::BOLD),
+            format!(" ❤️ {}", loc.modals.help_footer_credit),
+            theme.muted,
         ),
-        Span::styled(format!(" ❤️ {}", loc.modals.help_footer_credit), theme.muted),
     ]);
 
     let footer_p = Paragraph::new(footer_line)

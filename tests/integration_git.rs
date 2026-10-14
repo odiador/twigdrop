@@ -22,19 +22,14 @@ fn init_repo() -> TempDir {
         .expect("user.email");
     std::fs::write(dir.path().join("README.md"), "# test\n").expect("write");
     let mut index = repo.index().expect("index");
-    index.add_path(std::path::Path::new("README.md")).expect("add");
+    index
+        .add_path(std::path::Path::new("README.md"))
+        .expect("add");
     let tree_id = index.write_tree().expect("tree");
     let tree = repo.find_tree(tree_id).expect("find tree");
     let sig = Signature::now("Twigdrop Test", "test@twigdrop.dev").expect("sig");
-    repo.commit(
-        Some("HEAD"),
-        &sig,
-        &sig,
-        "initial commit",
-        &tree,
-        &[],
-    )
-    .expect("commit");
+    repo.commit(Some("HEAD"), &sig, &sig, "initial commit", &tree, &[])
+        .expect("commit");
     dir
 }
 
@@ -110,11 +105,15 @@ fn rename_branch_roundtrip() {
     {
         let repo = Repository::open(dir.path()).expect("open");
         let head = repo.head().expect("head").peel_to_commit().expect("commit");
-        repo.branch("feature/old-name", &head, false).expect("branch");
+        repo.branch("feature/old-name", &head, false)
+            .expect("branch");
     }
 
-    twigdrop::git::commands::run_git(&path, &["branch", "-m", "feature/old-name", "feature/new-name"])
-        .expect("rename");
+    twigdrop::git::commands::run_git(
+        &path,
+        &["branch", "-m", "feature/old-name", "feature/new-name"],
+    )
+    .expect("rename");
     let branches = twigdrop::git::build_branches(&path);
     assert!(branches.iter().any(|b| b.name == "feature/new-name"));
     assert!(!branches.iter().any(|b| b.name == "feature/old-name"));
@@ -130,8 +129,7 @@ fn merge_branch_into_current() {
         repo.branch("feature/add", &head, false).expect("branch");
     }
     // No-op fast-forward merge of an even branch must succeed.
-    twigdrop::git::commands::run_git(&path, &["merge", "--no-edit", "feature/add"])
-        .expect("merge");
+    twigdrop::git::commands::run_git(&path, &["merge", "--no-edit", "feature/add"]).expect("merge");
     let branches = twigdrop::git::build_branches(&path);
     assert!(branches.iter().any(|b| b.name == "feature/add"));
 }
@@ -164,10 +162,7 @@ fn delete_then_undo_restores_branch() {
     app.undo_delete(&path);
     let back = twigdrop::git::build_branches(&path);
     assert!(back.iter().any(|b| b.name == "feature/doomed"));
-    assert!(
-        app.ui.undoable_toast().is_none(),
-        "undo consumes the toast"
-    );
+    assert!(app.ui.undoable_toast().is_none(), "undo consumes the toast");
 }
 
 #[test]
@@ -218,10 +213,7 @@ fn prunable_filter_never_touches_live_branches() {
     let head = repo.head().expect("head").peel_to_commit().expect("commit");
     repo.branch("feature/keep", &head, false).expect("branch");
     let branches = twigdrop::git::build_branches(&path);
-    let current = branches
-        .first()
-        .map(|b| b.name.clone())
-        .unwrap_or_default();
+    let current = branches.first().map(|b| b.name.clone()).unwrap_or_default();
     let prunable = get_prunable_branches(&branches, &current, &[]);
     assert!(
         !prunable.contains(&current),

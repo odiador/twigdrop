@@ -2,14 +2,8 @@ use crate::git::commands::{run_git, run_git_with_status};
 use crate::state::ui::{RebaseAction, RebaseCommit};
 use std::fs;
 
-pub const DEFAULT_PROTECTED_BRANCHES: &[&str] = &[
-    "main",
-    "master",
-    "develop",
-    "dev",
-    "staging",
-    "production",
-];
+pub const DEFAULT_PROTECTED_BRANCHES: &[&str] =
+    &["main", "master", "develop", "dev", "staging", "production"];
 
 pub fn is_protected_branch(name: &str) -> bool {
     is_protected_branch_with(name, &[])
@@ -52,13 +46,19 @@ pub fn write_backup_line(
 ) -> std::io::Result<std::path::PathBuf> {
     let dir = base.join(slug);
     fs::create_dir_all(&dir)?;
-    let file = dir.join(format!(
-        "{}.log",
-        chrono::Local::now().format("%Y-%m-%d")
-    ));
+    let file = dir.join(format!("{}.log", chrono::Local::now().format("%Y-%m-%d")));
     use std::io::Write;
-    let mut f = fs::OpenOptions::new().create(true).append(true).open(&file)?;
-    writeln!(f, "{} {} {}", chrono::Local::now().format("%H:%M:%S"), name, sha)?;
+    let mut f = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&file)?;
+    writeln!(
+        f,
+        "{} {} {}",
+        chrono::Local::now().format("%H:%M:%S"),
+        name,
+        sha
+    )?;
     Ok(file)
 }
 
@@ -77,7 +77,7 @@ pub fn bulk_delete_branches(path: &str, names: &[String], extra_protected: &[Str
     let mut results = String::new();
     for name in names {
         if is_protected_branch_with(name, extra_protected) {
-            results.push_str(&format!("Skipping protected branch: {}\n", name));
+            results.push_str(&format!("Skipping protected branch: {name}\n"));
             continue;
         }
 
@@ -86,7 +86,7 @@ pub fn bulk_delete_branches(path: &str, names: &[String], extra_protected: &[Str
             Ok(output) => {
                 results.push_str(&format!("> git branch -D {}\n{}\n", name, output.trim()))
             }
-            Err(e) => results.push_str(&format!("Error deleting branch {}: {}\n", name, e)),
+            Err(e) => results.push_str(&format!("Error deleting branch {name}: {e}\n")),
         }
     }
     results
@@ -130,20 +130,20 @@ pub fn prune_branches(
 
     let count = to_delete.len();
     let details = bulk_delete_branches(path, &to_delete, extra_protected);
-    format!("Pruned {} branches:\n{}", count, details)
+    format!("Pruned {count} branches:\n{details}")
 }
 
 pub fn apply_stash(path: &str, id: &str) -> String {
     match run_git(path, &["stash", "apply", id]) {
         Ok(output) => format!("> git stash apply {}\n{}", id, output.trim()),
-        Err(e) => format!("Error applying stash {}: {}", id, e),
+        Err(e) => format!("Error applying stash {id}: {e}"),
     }
 }
 
 pub fn stage_file(path: &str, file_path: &str) -> Result<String, String> {
     match run_git(path, &["add", file_path]) {
-        Ok(_) => Ok(format!("Staged {}", file_path)),
-        Err(e) => Err(format!("Error staging {}: {}", file_path, e)),
+        Ok(_) => Ok(format!("Staged {file_path}")),
+        Err(e) => Err(format!("Error staging {file_path}: {e}")),
     }
 }
 
@@ -161,8 +161,8 @@ pub fn unstage_file(path: &str, file_path: &str) -> Result<String, String> {
     };
 
     match run_git(path, &args) {
-        Ok(_) => Ok(format!("Unstaged {}", file_path)),
-        Err(e) => Err(format!("Error unstaging {}: {}", file_path, e)),
+        Ok(_) => Ok(format!("Unstaged {file_path}")),
+        Err(e) => Err(format!("Error unstaging {file_path}: {e}")),
     }
 }
 
@@ -201,7 +201,7 @@ pub fn move_file_changes_forward(
             "log",
             "--format=%H",
             "--reverse",
-            &format!("{}..HEAD", hash),
+            &format!("{hash}..HEAD"),
             "--",
             file_rel_path,
         ],
@@ -216,7 +216,7 @@ pub fn move_file_changes_forward(
     // a. Restore file to state before target commit
     let _ = run_git(
         path,
-        &["checkout", &format!("{}^", hash), "--", file_rel_path],
+        &["checkout", &format!("{hash}^"), "--", file_rel_path],
     );
     // b. Fixup the target commit to remove those changes
     let _ = run_git(path, &["commit", "--fixup", hash]);
@@ -227,7 +227,7 @@ pub fn move_file_changes_forward(
     let result_msg = if let Some(next_h) = next_commit_hash {
         // d. Fixup the next commit to absorb these changes
         let _ = run_git(path, &["commit", "--fixup", &next_h]);
-        format!("Moving changes from {} to next commit {}.", hash, next_h)
+        format!("Moving changes from {hash} to next commit {next_h}.")
     } else {
         "No future commit touches this file. Changes left staged at HEAD.".to_string()
     };
@@ -242,13 +242,12 @@ pub fn move_file_changes_forward(
             "-i",
             "--autosquash",
             "--autostash",
-            &format!("{}^", hash),
+            &format!("{hash}^"),
         ],
     ) {
-        Ok(_) => Ok(format!("Success! {}", result_msg)),
+        Ok(_) => Ok(format!("Success! {result_msg}")),
         Err(e) => Err(format!(
-            "Rebase failed: {}. Manual resolution might be needed.",
-            e
+            "Rebase failed: {e}. Manual resolution might be needed."
         )),
     }
 }
@@ -329,7 +328,7 @@ pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
 pub fn abort_rebase(path: &str) -> Result<String, String> {
     match run_git(path, &["rebase", "--abort"]) {
         Ok(out) => Ok(format!("Rebase aborted successfully.\n{}", out.trim())),
-        Err(e) => Err(format!("Failed to abort rebase: {}", e)),
+        Err(e) => Err(format!("Failed to abort rebase: {e}")),
     }
 }
 
@@ -337,7 +336,7 @@ pub fn abort_rebase(path: &str) -> Result<String, String> {
 pub fn continue_rebase(path: &str) -> Result<String, String> {
     match run_git(path, &["rebase", "--continue"]) {
         Ok(out) => Ok(format!("Rebase continued.\n{}", out.trim())),
-        Err(e) => Err(format!("Failed to continue rebase: {}", e)),
+        Err(e) => Err(format!("Failed to continue rebase: {e}")),
     }
 }
 

@@ -45,11 +45,9 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
         }
         KeyCode::Enter => {
             if app.ui.settings_state.selected == 0 {
-                let date_str = crate::git::commands::run_git(
-                    path,
-                    &["log", "-1", "--format=%cI", hash],
-                )
-                .unwrap_or_default();
+                let date_str =
+                    crate::git::commands::run_git(path, &["log", "-1", "--format=%cI", hash])
+                        .unwrap_or_default();
 
                 let datetime = chrono::DateTime::parse_from_rfc3339(date_str.trim())
                     .map(|dt| dt.with_timezone(&chrono::Local))
@@ -75,25 +73,24 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
                         "-i",
                         "--autosquash",
                         "--autostash",
-                        &format!("{}^", hash),
+                        &format!("{hash}^"),
                     ],
                 );
                 app.ui.pop_modal();
                 app.ui
-                    .push_modal(AppMode::Message(format!("Amended to {}", hash)));
+                    .push_modal(AppMode::Message(format!("Amended to {hash}")));
             } else if app.ui.settings_state.selected == 2 {
                 let files = crate::git::files::get_commit_files(path, hash);
                 app.ui.selected_commit_file_idx = 0;
-                app.ui.push_modal(AppMode::CommitFiles(hash.to_string(), files));
+                app.ui
+                    .push_modal(AppMode::CommitFiles(hash.to_string(), files));
             } else if app.ui.settings_state.selected == 3 {
                 let short_hash = hash.to_string();
-                let parent_hash = crate::git::commands::run_git(
-                    path,
-                    &["rev-parse", &format!("{}^", short_hash)],
-                )
-                .unwrap_or_default()
-                .trim()
-                .to_string();
+                let parent_hash =
+                    crate::git::commands::run_git(path, &["rev-parse", &format!("{short_hash}^")])
+                        .unwrap_or_default()
+                        .trim()
+                        .to_string();
 
                 if parent_hash.is_empty() {
                     app.ui.pop_modal();
@@ -108,8 +105,7 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
                 let editor_script_path = git_dir.join("twigdrop-squash-editor.sh");
 
                 let script_content = format!(
-                    "#!/bin/sh\nawk '{{ if ($1 == \"pick\" && match($2, \"^{}\")) {{ $1 = \"squash\" }} print }}' \"$1\" > \"$1.tmp\" && mv \"$1.tmp\" \"$1\"\n",
-                    short_hash
+                    "#!/bin/sh\nawk '{{ if ($1 == \"pick\" && match($2, \"^{short_hash}\")) {{ $1 = \"squash\" }} print }}' \"$1\" > \"$1.tmp\" && mv \"$1.tmp\" \"$1\"\n"
                 );
 
                 let _ = std::fs::write(&editor_script_path, script_content);
@@ -127,11 +123,11 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
                         "rebase",
                         "-i",
                         "--autostash",
-                        &format!("{}^^", short_hash),
+                        &format!("{short_hash}^^"),
                     ],
                 ) {
-                    Ok(_) => format!("Squashed {} into its parent.", short_hash),
-                    Err(e) => format!("Failed to squash: {}", e),
+                    Ok(_) => format!("Squashed {short_hash} into its parent."),
+                    Err(e) => format!("Failed to squash: {e}"),
                 };
                 let _ = std::fs::remove_file(&editor_script_path);
 
@@ -180,7 +176,7 @@ pub fn handle_commit_files_keyboard(
                     path, hash, &file_path,
                 ) {
                     Ok(m) => m,
-                    Err(e) => format!("Error: {}", e),
+                    Err(e) => format!("Error: {e}"),
                 };
                 app.ui.pop_modal(); // pop CommitFiles
                 app.ui.pop_modal(); // pop CommitAction

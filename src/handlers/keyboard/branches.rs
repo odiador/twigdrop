@@ -50,22 +50,32 @@ pub fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
 
 pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     // 1. Modifiers with Ctrl (Safe operations)
-    if key.modifiers.contains(ratatui::crossterm::event::KeyModifiers::CONTROL) {
+    if key
+        .modifiers
+        .contains(ratatui::crossterm::event::KeyModifiers::CONTROL)
+    {
         match key.code {
             KeyCode::Char('d') | KeyCode::Char('D') => {
                 if !app.ui.bulk_selected.is_empty() {
                     let names: Vec<String> = app.ui.bulk_selected.iter().cloned().collect();
                     app.ui.push_modal(AppMode::ConfirmDelete(names));
-                } else if let Some(branch) = app.get_filtered_branches().get(app.ui.selected_branch_idx)
+                } else if let Some(branch) =
+                    app.get_filtered_branches().get(app.ui.selected_branch_idx)
                     && !branch.name.starts_with('*')
                     && !app.config.is_protected(&branch.name)
                 {
-                    app.ui.push_modal(AppMode::ConfirmDelete(vec![branch.name.clone()]));
+                    app.ui
+                        .push_modal(AppMode::ConfirmDelete(vec![branch.name.clone()]));
                 }
                 return false;
             }
             KeyCode::Char('p') | KeyCode::Char('P') => {
-                let msg = prune_branches(path, &app.repo.branches, &app.repo.current_branch, &app.config.protected_branches);
+                let msg = prune_branches(
+                    path,
+                    &app.repo.branches,
+                    &app.repo.current_branch,
+                    &app.config.protected_branches,
+                );
                 app.refresh_branches(path);
                 app.ui.push_modal(AppMode::Message(msg));
                 return false;
@@ -95,7 +105,8 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
                     app.repo.diff_preview = None;
                     if !app.repo.diff_files.is_empty() {
                         let first_file = app.repo.diff_files[0].clone();
-                        let diff_content = git::get_branch_file_diff(path, &branch_name, &first_file);
+                        let diff_content =
+                            git::get_branch_file_diff(path, &branch_name, &first_file);
                         let mut preview = PreviewState {
                             file_path: first_file,
                             lines: diff_content.lines().map(|s| s.to_string()).collect(),

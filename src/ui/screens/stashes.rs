@@ -13,7 +13,13 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(STASH_SPLIT.0), Constraint::Percentage(STASH_SPLIT.1)].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(STASH_SPLIT.0),
+                Constraint::Percentage(STASH_SPLIT.1),
+            ]
+            .as_ref(),
+        )
         .split(area);
     let mut stash_items = vec![];
     for (i, stash) in app.repo.stashes.iter().enumerate() {
@@ -38,7 +44,13 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
 
     let detail_chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Percentage(STASH_SPLIT.0), Constraint::Percentage(STASH_SPLIT.1)].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(STASH_SPLIT.0),
+                Constraint::Percentage(STASH_SPLIT.1),
+            ]
+            .as_ref(),
+        )
         .split(chunks[1]);
     let files_p = Paragraph::new(app.repo.stash_files.join("\n")).block(
         Block::default()

@@ -79,11 +79,13 @@ pub fn render_main_menu(f: &mut Frame, app: &App) {
 "#;
 
     use crate::ui::layout::{
-        MAIN_MENU_GAP_H, MAIN_MENU_HELP_H, MAIN_MENU_LOGO_H, MAIN_MENU_OPTIONS_H,
-        MAIN_MENU_QUIT_H,
+        MAIN_MENU_GAP_H, MAIN_MENU_HELP_H, MAIN_MENU_LOGO_H, MAIN_MENU_OPTIONS_H, MAIN_MENU_QUIT_H,
     };
-    let total_height =
-        MAIN_MENU_LOGO_H + MAIN_MENU_GAP_H + MAIN_MENU_OPTIONS_H + MAIN_MENU_HELP_H + MAIN_MENU_QUIT_H;
+    let total_height = MAIN_MENU_LOGO_H
+        + MAIN_MENU_GAP_H
+        + MAIN_MENU_OPTIONS_H
+        + MAIN_MENU_HELP_H
+        + MAIN_MENU_QUIT_H;
     let v_margin = area.height.saturating_sub(total_height) / 2;
 
     let v_chunks = Layout::default()

@@ -30,7 +30,7 @@ pub fn spawn_highlight_task(
         let mut highlighted_lines = Vec::with_capacity(lines.len());
 
         for line in &lines {
-            let line_with_ending = format!("{}\n", line);
+            let line_with_ending = format!("{line}\n");
             let ranges = h.highlight_line(&line_with_ending, &ps).unwrap_or_default();
             let mut spans = Vec::new();
 

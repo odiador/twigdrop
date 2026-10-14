@@ -18,7 +18,13 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(COMMITS_LIST_PCT), Constraint::Percentage(COMMITS_DETAILS_PCT)].as_ref())
+        .constraints(
+            [
+                Constraint::Percentage(COMMITS_LIST_PCT),
+                Constraint::Percentage(COMMITS_DETAILS_PCT),
+            ]
+            .as_ref(),
+        )
         .split(area);
 
     let list_area = chunks[0];
@@ -65,10 +71,7 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
                     format!(" {} ", commit.date),
                     Style::default().fg(Color::Cyan),
                 ),
-                Span::styled(
-                    format!(" [{}] ", commit.author),
-                    theme.muted2,
-                ),
+                Span::styled(format!(" [{}] ", commit.author), theme.muted2),
                 Span::styled(commit.message.clone(), Style::default().fg(Color::White)),
             ]);
 
@@ -204,7 +207,7 @@ pub fn render_commit_action(f: &mut Frame, app: &App, hash: &str) {
 
     let list = List::new(items).block(
         Block::default()
-            .title(format!(" Manage Commit: {} ", hash))
+            .title(format!(" Manage Commit: {hash} "))
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Yellow)),
     );
@@ -317,7 +320,7 @@ pub fn render_commit_files(f: &mut Frame, app: &App, hash: &str, files: &[FileEn
     }
 
     let block = Block::default()
-        .title(format!(" Files in commit {} ", hash))
+        .title(format!(" Files in commit {hash} "))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Cyan));
 

@@ -27,13 +27,19 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
     let (table_area, maybe_inspector, maybe_sidebar) = if app.ui.show_inspector_drawer {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(INSPECTOR_SPLIT.0), Constraint::Percentage(INSPECTOR_SPLIT.1)])
+            .constraints([
+                Constraint::Percentage(INSPECTOR_SPLIT.0),
+                Constraint::Percentage(INSPECTOR_SPLIT.1),
+            ])
             .split(area);
         (chunks[0], Some(chunks[1]), None)
     } else if app.ui.show_nav_sidebar {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(SIDEBAR_SPLIT.0), Constraint::Percentage(SIDEBAR_SPLIT.1)])
+            .constraints([
+                Constraint::Percentage(SIDEBAR_SPLIT.0),
+                Constraint::Percentage(SIDEBAR_SPLIT.1),
+            ])
             .split(area);
         (chunks[1], None, Some(chunks[0]))
     } else {
@@ -159,7 +165,9 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
         let mut row_style = theme.base;
         let mut branch_style = Style::default().fg(color);
         if is_current {
-            branch_style = branch_style.add_modifier(Modifier::BOLD).fg(theme.success.fg.unwrap_or(Color::Green));
+            branch_style = branch_style
+                .add_modifier(Modifier::BOLD)
+                .fg(theme.success.fg.unwrap_or(Color::Green));
         }
 
         if selected {
@@ -167,13 +175,15 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
         }
 
         let checkbox_prefix = if selected {
-            format!("▎{}", checkbox)
+            format!("▎{checkbox}")
         } else {
-            format!(" {}", checkbox)
+            format!(" {checkbox}")
         };
 
         let checkbox_style = if is_protected {
-            Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD)
         } else if is_bulk_selected {
             theme.success.add_modifier(Modifier::BOLD)
         } else {
@@ -183,7 +193,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
         let mut cells = vec![
             Cell::from(checkbox_prefix).style(checkbox_style),
             Cell::from(Line::from(vec![
-                Span::styled(format!("{:<4} ", icons), Style::default().fg(color)),
+                Span::styled(format!("{icons:<4} "), Style::default().fg(color)),
                 Span::styled(branch_name, branch_style),
             ])),
             Cell::from(sync_text).style(Style::default().fg(sync_color)),
@@ -234,37 +244,58 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
         header_cells.push(loc.branches.header_last_commit);
     }
     let table = Table::new(rows, widths)
-        .header(
-            Row::new(header_cells)
-            .style(theme.header)
-            .bottom_margin(1),
-        )
+        .header(Row::new(header_cells).style(theme.header).bottom_margin(1))
         .block(
             Block::default()
                 .title(if !app.ui.search_query.is_empty() {
                     Line::from(vec![
-                        Span::styled(format!(" {} ", loc.branches.title_branches), theme.accent.add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            format!(" {} ", loc.branches.title_branches),
+                            theme.accent.add_modifier(Modifier::BOLD),
+                        ),
                         Span::styled(" ", theme.warning.add_modifier(Modifier::BOLD)),
-                        Span::styled(&app.ui.search_query, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                        Span::styled(
+                            &app.ui.search_query,
+                            Style::default()
+                                .fg(Color::White)
+                                .add_modifier(Modifier::BOLD),
+                        ),
                         Span::styled("▌ ", theme.accent),
                         Span::styled(format!("{} • ", loc.branches.esc_to_clear), theme.muted),
-                        Span::styled(format!("{}: {} ", loc.branches.sort_label, sort_hint), theme.muted),
-                    ])
-                } else {
-                    Line::from(vec![
-                        Span::styled(format!(" {} ", loc.branches.title_branches), theme.accent.add_modifier(Modifier::BOLD)),
-                        Span::styled(format!("{} • ", loc.branches.type_to_filter), theme.subtle),
-                        Span::styled(format!("{}: {} • ", loc.branches.sort_label, sort_hint), theme.muted),
-                        Span::styled(format!("{} • {} ", loc.branches.inspector_hint, loc.branches.sidebar_hint), theme.muted),
-                    ])
-                })
-                .title(
-                    Line::from(vec![
                         Span::styled(
-                            loc.format_range(if branches_len == 0 { 0 } else { start + 1 }, start + branch_items_to_show, branches_len),
+                            format!("{}: {} ", loc.branches.sort_label, sort_hint),
                             theme.muted,
                         ),
                     ])
+                } else {
+                    Line::from(vec![
+                        Span::styled(
+                            format!(" {} ", loc.branches.title_branches),
+                            theme.accent.add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(format!("{} • ", loc.branches.type_to_filter), theme.subtle),
+                        Span::styled(
+                            format!("{}: {} • ", loc.branches.sort_label, sort_hint),
+                            theme.muted,
+                        ),
+                        Span::styled(
+                            format!(
+                                "{} • {} ",
+                                loc.branches.inspector_hint, loc.branches.sidebar_hint
+                            ),
+                            theme.muted,
+                        ),
+                    ])
+                })
+                .title(
+                    Line::from(vec![Span::styled(
+                        loc.format_range(
+                            if branches_len == 0 { 0 } else { start + 1 },
+                            start + branch_items_to_show,
+                            branches_len,
+                        ),
+                        theme.muted,
+                    )])
                     .alignment(Alignment::Right),
                 )
                 .borders(Borders::ALL)
@@ -350,14 +381,11 @@ pub fn render_confirm_delete(
         ))
         .alignment(Alignment::Center),
         Line::from(""),
-        Line::from(Span::styled(branch_list, theme.accent2))
-            .alignment(Alignment::Center),
+        Line::from(Span::styled(branch_list, theme.accent2)).alignment(Alignment::Center),
         Line::from(""),
-        Line::from(locale.branches.confirm_data_loss)
-            .alignment(Alignment::Center),
+        Line::from(locale.branches.confirm_data_loss).alignment(Alignment::Center),
         Line::from(""),
-        Line::from(locale.branches.confirm_prompt)
-            .alignment(Alignment::Center),
+        Line::from(locale.branches.confirm_prompt).alignment(Alignment::Center),
     ];
     let p = Paragraph::new(text).block(block);
     f.render_widget(p, inner);
@@ -377,8 +405,7 @@ pub fn render_create_branch(f: &mut Frame, input: &str, theme: &crate::ui::theme
         .border_style(theme.accent2);
 
     let p = Paragraph::new(format!(
-        "\nName: {}\n\n(Enter to create, Esc to cancel)",
-        input
+        "\nName: {input}\n\n(Enter to create, Esc to cancel)"
     ))
     .block(block)
     .alignment(Alignment::Center);
@@ -399,13 +426,12 @@ pub fn render_rename_branch(
     f.render_widget(Clear, inner);
 
     let block = Block::default()
-        .title(Line::from(format!(" Rename Branch: {} ", old)).alignment(Alignment::Left))
+        .title(Line::from(format!(" Rename Branch: {old} ")).alignment(Alignment::Left))
         .borders(Borders::ALL)
         .border_style(theme.accent2);
 
     let p = Paragraph::new(format!(
-        "\nNew name: {}\n\n(Enter to rename, Esc to cancel)",
-        input
+        "\nNew name: {input}\n\n(Enter to rename, Esc to cancel)"
     ))
     .block(block)
     .alignment(Alignment::Center);
@@ -451,10 +477,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
                 format!(" {} ", loc.branches.manage_title),
                 theme.accent.add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                format!("({}) ", b_name),
-                theme.muted,
-            ),
+            Span::styled(format!("({b_name}) "), theme.muted),
             if is_protected {
                 Span::styled(
                     "[PROTECTED] ",
@@ -471,15 +494,12 @@ pub fn render_manage(f: &mut Frame, app: &App) {
         .style(Style::default().bg(theme.surface_alt));
 
     let header_text = Line::from(vec![
-        Span::styled(format!("  {}", loc.branches.manage_target_prefix), theme.muted),
         Span::styled(
-            b_name,
-            theme.accent2.add_modifier(Modifier::BOLD),
+            format!("  {}", loc.branches.manage_target_prefix),
+            theme.muted,
         ),
-        Span::styled(
-            loc.branches.manage_instruction,
-            theme.subtle,
-        ),
+        Span::styled(b_name, theme.accent2.add_modifier(Modifier::BOLD)),
+        Span::styled(loc.branches.manage_instruction, theme.subtle),
     ]);
     f.render_widget(Paragraph::new(header_text).block(header_block), chunks[0]);
 
@@ -560,7 +580,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
 
         let prefix = if is_selected { "▎ " } else { "  " };
         let tag_span = Span::styled(
-            format!("[{}] ", tag),
+            format!("[{tag}] "),
             Style::default().fg(*tag_color).add_modifier(Modifier::BOLD),
         );
         let desc_span = Span::styled(
@@ -575,10 +595,7 @@ pub fn render_manage(f: &mut Frame, app: &App) {
         );
 
         let item_line = Line::from(vec![
-            Span::styled(
-                prefix,
-                theme.accent.add_modifier(Modifier::BOLD),
-            ),
+            Span::styled(prefix, theme.accent.add_modifier(Modifier::BOLD)),
             tag_span,
             desc_span,
         ]);
@@ -588,26 +605,11 @@ pub fn render_manage(f: &mut Frame, app: &App) {
     f.render_widget(List::new(items).block(list_block), chunks[1]);
 
     let footer_hints = Line::from(vec![
-        Span::styled(
-            "  ↑↓",
-            theme.nav.add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            format!(" {}   ", loc.common.select),
-            theme.muted,
-        ),
-        Span::styled(
-            "↵",
-            theme.success.add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            format!(" {}   ", loc.common.execute),
-            theme.muted,
-        ),
-        Span::styled(
-            "Esc",
-            theme.danger.add_modifier(Modifier::BOLD),
-        ),
+        Span::styled("  ↑↓", theme.nav.add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" {}   ", loc.common.select), theme.muted),
+        Span::styled("↵", theme.success.add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" {}   ", loc.common.execute), theme.muted),
+        Span::styled("Esc", theme.danger.add_modifier(Modifier::BOLD)),
         Span::styled(format!(" {}", loc.common.cancel), theme.muted),
     ]);
     f.render_widget(

@@ -18,7 +18,8 @@ pub enum Context {
 /// Intent derived from a key press. Handlers dispatch on this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
-    Quit,    OpenPalette,
+    Quit,
+    OpenPalette,
     OpenHelp,
     ToggleHelp,
     CloseOrBack,

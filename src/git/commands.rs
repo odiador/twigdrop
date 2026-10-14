@@ -11,7 +11,7 @@ pub fn run_git(path: &str, args: &[&str]) -> Result<String> {
     if output.status.success() {
         Ok(stdout)
     } else {
-        Err(anyhow!("git error: {}", stderr))
+        Err(anyhow!("git error: {stderr}"))
     }
 }
 
@@ -25,7 +25,7 @@ pub fn run_git_with_status(path: &str, args: &[&str]) -> Result<(String, i32)> {
     if output.status.success() {
         Ok((stdout, exit_code))
     } else {
-        Ok((format!("{}{}", stdout, stderr), exit_code))
+        Ok((format!("{stdout}{stderr}"), exit_code))
     }
 }
 
@@ -57,7 +57,7 @@ pub fn get_commit_tree(path: &str) -> Vec<CommitTreeItem> {
 }
 
 pub fn get_commit_tree_limited(path: &str, limit: usize) -> Vec<CommitTreeItem> {
-    let limit_str = format!("--max-count={}", limit);
+    let limit_str = format!("--max-count={limit}");
     let args = [
         "log",
         &limit_str,
@@ -150,7 +150,8 @@ mod tests {
 
     #[test]
     fn test_parse_commit_tree_line_with_branch_info() {
-        let line = "* | <|a1b2c3d (HEAD -> main, origin/main)|2026-09-16|Alice|feat: add awesome feature";
+        let line =
+            "* | <|a1b2c3d (HEAD -> main, origin/main)|2026-09-16|Alice|feat: add awesome feature";
         let item = parse_commit_tree_line(line).unwrap();
 
         assert_eq!(item.graph, "* | ");

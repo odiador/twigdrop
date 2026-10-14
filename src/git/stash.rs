@@ -47,5 +47,5 @@ pub fn get_stash_files(path: &str, id: &str) -> Vec<String> {
 
 pub fn get_stash_diff(path: &str, id: &str) -> String {
     run_git(path, &["stash", "show", "-p", "--color=never", id])
-        .unwrap_or_else(|e| format!("Error loading stash diff: {}", e))
+        .unwrap_or_else(|e| format!("Error loading stash diff: {e}"))
 }

@@ -60,19 +60,37 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     query: String::new(),
                     selected: 0,
                     actions: vec![
-                        (loc.modals.cmd_checkout.to_string(), CommandAction::CheckoutBranch),
-                        (loc.modals.cmd_create_branch.to_string(), CommandAction::CreateBranch),
-                        (loc.modals.cmd_settings.to_string(), CommandAction::OpenSettings),
+                        (
+                            loc.modals.cmd_checkout.to_string(),
+                            CommandAction::CheckoutBranch,
+                        ),
+                        (
+                            loc.modals.cmd_create_branch.to_string(),
+                            CommandAction::CreateBranch,
+                        ),
+                        (
+                            loc.modals.cmd_settings.to_string(),
+                            CommandAction::OpenSettings,
+                        ),
                         (
                             loc.modals.cmd_rebase.to_string(),
                             CommandAction::InteractiveRebase,
                         ),
-                        (loc.modals.cmd_stash.to_string(), CommandAction::StashChanges),
-                        (loc.modals.cmd_pop_stash.to_string(), CommandAction::PopStash),
+                        (
+                            loc.modals.cmd_stash.to_string(),
+                            CommandAction::StashChanges,
+                        ),
+                        (
+                            loc.modals.cmd_pop_stash.to_string(),
+                            CommandAction::PopStash,
+                        ),
                         (loc.modals.cmd_fetch.to_string(), CommandAction::Fetch),
                         (loc.modals.cmd_pull.to_string(), CommandAction::Pull),
                         (loc.modals.cmd_push.to_string(), CommandAction::Push),
-                        (loc.modals.cmd_commit.to_string(), CommandAction::CommitChanges),
+                        (
+                            loc.modals.cmd_commit.to_string(),
+                            CommandAction::CommitChanges,
+                        ),
                     ],
                 }));
             return false;

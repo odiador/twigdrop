@@ -48,8 +48,7 @@ pub const PADDING_XS: u16 = 1;
 pub const PADDING_SM: u16 = 2;
 
 /// Braille spinner frames for background work (status bar).
-pub const SPINNER_FRAMES: [char; 10] =
-    ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+pub const SPINNER_FRAMES: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 /// Full palette. Field names are semantic — never `mauve`/`pink` in screens.
 #[derive(Debug, Clone, Copy)]
@@ -133,7 +132,8 @@ impl Default for Theme {
 impl Theme {
     /// Current Catppuccin Mocha look, frozen as default so migration is visual-noop.
     #[must_use]
-    pub fn dark_default() -> Self {        Self {
+    pub fn dark_default() -> Self {
+        Self {
             base: Style::default().fg(Color::Rgb(205, 214, 244)),
             muted: Style::default().fg(Color::Rgb(147, 153, 178)),
             subtle: Style::default().fg(Color::Rgb(108, 112, 134)),
@@ -164,9 +164,7 @@ impl Theme {
             select_hi: Style::default()
                 .bg(Color::Rgb(80, 80, 100))
                 .fg(Color::White),
-            select_cyan: Style::default()
-                .bg(Color::Rgb(80, 80, 100))
-                .fg(Color::Cyan),
+            select_cyan: Style::default().bg(Color::Rgb(80, 80, 100)).fg(Color::Cyan),
             border_soft: Style::default().fg(Color::Rgb(69, 71, 90)),
             search_hit: Style::default()
                 .bg(Color::Rgb(255, 255, 0))

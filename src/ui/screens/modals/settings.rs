@@ -72,7 +72,7 @@ pub fn render_settings(f: &mut Frame, app: &App) {
                     format!("> {}", app.ui.settings_state.input)
                 }
             } else if app.ui.settings_state.selecting {
-                format!("{} (Selecting...)", opt)
+                format!("{opt} (Selecting...)")
             } else {
                 opt.clone()
             }
@@ -118,7 +118,7 @@ pub fn render_settings(f: &mut Frame, app: &App) {
             if i == app.ui.settings_state.choice_idx {
                 style = theme.select_hi.add_modifier(Modifier::BOLD);
             }
-            choice_items.push(ListItem::new(format!(" {} ", choice)).style(style));
+            choice_items.push(ListItem::new(format!(" {choice} ")).style(style));
         }
         let list = List::new(choice_items).block(
             Block::default()

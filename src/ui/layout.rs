@@ -144,14 +144,8 @@ mod tests {
         assert_eq!(modal_size(&AppMode::Help), MODAL_LG);
         assert_eq!(modal_size(&AppMode::Manage), MODAL_SM);
         assert_eq!(modal_size(&AppMode::Filter), MODAL_MD);
-        assert_eq!(
-            modal_size(&AppMode::ConfirmDelete(vec![])),
-            MODAL_MD
-        );
-        assert_eq!(
-            modal_size(&AppMode::CreateBranch(String::new())),
-            MODAL_SM
-        );
+        assert_eq!(modal_size(&AppMode::ConfirmDelete(vec![])), MODAL_MD);
+        assert_eq!(modal_size(&AppMode::CreateBranch(String::new())), MODAL_SM);
         assert_eq!(modal_size(&AppMode::Settings), SETTINGS_MODAL);
         assert_eq!(modal_size(&AppMode::QuickActions), QUICK_ACTIONS_MODAL);
         assert_eq!(modal_size(&AppMode::Switcher), SWITCHER_MODAL);

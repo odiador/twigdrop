@@ -6,7 +6,6 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph},
 };
 
-
 pub fn render_message(f: &mut Frame, msg: &str, theme: &crate::ui::theme::Theme) {
     let (mx, my) = crate::ui::theme::MODAL_MD;
     let inner = crate::ui::components::centered_rect(mx, my, f.area());

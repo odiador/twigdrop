@@ -162,11 +162,11 @@ pub struct Locale {
 
 impl Locale {
     pub fn format_range(&self, start: usize, end: usize, total: usize) -> String {
-        format!(" {}-{} of {} ", start, end, total)
+        format!(" {start}-{end} of {total} ")
     }
 
     pub fn format_branches_count(&self, count: usize) -> String {
-        format!("{} branches", count)
+        format!("{count} branches")
     }
 }
 

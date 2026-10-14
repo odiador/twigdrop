@@ -480,7 +480,6 @@ impl UiState {
         };
         (start, visible)
     }
-
 }
 
 #[cfg(test)]
@@ -511,14 +510,8 @@ mod tests {
             View::Branches
         );
         assert_eq!(UiState::new(PrimaryMode::Files, 30).view(), View::Files);
-        assert_eq!(
-            UiState::new(PrimaryMode::Commits, 30).view(),
-            View::Commits
-        );
-        assert_eq!(
-            UiState::new(PrimaryMode::Stashes, 30).view(),
-            View::Stashes
-        );
+        assert_eq!(UiState::new(PrimaryMode::Commits, 30).view(), View::Commits);
+        assert_eq!(UiState::new(PrimaryMode::Stashes, 30).view(), View::Stashes);
     }
 
     #[test]
@@ -583,4 +576,3 @@ mod tests {
         }
     }
 }
-

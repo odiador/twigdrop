@@ -13,9 +13,7 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let block = Block::default()
         .title(" ◀ Menu [→/Esc] ")
-        .title_style(
-            theme.accent.add_modifier(Modifier::BOLD),
-        )
+        .title_style(theme.accent.add_modifier(Modifier::BOLD))
         .borders(Borders::ALL)
         .border_style(theme.border_soft);
 
@@ -110,7 +108,7 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
         worktree_lines.push(Line::from(vec![
             Span::styled("• ", Style::default().fg(Color::Green)),
             Span::styled(name.clone(), Style::default().fg(Color::White)),
-            Span::styled(format!(" [{}]", branch), theme.accent2),
+            Span::styled(format!(" [{branch}]"), theme.accent2),
         ]));
     }
 

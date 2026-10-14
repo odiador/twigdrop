@@ -30,7 +30,7 @@ pub struct SnapRow {
 
 pub struct SnapCell {
     pub x: u16,
-        pub ch: char,
+    pub ch: char,
     pub color: Color,
     pub dissolved: bool,
 }
@@ -54,7 +54,7 @@ impl SnapAnimation {
         }
     }
 
-        pub fn tick(&mut self) {
+    pub fn tick(&mut self) {
         let elapsed = self.start_time.elapsed();
 
         match self.phase {

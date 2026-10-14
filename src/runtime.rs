@@ -111,7 +111,7 @@ impl Runtime {
                                 let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete("Generating commit message with AI...".to_string()))).await;
 
                                 if let Ok(s) = w.inner.summarize_diff(&diff).await {
-                                    let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(format!("Commit Msg Suggestion:\n{}", s)))).await;
+                                    let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(format!("Commit Msg Suggestion:\n{s}")))).await;
                                 } else {
                                     let _ = event_tx.send(Event::Task(TaskEvent::TaskFailed("Failed to generate commit message.".to_string()))).await;
                                 }
@@ -128,14 +128,14 @@ impl Runtime {
 
                                 let current_hash = match git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
                                     Ok(h) => h.trim().to_string(),
-                                    Err(_) => "".to_string(),
+                                    Err(_) => String::new(),
                                 };
 
                                 let mut cached = None;
                                 if let Some(ref d) = db
                                     && let Ok(Some((hash, s, c))) = d.get_analysis(&branch_name)
                                         && hash == current_hash {
-                                            cached = Some(format!("--- CACHED ---\nSummary:\n{}\n\nRecommendation:\n{}", s, c));
+                                            cached = Some(format!("--- CACHED ---\nSummary:\n{s}\n\nRecommendation:\n{c}"));
                                         }
 
                                 if let Some(msg) = cached {
@@ -152,7 +152,7 @@ impl Runtime {
                                                 let _ = d.save_analysis(&branch_name, &current_hash, &s, &c);
                                             }
                                             let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete(
-                                                format!("Summary:\n{}\n\nRecommendation:\n{}", s, c),
+                                                format!("Summary:\n{s}\n\nRecommendation:\n{c}"),
                                             ))).await;
                                         }
                                         _ => {

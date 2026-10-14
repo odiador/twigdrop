@@ -84,11 +84,12 @@ impl Default for Config {
     }
 }
 
-static FALLBACK_PROVIDER: std::sync::LazyLock<ProviderConfig> = std::sync::LazyLock::new(|| ProviderConfig {
-    model: String::new(),
-    api_key: String::new(),
-    url: String::new(),
-});
+static FALLBACK_PROVIDER: std::sync::LazyLock<ProviderConfig> =
+    std::sync::LazyLock::new(|| ProviderConfig {
+        model: String::new(),
+        api_key: String::new(),
+        url: String::new(),
+    });
 
 impl Config {
     pub fn locale(&self) -> &'static crate::i18n::Locale {
@@ -125,7 +126,7 @@ pub fn obfuscate(data: &str) -> String {
         result.push(byte ^ key[i % key.len()]);
     }
     // Encode as hex for readability in toml
-    result.iter().map(|b| format!("{:02x}", b)).collect()
+    result.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 pub fn deobfuscate(data: &str) -> String {
@@ -155,7 +156,7 @@ pub const GOOGLE_MODELS: &[&str] = &["gemini-1.5-pro", "gemini-1.5-flash", "gemi
 
 pub async fn fetch_ollama_models(url: &str) -> Vec<String> {
     let client = reqwest::Client::new();
-    let res = client.get(format!("{}/api/tags", url)).send().await;
+    let res = client.get(format!("{url}/api/tags")).send().await;
 
     match res {
         Ok(response) => {
