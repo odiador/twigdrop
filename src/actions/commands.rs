@@ -324,6 +324,56 @@ pub fn execute_interactive_rebase(path: &str, commits: &[RebaseCommit]) {
     let _ = std::fs::remove_file(editor_script_path);
 }
 
+/// Resolves the remote for `branch`: its configured upstream remote, else the
+/// first remote in `git remote`. Returns `None` when the repo has no remotes.
+pub fn resolve_remote(path: &str, branch: &str) -> Option<String> {
+    let key = format!("branch.{branch}.remote");
+    if let Ok(r) = run_git(path, &["config", "--get", &key])
+        && !r.trim().is_empty()
+    {
+        return Some(r.trim().to_string());
+    }
+    run_git(path, &["remote"])
+        .ok()?
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(str::to_string)
+}
+
+/// Pushes `branch` to its remote (resolved via [`resolve_remote`]).
+pub fn push_branch(path: &str, branch: &str, set_upstream: bool) -> Result<String, String> {
+    let remote =
+        resolve_remote(path, branch).ok_or_else(|| "No git remote configured.".to_string())?;
+    let mut args = vec!["push"];
+    if set_upstream {
+        args.push("-u");
+    }
+    args.push(&remote);
+    args.push(branch);
+    run_git(path, &args).map_err(|e| e.to_string())
+}
+
+/// Creates a fixup commit for `hash` from the staged changes and autosquashes it.
+pub fn fixup_commit(path: &str, hash: &str) -> Result<String, String> {
+    run_git(path, &["commit", "--fixup", hash]).map_err(|e| format!("Fixup failed: {e}"))?;
+    let base = format!("{hash}^");
+    run_git(
+        path,
+        &[
+            "-c",
+            "sequence.editor=:",
+            "rebase",
+            "-i",
+            "--autosquash",
+            "--autostash",
+            &base,
+        ],
+    )
+    .map(|_| format!("Amended to {hash}"))
+    .map_err(|e| format!("Autosquash rebase failed: {e}"))
+}
+
 #[allow(dead_code)]
 pub fn abort_rebase(path: &str) -> Result<String, String> {
     match run_git(path, &["rebase", "--abort"]) {

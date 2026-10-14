@@ -226,3 +226,33 @@ fn prunable_filter_never_touches_live_branches() {
         "protected branches are never prunable"
     );
 }
+
+#[test]
+fn resolve_remote_prefers_upstream_then_first_remote() {
+    use std::process::Command;
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path().to_str().unwrap();
+    let git = |args: &[&str]| {
+        assert!(
+            Command::new("git")
+                .current_dir(p)
+                .args(args)
+                .status()
+                .unwrap()
+                .success()
+        );
+    };
+    git(&["init", "-q"]);
+    assert_eq!(twigdrop::actions::commands::resolve_remote(p, "main"), None);
+    git(&["remote", "add", "upstream", "https://example.com/a.git"]);
+    assert_eq!(
+        twigdrop::actions::commands::resolve_remote(p, "main").as_deref(),
+        Some("upstream")
+    );
+    git(&["remote", "add", "zzz", "https://example.com/b.git"]);
+    git(&["config", "branch.main.remote", "zzz"]);
+    assert_eq!(
+        twigdrop::actions::commands::resolve_remote(p, "main").as_deref(),
+        Some("zzz")
+    );
+}

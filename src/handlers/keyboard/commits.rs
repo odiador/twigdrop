@@ -63,22 +63,9 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
                     active_field: DatePickerField::Day,
                 }));
             } else if app.ui.settings_state.selected == 1 {
-                let _ = crate::git::commands::run_git(path, &["commit", "--fixup", hash]);
-                let _ = crate::git::commands::run_git(
-                    path,
-                    &[
-                        "-c",
-                        "sequence.editor=:",
-                        "rebase",
-                        "-i",
-                        "--autosquash",
-                        "--autostash",
-                        &format!("{hash}^"),
-                    ],
-                );
+                let msg = crate::actions::commands::fixup_commit(path, hash).unwrap_or_else(|e| e);
                 app.ui.pop_modal();
-                app.ui
-                    .push_modal(AppMode::Message(format!("Amended to {hash}")));
+                app.ui.push_modal(AppMode::Message(msg));
             } else if app.ui.settings_state.selected == 2 {
                 let files = crate::git::files::get_commit_files(path, hash);
                 app.ui.selected_commit_file_idx = 0;

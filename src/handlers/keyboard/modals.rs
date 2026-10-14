@@ -417,16 +417,15 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                         app.ui.manage_selected = 0;
                     }
                     4 => {
-                        let msg = crate::git::commands::run_git(path, &["push", "origin", &b.name])
-                            .unwrap_or_else(|e| e.to_string());
+                        let msg = crate::actions::commands::push_branch(path, &b.name, false)
+                            .unwrap_or_else(|e| e);
                         app.refresh_branches(path);
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     5 => {
-                        let msg =
-                            crate::git::commands::run_git(path, &["push", "-u", "origin", &b.name])
-                                .unwrap_or_else(|e| e.to_string());
+                        let msg = crate::actions::commands::push_branch(path, &b.name, true)
+                            .unwrap_or_else(|e| e);
                         app.refresh_branches(path);
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
