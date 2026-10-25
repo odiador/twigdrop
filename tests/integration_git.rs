@@ -749,3 +749,59 @@ fn dotfiles_toggle_and_vscode_breadcrumbs_preview() {
     assert!(content.contains("1 │"));
     assert!(content.contains("[Ln 1/"));
 }
+
+#[test]
+fn folder_profile_modal_audit_and_scaffold() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::{AppMode, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    // Create only src directory
+    std::fs::create_dir_all(dir.path().join("src")).expect("mkdir src");
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+
+    // Press 'p' to open Folder Profile modal
+    let p_key = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, p_key, &p);
+
+    assert!(matches!(app.ui.current_mode(), AppMode::FolderProfile(_)));
+
+    // Render frame to ensure modal renders without panic
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let content: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("Folder Profiles & Architecture Audit"));
+    assert!(content.contains("Missing:"));
+
+    // Press 's' to scaffold missing directories
+    let s_key = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, s_key, &p);
+
+    // Verify 'tests' directory was scaffolded
+    assert!(dir.path().join("tests").exists());
+
+    // Press 'Esc' to exit modal
+    let esc_key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc_key, &p);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+}

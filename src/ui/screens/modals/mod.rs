@@ -2,6 +2,7 @@ pub mod branch_ops;
 pub mod command_palette;
 pub mod date_picker;
 pub mod filter;
+pub mod folder_profile;
 pub mod help;
 pub mod main_menu;
 pub mod manage;
@@ -14,6 +15,7 @@ pub use branch_ops::{render_confirm_delete, render_create_branch, render_rename_
 pub use command_palette::render_command_palette;
 pub use date_picker::render_date_picker;
 pub use filter::render_filter;
+pub use folder_profile::render_folder_profile;
 pub use help::{ASCII_LOGO, render_help, render_help_content};
 pub use main_menu::{render_main_menu, render_transparent_ascii};
 pub use manage::render_manage;

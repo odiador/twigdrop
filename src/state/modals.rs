@@ -65,6 +65,14 @@ pub struct QuickActionsState {
     pub actions: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FolderProfileState {
+    pub selected: usize,
+    pub profile_idx: usize,
+    pub available_profiles: Vec<crate::utils::profiles::FolderProfile>,
+    pub audit_report: crate::utils::profiles::ProfileAuditReport,
+}
+
 #[derive(Debug)]
 pub struct ModalState {
     pub mode: AppMode,

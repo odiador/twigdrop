@@ -3,6 +3,7 @@ pub mod code_preview;
 pub mod command_palette;
 pub mod date_picker;
 pub mod filter;
+pub mod folder_profile;
 pub mod help;
 pub mod main_menu;
 pub mod manage;
@@ -49,6 +50,7 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
         }
         AppMode::CodePreview(state) => code_preview::handle(app, key, state),
         AppMode::CommandPalette(state) => command_palette::handle(app, key, path, state),
+        AppMode::FolderProfile(state) => folder_profile::handle(app, state, key, path),
         AppMode::Diff => Some(super::diff::handle_diff_keyboard(app, key, path)),
         AppMode::Help => help::handle(app, key),
     }

@@ -1,4 +1,5 @@
 pub mod config;
+pub mod profiles;
 pub mod terminal;
 
 pub fn days_in_month(month: u32, year: i32) -> u32 {

@@ -95,6 +95,25 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             );
             false
         }
+        KeyCode::Char('p') | KeyCode::Char('P') => {
+            let available = crate::utils::profiles::load_profiles(path);
+            let active = crate::utils::profiles::FolderProfile::detect_preset(path);
+            let audit = crate::utils::profiles::audit_workspace(path, &active);
+            let profile_idx = available
+                .iter()
+                .position(|p| p.name == active.name)
+                .unwrap_or(0);
+
+            app.ui.push_modal(AppMode::FolderProfile(
+                crate::state::ui::FolderProfileState {
+                    selected: 0,
+                    profile_idx,
+                    available_profiles: available,
+                    audit_report: audit,
+                },
+            ));
+            false
+        }
         KeyCode::Esc => {
             if !app.ui.files_search_query.is_empty() {
                 app.ui.files_search_query.clear();

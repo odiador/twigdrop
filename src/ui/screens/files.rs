@@ -60,7 +60,9 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         } else {
             format!(" [{}]", badges.join(" • "))
         };
-        format!(" 📂 Files{badge_str} (.: dotfiles • c: changed • Space: stage • /: search) ")
+        format!(
+            " 📂 Files{badge_str} (.: dotfiles • p: profile • c: changed • Space: stage • /: search) "
+        )
     };
 
     let block = Block::default()

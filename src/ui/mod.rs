@@ -305,6 +305,7 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
         AppMode::Switcher => screens::render_switcher(f, app),
         AppMode::MainMenu => screens::render_main_menu(f, app),
         AppMode::CommandPalette(state) => screens::render_command_palette(f, state, loc, &theme),
+        AppMode::FolderProfile(state) => screens::render_folder_profile(f, app, state),
     }
 }
 

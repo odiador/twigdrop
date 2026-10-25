@@ -5,8 +5,8 @@ use std::time::Instant;
 
 pub use crate::state::frame_cache::FrameCache;
 pub use crate::state::modals::{
-    CommandAction, CommandPaletteState, DatePickerField, DatePickerState, MainMenuState,
-    ModalState, QuickActionsState, SettingsState,
+    CommandAction, CommandPaletteState, DatePickerField, DatePickerState, FolderProfileState,
+    MainMenuState, ModalState, QuickActionsState, SettingsState,
 };
 pub use crate::state::rebase::{RebaseAction, RebaseCommit, RebaseState};
 
@@ -114,6 +114,7 @@ pub enum AppMode {
     DatePicker(DatePickerState),
     CommitFiles(String, Vec<crate::git::files::FileEntry>),
     CommandPalette(CommandPaletteState),
+    FolderProfile(FolderProfileState),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -208,6 +209,7 @@ impl AppMode {
                 | Self::Manage
                 | Self::Help
                 | Self::ConfirmDelete(_)
+                | Self::FolderProfile(_)
         )
     }
 }
