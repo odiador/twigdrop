@@ -23,6 +23,7 @@ impl App {
         }
 
         let line_diffs = crate::git::get_line_diffs(repo_path, rel_path);
+        let line_blames = crate::git::blame::get_file_blame(repo_path, rel_path);
 
         let mut state = PreviewState {
             file_path: rel_path.to_string(),
@@ -33,6 +34,8 @@ impl App {
             selection_start: None,
             selection_end: None,
             line_diffs,
+            line_blames,
+            show_blame: false,
         };
 
         self.update_preview_highlighting(&mut state);

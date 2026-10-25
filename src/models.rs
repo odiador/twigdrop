@@ -107,3 +107,47 @@ pub struct PullRequest {
     #[serde(default)]
     pub body: String,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum CiStatus {
+    #[default]
+    Unknown,
+    Passing,
+    Failing,
+    Pending,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PrCheck {
+    pub name: String,
+    pub state: String,
+    #[serde(default)]
+    pub bucket: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub link: String,
+}
+
+#[must_use]
+pub fn compute_ci_status(checks: &[PrCheck]) -> CiStatus {
+    if checks.is_empty() {
+        return CiStatus::Unknown;
+    }
+    if checks.iter().any(|c| {
+        c.bucket == "fail"
+            || c.bucket == "cancel"
+            || c.state == "FAILURE"
+            || c.state == "ERROR"
+            || c.state == "CANCELLED"
+    }) {
+        CiStatus::Failing
+    } else if checks
+        .iter()
+        .any(|c| c.bucket == "pending" || c.state == "PENDING" || c.state == "IN_PROGRESS")
+    {
+        CiStatus::Pending
+    } else {
+        CiStatus::Passing
+    }
+}

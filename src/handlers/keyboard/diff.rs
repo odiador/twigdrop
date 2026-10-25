@@ -16,6 +16,8 @@ pub fn update_diff_preview(app: &mut App, path: &str) {
                 selection_start: None,
                 selection_end: None,
                 line_diffs: std::collections::HashMap::new(),
+                line_blames: std::collections::HashMap::new(),
+                show_blame: false,
             };
             app.update_diff_highlighting(&mut preview);
             app.repo.diff_preview = Some(preview);

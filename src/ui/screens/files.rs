@@ -208,8 +208,25 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
             theme.peach,
         ));
 
+        if let Some(blame) = state.line_blames.get(&state.cursor_y) {
+            let author_short = if blame.author.len() > 14 {
+                format!("{}…", &blame.author[..13])
+            } else {
+                blame.author.clone()
+            };
+            let short_hash = if blame.commit.len() > 8 {
+                &blame.commit[..8]
+            } else {
+                &blame.commit
+            };
+            breadcrumb_spans.push(Span::styled(
+                format!(" 👤 {author_short} • {} ({short_hash}) ", blame.date),
+                theme.nav,
+            ));
+        }
+
         breadcrumb_spans.push(Span::styled(
-            " (Tab: focus directory │ j/k: scroll) ",
+            " (b: blame • n/N: hunk • Tab: switch │ j/k: scroll) ",
             theme.subtle,
         ));
 
@@ -225,9 +242,10 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
     } else {
         "[Z: zoom] "
     };
+    let blame_hint = if state.show_blame { "[Blame: ON] " } else { "" };
     let block_title = format!(
-        " Preview: {} {} {}",
-        state.file_path, scroll_badge, zoom_hint
+        " Preview: {} {}{}{}",
+        state.file_path, scroll_badge, zoom_hint, blame_hint
     );
 
     let block = Block::default()
@@ -250,6 +268,31 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
             format!("{:>4} │ ", i + 1),
             Style::default().fg(Color::DarkGray),
         )];
+
+        if state.show_blame {
+            if let Some(blame) = state.line_blames.get(&i) {
+                let author_short = if blame.author.len() > 14 {
+                    format!("{}…", &blame.author[..13])
+                } else {
+                    blame.author.clone()
+                };
+                let short_hash = if blame.commit.len() > 8 {
+                    &blame.commit[..8]
+                } else {
+                    &blame.commit
+                };
+                spans.push(Span::styled(
+                    format!("{:<8} │ {:<14} {} │ ", short_hash, author_short, blame.date),
+                    Style::default().fg(Color::DarkGray),
+                ));
+            } else {
+                spans.push(Span::styled(
+                    "         │                │ ",
+                    Style::default().fg(Color::DarkGray),
+                ));
+            }
+        }
+
         let gutter_diff = state.line_diffs.get(&i);
         spans.push(match gutter_diff {
             Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(theme.diff_add_fg)),

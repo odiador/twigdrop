@@ -265,6 +265,7 @@ impl App {
                     self.ui.selected_pr_idx += 1;
                     self.ui.pr_scroll_y = 0;
                     self.fetch_current_pr_diff(path);
+                    self.fetch_current_pr_checks(path);
                 }
             }
         }
@@ -311,6 +312,7 @@ impl App {
                     self.ui.selected_pr_idx -= 1;
                     self.ui.pr_scroll_y = 0;
                     self.fetch_current_pr_diff(path);
+                    self.fetch_current_pr_checks(path);
                 }
             }
         }

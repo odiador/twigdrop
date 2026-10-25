@@ -10,6 +10,13 @@ pub use crate::state::modals::{
 };
 pub use crate::state::rebase::{RebaseAction, RebaseCommit, RebaseState};
 
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct BlameEntry {
+    pub commit: String,
+    pub author: String,
+    pub date: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PreviewState {
     pub file_path: String,
@@ -20,6 +27,64 @@ pub struct PreviewState {
     pub selection_start: Option<usize>,
     pub selection_end: Option<usize>,
     pub line_diffs: std::collections::HashMap<usize, GutterStatus>,
+    pub line_blames: std::collections::HashMap<usize, BlameEntry>,
+    pub show_blame: bool,
+}
+
+impl PreviewState {
+    pub fn jump_hunk(&mut self, forward: bool) -> Option<usize> {
+        if self.line_diffs.is_empty() {
+            return None;
+        }
+
+        let mut hunk_starts: Vec<usize> = self
+            .line_diffs
+            .keys()
+            .copied()
+            .filter(|&line| line == 0 || !self.line_diffs.contains_key(&(line - 1)))
+            .collect();
+        hunk_starts.sort_unstable();
+
+        if hunk_starts.is_empty() {
+            return None;
+        }
+
+        let target = if forward {
+            hunk_starts
+                .iter()
+                .copied()
+                .find(|&line| line > self.cursor_y)
+                .unwrap_or(hunk_starts[0])
+        } else {
+            let current_start = hunk_starts
+                .iter()
+                .copied()
+                .rfind(|&line| line <= self.cursor_y);
+
+            if let Some(s) = current_start {
+                if self.cursor_y > s && self.line_diffs.contains_key(&self.cursor_y) {
+                    s
+                } else {
+                    hunk_starts
+                        .iter()
+                        .copied()
+                        .rfind(|&line| line < s)
+                        .unwrap_or(*hunk_starts.last().unwrap())
+                }
+            } else {
+                *hunk_starts.last().unwrap()
+            }
+        };
+
+        self.cursor_y = target;
+        if target < self.scroll_y {
+            self.scroll_y = target.saturating_sub(3);
+        } else if target >= self.scroll_y + 20 {
+            self.scroll_y = target.saturating_sub(10);
+        }
+
+        Some(target)
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
@@ -49,6 +114,22 @@ pub enum PrTab {
     #[default]
     Description,
     Diff,
+    Checks,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum PrReviewKind {
+    Approve,
+    RequestChanges,
+    Comment,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct PrReviewModalState {
+    pub pr_number: u64,
+    pub pr_title: String,
+    pub kind: PrReviewKind,
+    pub body: String,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
@@ -115,6 +196,7 @@ pub enum AppMode {
     CommitFiles(String, Vec<crate::git::files::FileEntry>),
     CommandPalette(CommandPaletteState),
     FolderProfile(FolderProfileState),
+    PrReview(PrReviewModalState),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -210,6 +292,7 @@ impl AppMode {
                 | Self::Help
                 | Self::ConfirmDelete(_)
                 | Self::FolderProfile(_)
+                | Self::PrReview(_)
         )
     }
 }
@@ -548,5 +631,48 @@ mod tests {
         for view in View::ALL {
             assert!(state.switcher_order().contains(&T::View(view)));
         }
+    }
+
+    #[test]
+    fn test_preview_state_jump_hunk() {
+        let mut diffs = std::collections::HashMap::new();
+        diffs.insert(5, GutterStatus::Modified);
+        diffs.insert(6, GutterStatus::Modified);
+        diffs.insert(20, GutterStatus::Added);
+        diffs.insert(50, GutterStatus::Deleted);
+
+        let mut state = PreviewState {
+            file_path: "test.rs".to_string(),
+            lines: vec!["line".to_string(); 60],
+            highlighted_lines: Vec::new(),
+            cursor_y: 0,
+            scroll_y: 0,
+            selection_start: None,
+            selection_end: None,
+            line_diffs: diffs,
+            line_blames: std::collections::HashMap::new(),
+            show_blame: false,
+        };
+
+        // Forward jumps: 0 -> 5 -> 20 -> 50 -> wrap to 5
+        assert_eq!(state.jump_hunk(true), Some(5));
+        assert_eq!(state.cursor_y, 5);
+        assert_eq!(state.jump_hunk(true), Some(20));
+        assert_eq!(state.cursor_y, 20);
+        assert_eq!(state.jump_hunk(true), Some(50));
+        assert_eq!(state.cursor_y, 50);
+        assert_eq!(state.jump_hunk(true), Some(5));
+        assert_eq!(state.cursor_y, 5);
+
+        // Backward jumps from 5 wraps to 50
+        assert_eq!(state.jump_hunk(false), Some(50));
+        assert_eq!(state.cursor_y, 50);
+        assert_eq!(state.jump_hunk(false), Some(20));
+        assert_eq!(state.cursor_y, 20);
+
+        // When inside a multi-line hunk (line 6 inside 5..6): jumps to start of hunk (5)
+        state.cursor_y = 6;
+        assert_eq!(state.jump_hunk(false), Some(5));
+        assert_eq!(state.cursor_y, 5);
     }
 }

@@ -8,6 +8,7 @@ pub mod help;
 pub mod main_menu;
 pub mod manage;
 pub mod message;
+pub mod pr_review;
 pub mod quick_actions;
 pub mod rebase;
 pub mod settings;
@@ -51,6 +52,7 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
         AppMode::CodePreview(state) => code_preview::handle(app, key, state),
         AppMode::CommandPalette(state) => command_palette::handle(app, key, path, state),
         AppMode::FolderProfile(state) => folder_profile::handle(app, state, key, path),
+        AppMode::PrReview(state) => pr_review::handle(app, key, state, path),
         AppMode::Diff => Some(super::diff::handle_diff_keyboard(app, key, path)),
         AppMode::Help => help::handle(app, key),
     }

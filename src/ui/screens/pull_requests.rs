@@ -151,10 +151,29 @@ fn render_pr_list(f: &mut Frame, area: Rect, app: &App) {
             theme.subtle
         };
 
+        let ci_badge = if let Some(checks) = app.repo.pr_checks.get(&pr.number) {
+            match crate::models::compute_ci_status(checks) {
+                crate::models::CiStatus::Passing => {
+                    Span::styled("✓ ", theme.success.add_modifier(Modifier::BOLD))
+                }
+                crate::models::CiStatus::Failing => {
+                    Span::styled("✗ ", theme.danger.add_modifier(Modifier::BOLD))
+                }
+                crate::models::CiStatus::Pending => {
+                    Span::styled("● ", theme.warning.add_modifier(Modifier::BOLD))
+                }
+                crate::models::CiStatus::Unknown => Span::styled("· ", theme.dim),
+            }
+        } else {
+            Span::styled("· ", theme.dim)
+        };
+
         let line1_spans = vec![
             Span::styled(pointer, pointer_style),
             Span::styled(badge_str, badge_style),
-            Span::styled(format!(" #{} ", pr.number), theme.accent2),
+            Span::raw(" "),
+            ci_badge,
+            Span::styled(format!("#{} ", pr.number), theme.accent2),
             Span::styled(
                 pr.title.clone(),
                 if is_selected {
@@ -220,6 +239,7 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
     // 1. Tab Bar & Metadata Header
     let is_desc = app.ui.pr_tab == PrTab::Description;
     let is_diff = app.ui.pr_tab == PrTab::Diff;
+    let is_checks = app.ui.pr_tab == PrTab::Checks;
 
     let tab_desc_style = if is_desc {
         Style::default()
@@ -239,6 +259,33 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
         theme.subtle
     };
 
+    let tab_checks_style = if is_checks {
+        Style::default()
+            .bg(theme.surface)
+            .fg(theme.accent.fg.unwrap_or(Color::Magenta))
+            .add_modifier(Modifier::BOLD)
+    } else {
+        theme.subtle
+    };
+
+    let checks_count = app
+        .repo
+        .pr_checks
+        .get(&selected_pr.number)
+        .map(|c| c.len())
+        .unwrap_or(0);
+    let checks_badge_label = if checks_count > 0 {
+        let checks = app.repo.pr_checks.get(&selected_pr.number).unwrap();
+        match crate::models::compute_ci_status(checks) {
+            crate::models::CiStatus::Passing => format!(" [ 3: Checks (✓ {checks_count}) ] "),
+            crate::models::CiStatus::Failing => " [ 3: Checks (✗ failed) ] ".to_string(),
+            crate::models::CiStatus::Pending => " [ 3: Checks (● pending) ] ".to_string(),
+            crate::models::CiStatus::Unknown => format!(" [ 3: Checks ({checks_count}) ] "),
+        }
+    } else {
+        " [ 3: Checks ] ".to_string()
+    };
+
     let header_block = Block::default()
         .title(" Pull Request Overview ")
         .borders(Borders::ALL)
@@ -250,7 +297,11 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled(" [ 1: Description ] ", tab_desc_style),
             Span::styled(" [ 2: Diff ] ", tab_diff_style),
-            Span::styled("  (Tab: switch tab │ c: checkout │ o: web)", theme.subtle),
+            Span::styled(checks_badge_label, tab_checks_style),
+            Span::styled(
+                " (Tab: tabs │ a: approve │ x: request changes │ m: comment │ c: checkout │ o: web)",
+                theme.subtle,
+            ),
         ]),
         Line::from(vec![
             Span::styled(
@@ -276,7 +327,7 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
     let meta_p = Paragraph::new(meta_lines);
     f.render_widget(meta_p, header_inner);
 
-    // 2. Content Area (Markdown Description or Unified Diff)
+    // 2. Content Area (Markdown Description, Unified Diff, or CI Checks)
     let visible_rows = chunks[1].height.saturating_sub(2) as usize;
     let (total_lines, type_title, content_widget) = if is_desc {
         let md_content = if selected_pr.body.trim().is_empty() {
@@ -290,7 +341,7 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
             .scroll((app.ui.pr_scroll_y, 0))
             .wrap(Wrap { trim: false });
         (len, "Description (Markdown)", p)
-    } else {
+    } else if is_diff {
         let diff_text = app
             .repo
             .pr_diff
@@ -302,6 +353,57 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
             .scroll((app.ui.pr_scroll_y, 0))
             .wrap(Wrap { trim: false });
         (len, "Changes Diff", p)
+    } else {
+        let checks = app.repo.pr_checks.get(&selected_pr.number);
+        let mut check_lines = Vec::new();
+        check_lines.push(Line::default());
+        if let Some(list) = checks {
+            if list.is_empty() {
+                check_lines.push(Line::from(Span::styled(
+                    "  No CI checks reported for this pull request.",
+                    theme.muted,
+                )));
+            } else {
+                for c in list {
+                    let (icon, icon_style) = match c.bucket.as_str() {
+                        "pass" => (" ✓ ", theme.success.add_modifier(Modifier::BOLD)),
+                        "fail" | "cancel" => (" ✗ ", theme.danger.add_modifier(Modifier::BOLD)),
+                        "pending" => (" ● ", theme.warning.add_modifier(Modifier::BOLD)),
+                        _ => (" · ", theme.dim),
+                    };
+                    let desc = if c.description.is_empty() {
+                        c.state.clone()
+                    } else {
+                        format!("{} - {}", c.state, c.description)
+                    };
+                    check_lines.push(Line::from(vec![
+                        Span::styled(icon, icon_style),
+                        Span::styled(
+                            format!("{:<28} ", c.name),
+                            theme.base.add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(desc, theme.soft),
+                    ]));
+                    if !c.link.is_empty() {
+                        check_lines.push(Line::from(vec![
+                            Span::raw("     ↳ URL: "),
+                            Span::styled(&c.link, theme.subtle),
+                        ]));
+                    }
+                    check_lines.push(Line::default());
+                }
+            }
+        } else {
+            check_lines.push(Line::from(Span::styled(
+                "  Loading checks from GitHub...",
+                theme.subtle,
+            )));
+        }
+        let len = check_lines.len();
+        let p = Paragraph::new(check_lines)
+            .scroll((app.ui.pr_scroll_y, 0))
+            .wrap(Wrap { trim: false });
+        (len, "CI Checks", p)
     };
 
     let scroll_badge = crate::ui::components::scroll_indicator(

@@ -60,6 +60,8 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                                 selection_start: None,
                                 selection_end: None,
                                 line_diffs: std::collections::HashMap::new(),
+                                line_blames: std::collections::HashMap::new(),
+                                show_blame: false,
                             };
                             app.update_diff_highlighting(&mut preview);
                             app.repo.diff_preview = Some(preview);

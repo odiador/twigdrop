@@ -216,11 +216,14 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             } else if app.ui.primary_mode == PrimaryMode::PullRequests {
                 app.ui.pr_tab = match app.ui.pr_tab {
                     crate::state::ui::PrTab::Description => crate::state::ui::PrTab::Diff,
-                    crate::state::ui::PrTab::Diff => crate::state::ui::PrTab::Description,
+                    crate::state::ui::PrTab::Diff => crate::state::ui::PrTab::Checks,
+                    crate::state::ui::PrTab::Checks => crate::state::ui::PrTab::Description,
                 };
                 app.ui.pr_scroll_y = 0;
                 if app.ui.pr_tab == crate::state::ui::PrTab::Diff && app.repo.pr_diff.is_none() {
                     app.fetch_current_pr_diff(path);
+                } else if app.ui.pr_tab == crate::state::ui::PrTab::Checks {
+                    app.fetch_current_pr_checks(path);
                 }
             }
             return false;

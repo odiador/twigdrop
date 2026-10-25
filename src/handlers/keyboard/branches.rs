@@ -32,6 +32,8 @@ pub fn handle_enter_or_selection(app: &mut App, path: &str) -> bool {
                     selection_start: None,
                     selection_end: None,
                     line_diffs: std::collections::HashMap::new(),
+                    line_blames: std::collections::HashMap::new(),
+                    show_blame: false,
                 };
                 app.update_diff_highlighting(&mut preview);
                 app.repo.diff_preview = Some(preview);
@@ -116,6 +118,8 @@ pub fn handle_branches_keyboard(app: &mut App, key: KeyEvent, path: &str) -> boo
                             selection_start: None,
                             selection_end: None,
                             line_diffs: std::collections::HashMap::new(),
+                            line_blames: std::collections::HashMap::new(),
+                            show_blame: false,
                         };
                         app.update_diff_highlighting(&mut preview);
                         app.repo.diff_preview = Some(preview);

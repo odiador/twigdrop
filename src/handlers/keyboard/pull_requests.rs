@@ -23,11 +23,14 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
         KeyCode::Tab => {
             app.ui.pr_tab = match app.ui.pr_tab {
                 PrTab::Description => PrTab::Diff,
-                PrTab::Diff => PrTab::Description,
+                PrTab::Diff => PrTab::Checks,
+                PrTab::Checks => PrTab::Description,
             };
             app.ui.pr_scroll_y = 0;
             if app.ui.pr_tab == PrTab::Diff && app.repo.pr_diff.is_none() {
                 app.fetch_current_pr_diff(path);
+            } else if app.ui.pr_tab == PrTab::Checks {
+                app.fetch_current_pr_checks(path);
             }
             false
         }
@@ -41,6 +44,51 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
             app.ui.pr_scroll_y = 0;
             if app.repo.pr_diff.is_none() {
                 app.fetch_current_pr_diff(path);
+            }
+            false
+        }
+        KeyCode::Char('3') => {
+            app.ui.pr_tab = PrTab::Checks;
+            app.ui.pr_scroll_y = 0;
+            app.fetch_current_pr_checks(path);
+            false
+        }
+        KeyCode::Char('a') => {
+            if let Some(pr) = app.repo.pull_requests.get(app.ui.selected_pr_idx) {
+                app.ui.push_modal(crate::state::ui::AppMode::PrReview(
+                    crate::state::ui::PrReviewModalState {
+                        pr_number: pr.number,
+                        pr_title: pr.title.clone(),
+                        kind: crate::state::ui::PrReviewKind::Approve,
+                        body: String::new(),
+                    },
+                ));
+            }
+            false
+        }
+        KeyCode::Char('x') => {
+            if let Some(pr) = app.repo.pull_requests.get(app.ui.selected_pr_idx) {
+                app.ui.push_modal(crate::state::ui::AppMode::PrReview(
+                    crate::state::ui::PrReviewModalState {
+                        pr_number: pr.number,
+                        pr_title: pr.title.clone(),
+                        kind: crate::state::ui::PrReviewKind::RequestChanges,
+                        body: String::new(),
+                    },
+                ));
+            }
+            false
+        }
+        KeyCode::Char('m') => {
+            if let Some(pr) = app.repo.pull_requests.get(app.ui.selected_pr_idx) {
+                app.ui.push_modal(crate::state::ui::AppMode::PrReview(
+                    crate::state::ui::PrReviewModalState {
+                        pr_number: pr.number,
+                        pr_title: pr.title.clone(),
+                        kind: crate::state::ui::PrReviewKind::Comment,
+                        body: String::new(),
+                    },
+                ));
             }
             false
         }

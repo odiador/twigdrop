@@ -31,6 +31,7 @@ pub struct RepositoryState {
     pub pull_requests: Vec<crate::models::PullRequest>,
     pub pr_diff: Option<String>,
     pub pr_error: Option<String>,
+    pub pr_checks: HashMap<u64, Vec<crate::models::PrCheck>>,
 }
 
 impl RepositoryState {
@@ -58,6 +59,7 @@ impl RepositoryState {
             pull_requests: Vec::new(),
             pr_diff: None,
             pr_error: None,
+            pr_checks: HashMap::new(),
         }
     }
 }

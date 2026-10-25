@@ -1,3 +1,4 @@
+pub mod blame;
 pub mod commands;
 pub mod error;
 pub mod files;

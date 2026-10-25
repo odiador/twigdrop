@@ -866,3 +866,268 @@ fn test_score_maxing_zoom_and_quick_jump() {
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
     assert!(!app.ui.maximized_panel);
 }
+
+#[test]
+fn test_pr_ci_checks_and_review_modals() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::models::{PrCheck, PullRequest, PullRequestAuthor};
+    use twigdrop::state::{AppMode, PrReviewKind, PrTab, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::PullRequests);
+
+    let test_pr = PullRequest {
+        number: 42,
+        title: "Super Feature".to_string(),
+        author: PullRequestAuthor {
+            login: "octocat".to_string(),
+        },
+        head_ref_name: "feature/super".to_string(),
+        base_ref_name: "main".to_string(),
+        updated_at: "2026-10-25".to_string(),
+        url: "https://github.com/test/repo/pull/42".to_string(),
+        state: "OPEN".to_string(),
+        body: "Detailed description of PR #42".to_string(),
+    };
+    app.repo.pull_requests = vec![test_pr];
+
+    let check1 = PrCheck {
+        name: "test-suite".to_string(),
+        state: "SUCCESS".to_string(),
+        bucket: "pass".to_string(),
+        description: "All unit tests passed".to_string(),
+        link: "https://github.com/test/repo/actions/runs/1".to_string(),
+    };
+    app.repo.pr_checks.insert(42, vec![check1]);
+
+    // Render initial PR view (Description tab)
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let content: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("Super Feature"));
+    assert!(content.contains("3: Checks"));
+    assert!(content.contains("✓ 1")); // Passed CI status badge with count
+
+    // Press '3' to switch directly to Checks tab
+    let key_3 = KeyEvent::new(KeyCode::Char('3'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_3, &p);
+    assert_eq!(app.ui.pr_tab, PrTab::Checks);
+
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+    let content_checks: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content_checks.contains("test-suite"));
+    assert!(content_checks.contains("All unit tests passed"));
+
+    // Press Tab to cycle back to Description
+    let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab, &p);
+    assert_eq!(app.ui.pr_tab, PrTab::Description);
+
+    // Press 'a' to open Approve modal
+    let key_a = KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_a, &p);
+    assert!(
+        matches!(app.ui.current_mode(), AppMode::PrReview(s) if s.kind == PrReviewKind::Approve && s.pr_number == 42)
+    );
+
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+    let content_approve: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content_approve.contains("Approve Pull Request"));
+    assert!(content_approve.contains("#42"));
+
+    // Close modal with Esc
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+
+    // Press 'x' to open Request Changes modal
+    let key_x = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_x, &p);
+    assert!(
+        matches!(app.ui.current_mode(), AppMode::PrReview(s) if s.kind == PrReviewKind::RequestChanges)
+    );
+
+    // Pressing Enter with empty body fails validation and modal stays open
+    let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, enter, &p);
+    assert!(matches!(app.ui.current_mode(), AppMode::PrReview(_)));
+
+    // Close modal with Esc
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+
+    // Press 'm' to open Comment modal
+    let key_m = KeyEvent::new(KeyCode::Char('m'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_m, &p);
+    assert!(
+        matches!(app.ui.current_mode(), AppMode::PrReview(s) if s.kind == PrReviewKind::Comment)
+    );
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+}
+
+#[test]
+fn test_inline_blame_toggle_and_hunk_jump() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::{AppMode, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    // Create a multi-line file and commit it
+    let file_path = dir.path().join("code.txt");
+    let mut initial_lines = Vec::new();
+    for i in 1..=30 {
+        initial_lines.push(format!("Original line {i}"));
+    }
+    std::fs::write(&file_path, initial_lines.join("\n") + "\n").expect("write code.txt");
+
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["add", "code.txt"])
+        .output()
+        .expect("git add");
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["commit", "-m", "add code.txt"])
+        .output()
+        .expect("git commit");
+
+    // Now introduce changes at line 5 and line 20
+    let mut modified_lines = initial_lines.clone();
+    modified_lines[4] = "Modified line 5".to_string();
+    modified_lines[19] = "Modified line 20".to_string();
+    std::fs::write(&file_path, modified_lines.join("\n") + "\n").expect("modify code.txt");
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+
+    let preview = app.create_preview_state(&p, "code.txt").expect("preview");
+    app.ui.push_modal(AppMode::CodePreview(preview));
+    assert!(matches!(app.ui.current_mode(), AppMode::CodePreview(_)));
+
+    // Verify git blame was populated
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert!(!s.line_blames.is_empty(), "line_blames should be populated");
+        assert!(!s.show_blame, "blame should be off by default");
+        assert!(
+            s.line_diffs.contains_key(&4),
+            "diff at line 5 (0-indexed 4)"
+        );
+        assert!(
+            s.line_diffs.contains_key(&19),
+            "diff at line 20 (0-indexed 19)"
+        );
+    }
+
+    // Render frame to check active line blame chip in breadcrumbs
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let content_preview: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content_preview.contains("👤"));
+    assert!(content_preview.contains("Twigdrop"));
+
+    // Press 'b' to toggle inline blame ON
+    let key_b = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_b, &p);
+
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert!(s.show_blame);
+    }
+
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+    let content_blame: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content_blame.contains("[Blame: ON]"));
+
+    // Press 'b' again to toggle inline blame OFF
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_b, &p);
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert!(!s.show_blame);
+    }
+
+    // Test hunk navigation: 'n' jumps to next change (line 5 -> 0-indexed 4)
+    let key_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_n, &p);
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert_eq!(s.cursor_y, 4);
+    }
+
+    // 'n' again jumps to second change (line 20 -> 0-indexed 19)
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_n, &p);
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert_eq!(s.cursor_y, 19);
+    }
+
+    // 'n' again wraps back to line 5 (0-indexed 4)
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_n, &p);
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert_eq!(s.cursor_y, 4);
+    }
+
+    // 'N' jumps backwards to line 20 (0-indexed 19)
+    let key_big_n = KeyEvent::new(KeyCode::Char('N'), KeyModifiers::SHIFT);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_big_n, &p);
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert_eq!(s.cursor_y, 19);
+    }
+}

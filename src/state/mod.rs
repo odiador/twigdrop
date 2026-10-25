@@ -14,6 +14,6 @@ pub use modals::{
 pub use rebase::{RebaseAction, RebaseCommit, RebaseState};
 pub use toast::{TOAST_TTL, Toast, ToastKind, UndoRestore};
 pub use ui::{
-    AppMode, BranchSortMode, CommitPanel, FilePanel, PreviewState, PrimaryMode, SwitchTarget,
-    UiState, View,
+    AppMode, BlameEntry, BranchSortMode, CommitPanel, FilePanel, PrReviewKind, PrReviewModalState,
+    PrTab, PreviewState, PrimaryMode, SwitchTarget, UiState, View,
 };
