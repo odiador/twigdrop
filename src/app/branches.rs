@@ -162,8 +162,7 @@ impl App {
     /// Also fixes the legacy hardcoded `"."` repo path. Cheap enough to run
     /// whenever the sidebar is visible; skips when hidden.
     pub fn refresh_sidebar_worktrees(&mut self, path: &str) {
-        let out = crate::git::commands::run_git(path, &["worktree", "list", "--porcelain"])
-            .unwrap_or_default();
+        let out = crate::actions::commands::list_worktrees(path).unwrap_or_default();
         let mut worktrees = Vec::new();
         let mut current_wt = String::new();
         for line in out.lines() {

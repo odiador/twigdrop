@@ -1,8 +1,8 @@
+use crate::git::error::GitError;
 use crate::models::CommitTreeItem;
-use anyhow::{Result, anyhow};
 use std::process::Command;
 
-pub fn run_git(path: &str, args: &[&str]) -> Result<String> {
+pub(crate) fn run_git(path: &str, args: &[&str]) -> Result<String, GitError> {
     let output = Command::new("git").current_dir(path).args(args).output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -11,11 +11,15 @@ pub fn run_git(path: &str, args: &[&str]) -> Result<String> {
     if output.status.success() {
         Ok(stdout)
     } else {
-        Err(anyhow!("git error: {stderr}"))
+        Err(GitError::Command(if stderr.is_empty() {
+            stdout
+        } else {
+            stderr
+        }))
     }
 }
 
-pub fn run_git_with_status(path: &str, args: &[&str]) -> Result<(String, i32)> {
+pub(crate) fn run_git_with_status(path: &str, args: &[&str]) -> Result<(String, i32), GitError> {
     let output = Command::new("git").current_dir(path).args(args).output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();

@@ -107,7 +107,7 @@ impl Runtime {
                         Some((task_type, repo_path, payload)) = ai_trigger_rx.recv() => {
                             if task_type == "rename_commit" {
                                 let hash = payload;
-                                let diff = git::commands::run_git(&repo_path, &["show", &hash]).unwrap_or_default();
+                                let diff = crate::actions::commands::get_commit_show(&repo_path, &hash).unwrap_or_default();
                                 let _ = event_tx.send(Event::Task(TaskEvent::AiAnalysisComplete("Generating commit message with AI...".to_string()))).await;
 
                                 if let Ok(s) = w.inner.summarize_diff(&diff).await {
@@ -126,7 +126,7 @@ impl Runtime {
                                     .join("twigdrop.db");
                                 let db = crate::db::Database::new(db_path).ok();
 
-                                let current_hash = match git::commands::run_git(&repo_path, &["rev-parse", &branch_name]) {
+                                let current_hash = match crate::actions::commands::resolve_full_hash(&repo_path, &branch_name) {
                                     Ok(h) => h.trim().to_string(),
                                     Err(_) => String::new(),
                                 };

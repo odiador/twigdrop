@@ -7,7 +7,7 @@ pub fn handle(app: &mut App, key: KeyEvent, path: &str, input: String) -> Option
         KeyCode::Enter => {
             if !input.is_empty() {
                 let parts: Vec<&str> = input.split_whitespace().collect();
-                let msg = match crate::git::commands::run_git(path, &parts) {
+                let msg = match crate::actions::commands::run_arbitrary_git(path, &parts) {
                     Ok(m) => format!("$ {input}\n{m}"),
                     Err(e) => format!("Error: {e}"),
                 };

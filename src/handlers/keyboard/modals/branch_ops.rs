@@ -27,7 +27,7 @@ pub fn handle_create_branch(
     match key.code {
         KeyCode::Enter => {
             if !input.is_empty() {
-                match crate::git::commands::run_git(path, &["checkout", "-b", &input]) {
+                match crate::actions::commands::create_branch(path, &input) {
                     Ok(_) => {
                         app.refresh_branches(path);
                         app.repo.current_branch = git::get_current_branch(path);
@@ -72,7 +72,7 @@ pub fn handle_rename_branch(
     match key.code {
         KeyCode::Enter => {
             if !input.is_empty() && input != old {
-                match crate::git::commands::run_git(path, &["branch", "-m", &old, &input]) {
+                match crate::actions::commands::rename_branch(path, &old, &input) {
                     Ok(_) => {
                         app.refresh_branches(path);
                         app.repo.current_branch = git::get_current_branch(path);

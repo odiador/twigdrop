@@ -81,7 +81,7 @@ pub fn handle(
                             Err(e) => {
                                 let files = crate::git::status::get_conflicting_files(path);
                                 if files.is_empty() {
-                                    e
+                                    e.to_string()
                                 } else {
                                     format!(
                                         "{e}\n\n{}:\n{}",
@@ -95,13 +95,14 @@ pub fn handle(
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     CommandAction::AbortRebase => {
-                        let msg =
-                            crate::actions::commands::abort_rebase(path).unwrap_or_else(|e| e);
+                        let msg = crate::actions::commands::abort_rebase(path)
+                            .unwrap_or_else(|e| e.to_string());
                         app.refresh_branches(path);
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     CommandAction::AbortMerge => {
-                        let msg = crate::actions::commands::abort_merge(path).unwrap_or_else(|e| e);
+                        let msg = crate::actions::commands::abort_merge(path)
+                            .unwrap_or_else(|e| e.to_string());
                         app.refresh_branches(path);
                         app.ui.push_modal(AppMode::Message(msg));
                     }

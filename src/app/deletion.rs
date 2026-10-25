@@ -68,7 +68,7 @@ impl App {
         };
         let mut restored = 0;
         for (name, sha) in &restore.branches {
-            if crate::git::commands::run_git(path, &["branch", name, sha]).is_ok() {
+            if crate::actions::commands::recreate_branch(path, name, sha).is_ok() {
                 restored += 1;
             }
         }

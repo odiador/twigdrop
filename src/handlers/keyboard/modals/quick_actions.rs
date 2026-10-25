@@ -19,7 +19,7 @@ pub fn handle(app: &mut App, key: KeyEvent, path: &str) -> Option<bool> {
             let parts: Vec<&str> = action.split_whitespace().collect();
             if parts.len() >= 2 && parts[0] == "git" {
                 let args = &parts[1..];
-                let msg = match crate::git::commands::run_git(path, args) {
+                let msg = match crate::actions::commands::run_arbitrary_git(path, args) {
                     Ok(m) => format!("> {action}\n{m}"),
                     Err(e) => format!("Error: {e}"),
                 };

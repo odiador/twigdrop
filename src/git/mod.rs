@@ -1,8 +1,10 @@
 pub mod commands;
+pub mod error;
 pub mod files;
 pub mod stash;
 pub mod status;
 
+pub use error::GitError;
 pub use status::get_current_branch;
 
 use crate::git::commands::{run_git, run_git_with_status};

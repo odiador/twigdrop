@@ -46,8 +46,7 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
         KeyCode::Enter => {
             if app.ui.settings_state.selected == 0 {
                 let date_str =
-                    crate::git::commands::run_git(path, &["log", "-1", "--format=%cI", hash])
-                        .unwrap_or_default();
+                    crate::actions::commands::resolve_commit_date(path, hash).unwrap_or_default();
 
                 let datetime = chrono::DateTime::parse_from_rfc3339(date_str.trim())
                     .map(|dt| dt.with_timezone(&chrono::Local))
@@ -63,7 +62,8 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
                     active_field: DatePickerField::Day,
                 }));
             } else if app.ui.settings_state.selected == 1 {
-                let msg = crate::actions::commands::fixup_commit(path, hash).unwrap_or_else(|e| e);
+                let msg = crate::actions::commands::fixup_commit(path, hash)
+                    .unwrap_or_else(|e| e.to_string());
                 app.ui.pop_modal();
                 app.ui.push_modal(AppMode::Message(msg));
             } else if app.ui.settings_state.selected == 2 {
@@ -73,52 +73,13 @@ pub fn handle_commit_action_keyboard(app: &mut App, key: KeyEvent, hash: &str, p
                     .push_modal(AppMode::CommitFiles(hash.to_string(), files));
             } else if app.ui.settings_state.selected == 3 {
                 let short_hash = hash.to_string();
-                let parent_hash =
-                    crate::git::commands::run_git(path, &["rev-parse", &format!("{short_hash}^")])
-                        .unwrap_or_default()
-                        .trim()
-                        .to_string();
-
-                if parent_hash.is_empty() {
-                    app.ui.pop_modal();
-                    app.ui.push_modal(AppMode::Message(
-                        "Cannot squash: no parent commit found.".to_string(),
-                    ));
-                    return false;
-                }
-
-                let git_dir = crate::git::commands::get_git_dir(path)
-                    .unwrap_or_else(|| std::path::Path::new(path).join(".git"));
-                let editor_script_path = git_dir.join("twigdrop-squash-editor.sh");
-
-                let script_content = format!(
-                    "#!/bin/sh\nawk '{{ if ($1 == \"pick\" && match($2, \"^{short_hash}\")) {{ $1 = \"squash\" }} print }}' \"$1\" > \"$1.tmp\" && mv \"$1.tmp\" \"$1\"\n"
-                );
-
-                let _ = std::fs::write(&editor_script_path, script_content);
-                #[cfg(unix)]
-                let _ = std::process::Command::new("chmod")
-                    .arg("+x")
-                    .arg(&editor_script_path)
-                    .status();
-
-                let msg = match crate::git::commands::run_git(
-                    path,
-                    &[
-                        "-c",
-                        &format!("sequence.editor={}", editor_script_path.display()),
-                        "rebase",
-                        "-i",
-                        "--autostash",
-                        &format!("{short_hash}^^"),
-                    ],
-                ) {
-                    Ok(_) => format!("Squashed {short_hash} into its parent."),
+                let msg = match crate::actions::commands::squash_into_parent(path, &short_hash) {
+                    Ok(m) => {
+                        app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
+                        m
+                    }
                     Err(e) => format!("Failed to squash: {e}"),
                 };
-                let _ = std::fs::remove_file(&editor_script_path);
-
-                app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
                 app.ui.pop_modal();
                 app.ui.push_modal(AppMode::Message(msg));
             } else if app.ui.settings_state.selected == 4 {

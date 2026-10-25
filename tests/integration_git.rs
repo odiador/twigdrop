@@ -109,11 +109,8 @@ fn rename_branch_roundtrip() {
             .expect("branch");
     }
 
-    twigdrop::git::commands::run_git(
-        &path,
-        &["branch", "-m", "feature/old-name", "feature/new-name"],
-    )
-    .expect("rename");
+    twigdrop::actions::commands::rename_branch(&path, "feature/old-name", "feature/new-name")
+        .expect("rename");
     let branches = twigdrop::git::build_branches(&path);
     assert!(branches.iter().any(|b| b.name == "feature/new-name"));
     assert!(!branches.iter().any(|b| b.name == "feature/old-name"));
@@ -129,7 +126,7 @@ fn merge_branch_into_current() {
         repo.branch("feature/add", &head, false).expect("branch");
     }
     // No-op fast-forward merge of an even branch must succeed.
-    twigdrop::git::commands::run_git(&path, &["merge", "--no-edit", "feature/add"]).expect("merge");
+    twigdrop::actions::commands::merge_branch(&path, "feature/add").expect("merge");
     let branches = twigdrop::git::build_branches(&path);
     assert!(branches.iter().any(|b| b.name == "feature/add"));
 }

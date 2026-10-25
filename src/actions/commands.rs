@@ -1,4 +1,5 @@
 use crate::git::commands::{run_git, run_git_with_status};
+use crate::git::error::GitError;
 use crate::state::ui::{RebaseAction, RebaseCommit};
 use std::fs;
 
@@ -341,22 +342,165 @@ pub fn resolve_remote(path: &str, branch: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Checks out `branch`.
+pub fn checkout_branch(path: &str, branch: &str) -> Result<String, GitError> {
+    run_git(path, &["checkout", branch]).map(|s| s.trim().to_string())
+}
+
+/// Creates and switches to a new branch named `branch`.
+pub fn create_branch(path: &str, branch: &str) -> Result<String, GitError> {
+    run_git(path, &["checkout", "-b", branch]).map(|s| s.trim().to_string())
+}
+
+/// Renames `old_name` branch to `new_name`.
+pub fn rename_branch(path: &str, old_name: &str, new_name: &str) -> Result<String, GitError> {
+    run_git(path, &["branch", "-m", old_name, new_name]).map(|s| s.trim().to_string())
+}
+
+/// Merges `branch` into the current HEAD.
+pub fn merge_branch(path: &str, branch: &str) -> Result<String, GitError> {
+    run_git(path, &["merge", branch]).map(|s| s.trim().to_string())
+}
+
+/// Recreates a deleted branch pointing to `sha` (used for undo).
+pub fn recreate_branch(path: &str, name: &str, sha: &str) -> Result<String, GitError> {
+    run_git(path, &["branch", name, sha]).map(|s| s.trim().to_string())
+}
+
+/// Resolves the commit date in ISO 8601 format for `hash`.
+pub fn resolve_commit_date(path: &str, hash: &str) -> Result<String, GitError> {
+    run_git(path, &["log", "-1", "--format=%cI", hash]).map(|s| s.trim().to_string())
+}
+
+/// Resolves the parent commit hash (`hash^`).
+pub fn resolve_parent_hash(path: &str, hash: &str) -> Result<String, GitError> {
+    run_git(path, &["rev-parse", &format!("{hash}^")]).map(|s| s.trim().to_string())
+}
+
+/// Resolves the full 40-character SHA from a ref or short SHA.
+pub fn resolve_full_hash(path: &str, short_hash: &str) -> Result<String, GitError> {
+    run_git(path, &["rev-parse", short_hash]).map(|s| s.trim().to_string())
+}
+
+/// Amends the current commit's date.
+pub fn amend_commit_date(path: &str, date_iso: &str) -> Result<String, GitError> {
+    run_git(
+        path,
+        &["commit", "--amend", "--no-edit", "--date", date_iso],
+    )
+    .map(|s| s.trim().to_string())
+}
+
+/// Lists all git worktrees in porcelain format.
+pub fn list_worktrees(path: &str) -> Result<String, GitError> {
+    run_git(path, &["worktree", "list", "--porcelain"])
+}
+
+/// Runs an arbitrary git command specified by argument slices.
+pub fn run_arbitrary_git(path: &str, args: &[&str]) -> Result<String, GitError> {
+    run_git(path, args).map(|s| s.trim().to_string())
+}
+
+/// Pushes a stash with a custom message.
+pub fn push_stash(path: &str, message: &str) -> Result<String, GitError> {
+    run_git(path, &["stash", "push", "-m", message])
+}
+
+/// Returns the commit log between `upstream` and `HEAD` for interactive rebase.
+pub fn get_rebase_commits_log(path: &str, upstream: &str) -> Result<String, GitError> {
+    run_git(
+        path,
+        &["log", &format!("{upstream}..HEAD"), "--format=%h %s"],
+    )
+}
+
+/// Returns commits in `range` with `%h|%s` format.
+pub fn get_commits_in_range(path: &str, range: &str) -> Result<String, GitError> {
+    run_git(path, &["log", "--format=%h|%s", range])
+}
+
+/// Returns the commit show diff for `hash`.
+pub fn get_commit_show(path: &str, hash: &str) -> Result<String, GitError> {
+    run_git(path, &["show", hash])
+}
+
+/// Squashes `short_hash` into its parent commit.
+pub fn squash_into_parent(path: &str, short_hash: &str) -> Result<String, GitError> {
+    let parent_hash = resolve_parent_hash(path, short_hash)?;
+    if parent_hash.trim().is_empty() {
+        return Err(GitError::Command(
+            "Cannot squash: no parent commit found.".to_string(),
+        ));
+    }
+
+    let git_dir = crate::git::commands::get_git_dir(path)
+        .unwrap_or_else(|| std::path::Path::new(path).join(".git"));
+    let editor_script_path = git_dir.join("twigdrop-squash-editor.sh");
+
+    let script_content = format!(
+        "#!/bin/sh\nawk '{{ if ($1 == \"pick\" && match($2, \"^{short_hash}\")) {{ $1 = \"squash\" }} print }}' \"$1\" > \"$1.tmp\" && mv \"$1.tmp\" \"$1\"\n"
+    );
+
+    let _ = std::fs::write(&editor_script_path, script_content);
+    #[cfg(unix)]
+    let _ = std::process::Command::new("chmod")
+        .arg("+x")
+        .arg(&editor_script_path)
+        .status();
+
+    let res = run_git(
+        path,
+        &[
+            "-c",
+            &format!("sequence.editor={}", editor_script_path.display()),
+            "rebase",
+            "-i",
+            "--autostash",
+            &format!("{short_hash}^^"),
+        ],
+    );
+    let _ = std::fs::remove_file(&editor_script_path);
+    res.map(|_| format!("Squashed {short_hash} into its parent."))
+}
+
+/// Updates commit date during an interactive rebase execution.
+pub fn rebase_update_commit_date(
+    path: &str,
+    short_hash: &str,
+    new_date: &str,
+) -> Result<String, GitError> {
+    let full_hash = resolve_full_hash(path, short_hash).unwrap_or_else(|_| short_hash.to_string());
+    let exec_cmd = format!(
+        "if [ \"$(git rev-parse HEAD)\" = \"{full_hash}\" ]; then GIT_COMMITTER_DATE=\"{new_date}\" git commit --amend --no-edit --date=\"{new_date}\"; fi"
+    );
+
+    run_git(
+        path,
+        &[
+            "rebase",
+            "--autostash",
+            &format!("{short_hash}^"),
+            "--exec",
+            &exec_cmd,
+        ],
+    )
+}
+
 /// Pushes `branch` to its remote (resolved via [`resolve_remote`]).
-pub fn push_branch(path: &str, branch: &str, set_upstream: bool) -> Result<String, String> {
-    let remote =
-        resolve_remote(path, branch).ok_or_else(|| "No git remote configured.".to_string())?;
+pub fn push_branch(path: &str, branch: &str, set_upstream: bool) -> Result<String, GitError> {
+    let remote = resolve_remote(path, branch).ok_or(GitError::NoRemote)?;
     let mut args = vec!["push"];
     if set_upstream {
         args.push("-u");
     }
     args.push(&remote);
     args.push(branch);
-    run_git(path, &args).map_err(|e| e.to_string())
+    run_git(path, &args)
 }
 
 /// Creates a fixup commit for `hash` from the staged changes and autosquashes it.
-pub fn fixup_commit(path: &str, hash: &str) -> Result<String, String> {
-    run_git(path, &["commit", "--fixup", hash]).map_err(|e| format!("Fixup failed: {e}"))?;
+pub fn fixup_commit(path: &str, hash: &str) -> Result<String, GitError> {
+    run_git(path, &["commit", "--fixup", hash])?;
     let base = format!("{hash}^");
     run_git(
         path,
@@ -371,27 +515,19 @@ pub fn fixup_commit(path: &str, hash: &str) -> Result<String, String> {
         ],
     )
     .map(|_| format!("Amended to {hash}"))
-    .map_err(|e| format!("Autosquash rebase failed: {e}"))
 }
 
-pub fn abort_merge(path: &str) -> Result<String, String> {
-    run_git(path, &["merge", "--abort"])
-        .map(|out| format!("Merge aborted.\n{}", out.trim()))
-        .map_err(|e| format!("Failed to abort merge: {e}"))
+pub fn abort_merge(path: &str) -> Result<String, GitError> {
+    run_git(path, &["merge", "--abort"]).map(|out| format!("Merge aborted.\n{}", out.trim()))
 }
 
-pub fn abort_rebase(path: &str) -> Result<String, String> {
-    match run_git(path, &["rebase", "--abort"]) {
-        Ok(out) => Ok(format!("Rebase aborted successfully.\n{}", out.trim())),
-        Err(e) => Err(format!("Failed to abort rebase: {e}")),
-    }
+pub fn abort_rebase(path: &str) -> Result<String, GitError> {
+    run_git(path, &["rebase", "--abort"])
+        .map(|out| format!("Rebase aborted successfully.\n{}", out.trim()))
 }
 
-pub fn continue_rebase(path: &str) -> Result<String, String> {
-    match run_git(path, &["rebase", "--continue"]) {
-        Ok(out) => Ok(format!("Rebase continued.\n{}", out.trim())),
-        Err(e) => Err(format!("Failed to continue rebase: {e}")),
-    }
+pub fn continue_rebase(path: &str) -> Result<String, GitError> {
+    run_git(path, &["rebase", "--continue"]).map(|out| format!("Rebase continued.\n{}", out.trim()))
 }
 
 #[cfg(test)]

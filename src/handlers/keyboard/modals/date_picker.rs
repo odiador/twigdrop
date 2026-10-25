@@ -96,22 +96,10 @@ pub fn handle_date_picker_keyboard(
                 app.ui.modal_stack.iter().rev().nth(1).map(|m| &m.mode)
             {
                 let short_hash = hash.clone();
-                let full_hash = crate::git::commands::run_git(path, &["rev-parse", &short_hash])
-                    .unwrap_or(short_hash.clone());
-
-                let exec_cmd = format!(
-                    "if [ \"$(git rev-parse HEAD)\" = \"{full_hash}\" ]; then GIT_COMMITTER_DATE=\"{new_date}\" git commit --amend --no-edit --date=\"{new_date}\"; fi"
-                );
-
-                let msg = match crate::git::commands::run_git(
+                let msg = match crate::actions::commands::rebase_update_commit_date(
                     path,
-                    &[
-                        "rebase",
-                        "--autostash",
-                        &format!("{short_hash}^"),
-                        "--exec",
-                        &exec_cmd,
-                    ],
+                    &short_hash,
+                    &new_date,
                 ) {
                     Ok(m) => {
                         app.repo.commit_tree = crate::git::commands::get_commit_tree(path);

@@ -25,7 +25,7 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
             if let Some(b) = branch {
                 match app.ui.manage_selected {
                     0 => {
-                        let msg = crate::git::commands::run_git(path, &["checkout", &b.name])
+                        let msg = crate::actions::commands::checkout_branch(path, &b.name)
                             .unwrap_or_else(|e| e.to_string());
                         app.refresh_branches(path);
                         app.repo.current_branch = git::get_current_branch(path);
@@ -96,20 +96,20 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                     }
                     4 => {
                         let msg = crate::actions::commands::push_branch(path, &b.name, false)
-                            .unwrap_or_else(|e| e);
+                            .unwrap_or_else(|e| e.to_string());
                         app.refresh_branches(path);
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     5 => {
                         let msg = crate::actions::commands::push_branch(path, &b.name, true)
-                            .unwrap_or_else(|e| e);
+                            .unwrap_or_else(|e| e.to_string());
                         app.refresh_branches(path);
                         app.ui.pop_modal();
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     6 => {
-                        let msg = crate::git::commands::run_git(path, &["merge", &b.name])
+                        let msg = crate::actions::commands::merge_branch(path, &b.name)
                             .unwrap_or_else(|e| e.to_string());
                         app.refresh_branches(path);
                         app.repo.current_branch = git::get_current_branch(path);
@@ -127,14 +127,9 @@ pub fn handle_manage_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool 
                         app.ui.push_modal(AppMode::Message(msg));
                     }
                     8 => {
-                        let msg = crate::git::commands::run_git(
+                        let msg = crate::actions::commands::push_stash(
                             path,
-                            &[
-                                "stash",
-                                "push",
-                                "-m",
-                                &format!("Stash from Twigdrop: {}", b.name),
-                            ],
+                            &format!("Stash from Twigdrop: {}", b.name),
                         )
                         .unwrap_or_else(|e| e.to_string());
                         app.ui.pop_modal();

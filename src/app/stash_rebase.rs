@@ -25,11 +25,8 @@ impl App {
 
     pub fn load_rebase_commits_from_hash(&mut self, path: &str, hash: &str) {
         // Instead of getting unpushed commits, we want to get the commits from the hash to HEAD.
-        let out = crate::git::commands::run_git(
-            path,
-            &["log", "--format=%h|%s", &format!("{hash}..HEAD")],
-        )
-        .unwrap_or_default();
+        let out = crate::actions::commands::get_commits_in_range(path, &format!("{hash}..HEAD"))
+            .unwrap_or_default();
         let commits: Vec<crate::state::ui::RebaseCommit> = out
             .lines()
             .map(|line| {
