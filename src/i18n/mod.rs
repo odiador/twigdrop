@@ -149,6 +149,7 @@ pub struct FooterStrings {
     pub files_normal: &'static str,
     pub commits_normal: &'static str,
     pub stashes_normal: &'static str,
+    pub pull_requests_normal: &'static str,
     pub status_tag: &'static str,
     pub preview: &'static str,
     pub diff: &'static str,

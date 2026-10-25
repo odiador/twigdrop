@@ -3,6 +3,7 @@ pub mod commits;
 pub mod diff;
 pub mod files;
 pub mod modals;
+pub mod pull_requests;
 pub mod stashes;
 
 pub use diff::update_diff_preview;
@@ -197,6 +198,15 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     format!("Filter: {label}"),
                     None,
                 );
+            } else if app.ui.primary_mode == PrimaryMode::PullRequests {
+                app.ui.pr_tab = match app.ui.pr_tab {
+                    crate::state::ui::PrTab::Description => crate::state::ui::PrTab::Diff,
+                    crate::state::ui::PrTab::Diff => crate::state::ui::PrTab::Description,
+                };
+                app.ui.pr_scroll_y = 0;
+                if app.ui.pr_tab == crate::state::ui::PrTab::Diff && app.repo.pr_diff.is_none() {
+                    app.fetch_current_pr_diff(path);
+                }
             }
             return false;
         }
@@ -242,6 +252,10 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     app.load_stash_detail(path);
                     app.ui.selected_stash_idx = 0;
                 }
+                PrimaryMode::PullRequests => {
+                    app.load_pull_requests(path);
+                    app.ui.selected_pr_idx = 0;
+                }
             }
             app.ui.track_history(app.ui.view());
             return false;
@@ -282,6 +296,13 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.ui.track_history(View::Stashes);
             return false;
         }
+        KeyCode::Char('P') => {
+            app.set_primary_mode(PrimaryMode::PullRequests);
+            app.load_pull_requests(path);
+            app.ui.selected_pr_idx = 0;
+            app.ui.track_history(View::PullRequests);
+            return false;
+        }
 
         KeyCode::Char('!') => {
             app.ui.push_modal(AppMode::Shell(String::new()));
@@ -301,5 +322,6 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         PrimaryMode::Files => files::handle_files_keyboard(app, key, path),
         PrimaryMode::Commits => commits::handle_commits_keyboard(app, key, path),
         PrimaryMode::Stashes => stashes::handle_stashes_keyboard(app, key, path),
+        PrimaryMode::PullRequests => pull_requests::handle_pull_requests_keyboard(app, key, path),
     }
 }

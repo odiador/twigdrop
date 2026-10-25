@@ -39,6 +39,7 @@ pub enum Action {
     OpenStashManager,
     OpenCommits,
     OpenRebase,
+    OpenPullRequests,
     QuickActions,
     Shell,
     Switcher,
@@ -200,6 +201,13 @@ pub static BINDINGS: &[Binding] = &[
         i18n_key: "modals.command_palette_title",
     },
     Binding {
+        id: "global.pull_requests",
+        action: Action::OpenPullRequests,
+        context: Context::Global,
+        keys: "Shift+P",
+        i18n_key: "footer.pull_requests_normal",
+    },
+    Binding {
         id: "global.quick_actions",
         action: Action::QuickActions,
         context: Context::Global,
@@ -313,6 +321,7 @@ pub fn from_key(key: KeyEvent) -> Option<Action> {
         KeyCode::Char('C') if shift || none => Some(A::OpenCommits),
         KeyCode::Char('R') if shift || none => Some(A::OpenRebase),
         KeyCode::Char('S') if shift || none => Some(A::OpenStashManager),
+        KeyCode::Char('P') if shift || none => Some(A::OpenPullRequests),
         _ => None,
     };
     if shift_action.is_some() {
@@ -452,6 +461,7 @@ mod tests {
             "global.commits",
             "global.stash_mgr",
             "global.rebase",
+            "global.pull_requests",
             "diff.ai_autofix",
             "global.quick_actions",
             "global.shell",

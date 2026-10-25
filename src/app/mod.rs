@@ -3,6 +3,7 @@ pub mod branches;
 pub mod deletion;
 pub mod files;
 pub mod preview;
+pub mod pull_requests;
 pub mod stash_rebase;
 
 pub use ai::AIState;
@@ -52,6 +53,7 @@ impl App {
             1 => PrimaryMode::Files,
             2 => PrimaryMode::Commits,
             3 => PrimaryMode::Stashes,
+            4 => PrimaryMode::PullRequests,
             _ => PrimaryMode::Branches,
         };
 
@@ -86,6 +88,8 @@ impl App {
         } else if app.ui.primary_mode == PrimaryMode::Stashes {
             app.load_stashes(repo_path);
             app.load_stash_detail(repo_path);
+        } else if app.ui.primary_mode == PrimaryMode::PullRequests {
+            app.load_pull_requests(repo_path);
         }
 
         app.refresh_filtered_branches();
@@ -97,7 +101,8 @@ impl App {
             PrimaryMode::Branches => PrimaryMode::Files,
             PrimaryMode::Files => PrimaryMode::Commits,
             PrimaryMode::Commits => PrimaryMode::Stashes,
-            PrimaryMode::Stashes => PrimaryMode::Branches,
+            PrimaryMode::Stashes => PrimaryMode::PullRequests,
+            PrimaryMode::PullRequests => PrimaryMode::Branches,
         };
         self.set_primary_mode(next_mode);
     }
@@ -114,6 +119,7 @@ impl App {
             PrimaryMode::Files => 1,
             PrimaryMode::Commits => 2,
             PrimaryMode::Stashes => 3,
+            PrimaryMode::PullRequests => 4,
         };
 
         if let Ok(mut w) = self.shared_primary_mode.write() {

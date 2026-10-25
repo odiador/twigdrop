@@ -146,6 +146,9 @@ pub fn render_views(f: &mut Frame, app: &App, area: Rect) {
         PrimaryMode::Stashes => {
             screens::render_stash_detail(f, area, app);
         }
+        PrimaryMode::PullRequests => {
+            screens::render_pull_requests(f, area, app);
+        }
     }
 }
 
@@ -197,6 +200,9 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
         PrimaryMode::Stashes => {
             format!(" 📦 Stashes │ {} │", app.repo.current_branch)
         }
+        PrimaryMode::PullRequests => {
+            format!(" 🐙 PRs │ {} │", app.repo.current_branch)
+        }
     };
     let status_prefix = if app.is_busy() {
         let tick = usize::try_from(app.frame_cache.borrow().spinner_tick).unwrap_or(0);
@@ -220,6 +226,7 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
             PrimaryMode::Files => loc.footer.files_normal,
             PrimaryMode::Commits => loc.footer.commits_normal,
             PrimaryMode::Stashes => loc.footer.stashes_normal,
+            PrimaryMode::PullRequests => loc.footer.pull_requests_normal,
         }
     };
 

@@ -4,6 +4,7 @@ pub mod diff;
 pub mod files;
 pub mod inspector;
 pub mod modals;
+pub mod pull_requests;
 pub mod sidebar;
 pub mod stashes;
 
@@ -18,4 +19,5 @@ pub use modals::{
     render_filter, render_help, render_main_menu, render_manage, render_message,
     render_quick_actions, render_rename_branch, render_settings, render_shell, render_switcher,
 };
+pub use pull_requests::render_pull_requests;
 pub use stashes::render_stash_detail;

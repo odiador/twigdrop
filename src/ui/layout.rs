@@ -56,6 +56,8 @@ pub const INSPECTOR_SPLIT: (u16, u16) = (65, 35);
 pub const SIDEBAR_SPLIT: (u16, u16) = (25, 75);
 /// Stashes view splits: list / detail and files / diff.
 pub const STASH_SPLIT: (u16, u16) = (30, 70);
+/// Pull Requests view splits: list / detail.
+pub const PR_SPLIT: (u16, u16) = (38, 62);
 
 /// Centered-rect sizes per modal (percent_x, percent_y). Single source for
 /// both render and mouse hit-testing (`calculate_modal_rect` delegates here).

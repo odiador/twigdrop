@@ -251,6 +251,14 @@ impl App {
                     self.ui.selected_stash_idx += 1;
                 }
             }
+            PrimaryMode::PullRequests => {
+                let max = self.repo.pull_requests.len().saturating_sub(1);
+                if self.ui.selected_pr_idx < max {
+                    self.ui.selected_pr_idx += 1;
+                    self.ui.pr_scroll_y = 0;
+                    self.fetch_current_pr_diff(path);
+                }
+            }
         }
     }
 
@@ -282,6 +290,13 @@ impl App {
             PrimaryMode::Stashes => {
                 if self.ui.selected_stash_idx > 0 {
                     self.ui.selected_stash_idx -= 1;
+                }
+            }
+            PrimaryMode::PullRequests => {
+                if self.ui.selected_pr_idx > 0 {
+                    self.ui.selected_pr_idx -= 1;
+                    self.ui.pr_scroll_y = 0;
+                    self.fetch_current_pr_diff(path);
                 }
             }
         }

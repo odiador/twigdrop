@@ -84,3 +84,26 @@ pub struct CommitTreeItem {
     pub author: String,
     pub message: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PullRequestAuthor {
+    pub login: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PullRequest {
+    pub number: u64,
+    pub title: String,
+    pub author: PullRequestAuthor,
+    #[serde(rename = "headRefName")]
+    pub head_ref_name: String,
+    #[serde(rename = "baseRefName")]
+    pub base_ref_name: String,
+    pub state: String,
+    #[serde(rename = "updatedAt", default)]
+    pub updated_at: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub body: String,
+}

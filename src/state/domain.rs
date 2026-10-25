@@ -28,6 +28,9 @@ pub struct RepositoryState {
     /// Sidebar cache: `(worktree name, branch)` pairs.
     /// Refreshed in update (`App::refresh_sidebar_worktrees`), never in render.
     pub worktrees: Vec<(String, String)>,
+    pub pull_requests: Vec<crate::models::PullRequest>,
+    pub pr_diff: Option<String>,
+    pub pr_error: Option<String>,
 }
 
 impl RepositoryState {
@@ -52,6 +55,9 @@ impl RepositoryState {
             inspector_branch: String::new(),
             inspector_commits: Vec::new(),
             worktrees: Vec::new(),
+            pull_requests: Vec::new(),
+            pr_diff: None,
+            pr_error: None,
         }
     }
 }

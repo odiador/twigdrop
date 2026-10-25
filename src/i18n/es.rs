@@ -119,6 +119,7 @@ pub static ES: Locale = Locale {
         files_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: commits │ e: explorador │ v: IDE │ s: stage/unstage │ !: consola │ t: TTY │ ?: ayuda │ q: salir ",
         commits_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: stashes │ Enter: detalles │ ?: ayuda │ q: salir ",
         stashes_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: ramas │ a: aplicar │ ?: ayuda │ q: salir ",
+        pull_requests_normal: " ↑/↓: mover │ Tab: pestañas │ f: filtro │ c: checkout │ o: web │ r: recargar │ Shift+Tab: cambiar │ q: salir ",
         status_tag: "ramas",
         preview: " hjkl: navegar │ Esc: cerrar │ [ / ]: redimensionar barra ",
         diff: " Shift+F: Auto-arreglo IA │ q/Esc: Atrás ",

@@ -589,3 +589,92 @@ fn branches_active_only_tab_toggle_filters_stale_branches() {
     assert!(!app.ui.branches_active_only);
     assert_eq!(app.ui.filtered_indices.len(), 3);
 }
+
+#[test]
+fn pull_requests_mode_keyboard_navigation_and_tab_diff_toggle() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::models::{PullRequest, PullRequestAuthor};
+    use twigdrop::state::ui::{PrFilter, PrTab, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+    let mut app = test_app(&p, vec![], "main");
+
+    // Press Shift+P to switch to PullRequests mode
+    let shift_p_key = KeyEvent::new(KeyCode::Char('P'), KeyModifiers::SHIFT);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, shift_p_key, &p);
+    assert_eq!(app.ui.primary_mode, PrimaryMode::PullRequests);
+
+    // Mock two PRs
+    app.repo.pull_requests = vec![
+        PullRequest {
+            number: 10,
+            title: "feat: first feature".to_string(),
+            author: PullRequestAuthor {
+                login: "bob".to_string(),
+            },
+            head_ref_name: "feat/first".to_string(),
+            base_ref_name: "main".to_string(),
+            state: "OPEN".to_string(),
+            updated_at: "2026-10-25".to_string(),
+            url: "https://github.com/test/repo/pull/10".to_string(),
+            body: "## Summary\nFirst PR description in **markdown**.".to_string(),
+        },
+        PullRequest {
+            number: 11,
+            title: "fix: second fix".to_string(),
+            author: PullRequestAuthor {
+                login: "charlie".to_string(),
+            },
+            head_ref_name: "fix/second".to_string(),
+            base_ref_name: "main".to_string(),
+            state: "MERGED".to_string(),
+            updated_at: "2026-10-24".to_string(),
+            url: "https://github.com/test/repo/pull/11".to_string(),
+            body: "Bug fix details.".to_string(),
+        },
+    ];
+    app.repo.pr_diff = Some("diff --git a/a.txt b/a.txt\n+added line\n-removed line\n".to_string());
+
+    assert_eq!(app.ui.selected_pr_idx, 0);
+    assert_eq!(app.ui.pr_tab, PrTab::Description);
+
+    // Tab key toggles between Description and Diff tab
+    let tab_key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
+    assert_eq!(app.ui.pr_tab, PrTab::Diff);
+
+    // 'j' navigates down to second PR
+    let j_key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, j_key, &p);
+    assert_eq!(app.ui.selected_pr_idx, 1);
+
+    // Render frame to ensure draw doesn't panic
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let content: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("Pull Requests"));
+    assert!(content.contains("#10"));
+    assert!(content.contains("first feature"));
+    assert!(content.contains("#11"));
+
+    // 'f' cycles filter from Open -> All
+    let f_key = KeyEvent::new(KeyCode::Char('f'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, f_key, &p);
+    assert_eq!(app.ui.pr_filter, PrFilter::All);
+}

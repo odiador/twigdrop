@@ -1,4 +1,5 @@
 pub mod commands;
+pub mod github;
 
 pub use commands::{
     abort_merge, abort_rebase, amend_commit_date, apply_stash, bulk_delete_branches,

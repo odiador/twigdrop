@@ -44,6 +44,54 @@ pub enum BranchSortMode {
     Alphabetical,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
+pub enum PrTab {
+    #[default]
+    Description,
+    Diff,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
+pub enum PrFilter {
+    #[default]
+    Open,
+    All,
+    Merged,
+    Closed,
+}
+
+impl PrFilter {
+    #[must_use]
+    pub const fn as_gh_arg(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::All => "all",
+            Self::Merged => "merged",
+            Self::Closed => "closed",
+        }
+    }
+
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Open => Self::All,
+            Self::All => Self::Merged,
+            Self::Merged => Self::Closed,
+            Self::Closed => Self::Open,
+        }
+    }
+
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Open => "Open",
+            Self::All => "All",
+            Self::Merged => "Merged",
+            Self::Closed => "Closed",
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum AppMode {
     Normal,
@@ -74,6 +122,7 @@ pub enum PrimaryMode {
     Files,
     Commits,
     Stashes,
+    PullRequests,
 }
 
 /// Canonical view: exactly one visible at a time.
@@ -84,11 +133,18 @@ pub enum View {
     Files,
     Commits,
     Stashes,
+    PullRequests,
 }
 
 impl View {
     /// All primary views, in sidebar order.
-    pub const ALL: [Self; 4] = [Self::Branches, Self::Files, Self::Commits, Self::Stashes];
+    pub const ALL: [Self; 5] = [
+        Self::Branches,
+        Self::Files,
+        Self::Commits,
+        Self::Stashes,
+        Self::PullRequests,
+    ];
 
     #[must_use]
     pub const fn from_primary(mode: PrimaryMode) -> Self {
@@ -97,6 +153,7 @@ impl View {
             PrimaryMode::Files => Self::Files,
             PrimaryMode::Commits => Self::Commits,
             PrimaryMode::Stashes => Self::Stashes,
+            PrimaryMode::PullRequests => Self::PullRequests,
         }
     }
 
@@ -107,6 +164,7 @@ impl View {
             Self::Files => "Files",
             Self::Commits => "Commit Tree",
             Self::Stashes => "Stashes",
+            Self::PullRequests => "Pull Requests",
         }
     }
 }
@@ -120,11 +178,12 @@ pub enum SwitchTarget {
 
 impl SwitchTarget {
     /// Single source for the switcher list (render + keyboard).
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::View(View::Files),
         Self::View(View::Branches),
         Self::View(View::Commits),
         Self::View(View::Stashes),
+        Self::View(View::PullRequests),
         Self::Help,
     ];
 
@@ -167,6 +226,10 @@ pub struct UiState {
     pub diff_file_selected: usize,
     pub selected_commit_idx: usize,
     pub selected_commit_file_idx: usize,
+    pub selected_pr_idx: usize,
+    pub pr_tab: PrTab,
+    pub pr_filter: PrFilter,
+    pub pr_scroll_y: u16,
 
     // Scrolling
     pub info_scroll: u16,
@@ -232,6 +295,10 @@ impl UiState {
             diff_file_selected: 0,
             selected_commit_idx: 0,
             selected_commit_file_idx: 0,
+            selected_pr_idx: 0,
+            pr_tab: PrTab::Description,
+            pr_filter: PrFilter::Open,
+            pr_scroll_y: 0,
             info_scroll: 0,
             current_filter: None,
             search_query: String::new(),
@@ -419,6 +486,10 @@ mod tests {
         assert_eq!(UiState::new(PrimaryMode::Files, 30).view(), View::Files);
         assert_eq!(UiState::new(PrimaryMode::Commits, 30).view(), View::Commits);
         assert_eq!(UiState::new(PrimaryMode::Stashes, 30).view(), View::Stashes);
+        assert_eq!(
+            UiState::new(PrimaryMode::PullRequests, 30).view(),
+            View::PullRequests
+        );
     }
 
     #[test]
@@ -449,7 +520,7 @@ mod tests {
     #[test]
     fn test_switcher_targets_cover_views() {
         use SwitchTarget as T;
-        assert_eq!(SwitchTarget::ALL.len(), 5);
+        assert_eq!(SwitchTarget::ALL.len(), 6);
         for view in View::ALL {
             assert!(SwitchTarget::ALL.contains(&T::View(view)), "{view:?}");
         }

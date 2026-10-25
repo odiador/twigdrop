@@ -34,6 +34,12 @@ pub fn handle(app: &mut App, key: KeyEvent, path: &str) -> Option<bool> {
                     app.load_stash_detail(path);
                     app.ui.track_history(View::Stashes);
                 }
+                SwitchTarget::View(View::PullRequests) => {
+                    app.set_primary_mode(PrimaryMode::PullRequests);
+                    app.load_pull_requests(path);
+                    app.ui.selected_pr_idx = 0;
+                    app.ui.track_history(View::PullRequests);
+                }
                 SwitchTarget::Help => {
                     app.ui.push_modal(AppMode::Help);
                 }

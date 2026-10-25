@@ -78,6 +78,15 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                         app.load_stash_detail(path);
                     }
                 }
+                PrimaryMode::PullRequests => {
+                    if row > 0 {
+                        let idx = row.saturating_sub(1);
+                        if idx < app.repo.pull_requests.len() {
+                            app.ui.selected_pr_idx = idx;
+                            app.fetch_current_pr_diff(path);
+                        }
+                    }
+                }
             }
         }
         MouseEventKind::Drag(MouseButton::Left) => {

@@ -191,3 +191,29 @@ fn test_ui_draw_current_branch_hero() {
     assert!(content.contains("Sync:"));
     assert!(content.contains("Working tree:"));
 }
+
+#[test]
+fn test_ui_draw_pull_requests_view() {
+    let mut app = create_test_app();
+    app.set_primary_mode(crate::state::ui::PrimaryMode::PullRequests);
+    app.repo.pull_requests = vec![crate::models::PullRequest {
+        number: 42,
+        title: "Add awesome markdown support".to_string(),
+        author: crate::models::PullRequestAuthor {
+            login: "alice".to_string(),
+        },
+        head_ref_name: "feat/md".to_string(),
+        base_ref_name: "main".to_string(),
+        state: "OPEN".to_string(),
+        updated_at: "2026-10-25".to_string(),
+        url: "https://github.com/test/repo/pull/42".to_string(),
+        body: "# Feature Title\n- [x] Tested markdown".to_string(),
+    }];
+    let (_, content) = render_terminal(&mut app, 120, 30);
+    assert!(content.contains("Pull Requests [Open]"));
+    assert!(content.contains("#42"));
+    assert!(content.contains("Add awesome markdown support"));
+    assert!(content.contains("@alice"));
+    assert!(content.contains("Description (Markdown)"));
+    assert!(content.contains("Feature Title"));
+}

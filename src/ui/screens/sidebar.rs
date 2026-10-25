@@ -35,6 +35,7 @@ pub fn render_sidebar_menu(f: &mut Frame, area: Rect, app: &App) {
         ("📁 Changed Files", PrimaryMode::Files),
         ("📜 Commit Graph", PrimaryMode::Commits),
         ("🗃️ Stashes", PrimaryMode::Stashes),
+        ("🐙 Pull Requests", PrimaryMode::PullRequests),
     ];
 
     let mut view_lines = vec![];
