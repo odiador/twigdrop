@@ -121,6 +121,12 @@ pub struct Theme {
     pub backdrop_fg: Color,
     pub surface: Color,
     pub surface_alt: Color,
+    pub diff_add_bg: Color,
+    pub diff_add_fg: Color,
+    pub diff_del_bg: Color,
+    pub diff_del_fg: Color,
+    pub diff_hunk_bg: Color,
+    pub diff_hunk_fg: Color,
 }
 
 impl Default for Theme {
@@ -184,6 +190,12 @@ impl Theme {
             backdrop_fg: Color::Rgb(88, 91, 112),
             surface: Color::Rgb(30, 30, 46),
             surface_alt: Color::Rgb(24, 24, 37),
+            diff_add_bg: Color::Rgb(25, 55, 35),
+            diff_add_fg: Color::Rgb(166, 227, 161),
+            diff_del_bg: Color::Rgb(65, 25, 30),
+            diff_del_fg: Color::Rgb(243, 139, 168),
+            diff_hunk_bg: Color::Rgb(30, 42, 60),
+            diff_hunk_fg: Color::Rgb(137, 220, 235),
         }
     }
 
@@ -245,6 +257,12 @@ impl Theme {
             backdrop_fg: Color::Rgb(88, 91, 112),
             surface: Color::Rgb(230, 233, 239),
             surface_alt: Color::Rgb(239, 241, 245),
+            diff_add_bg: Color::Rgb(220, 245, 220),
+            diff_add_fg: Color::Rgb(40, 140, 30),
+            diff_del_bg: Color::Rgb(255, 225, 225),
+            diff_del_fg: Color::Rgb(200, 20, 40),
+            diff_hunk_bg: Color::Rgb(230, 240, 255),
+            diff_hunk_fg: Color::Rgb(30, 100, 220),
         }
     }
 

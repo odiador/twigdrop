@@ -166,10 +166,13 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
             format!("{:>3} ", i + 1),
             Style::default().fg(Color::DarkGray),
         )];
-        spans.push(match state.line_diffs.get(&i) {
-            Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(Color::Green)),
-            Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Blue)),
-            Some(GutterStatus::Deleted) => Span::styled("~ ", Style::default().fg(Color::Red)),
+        let gutter_diff = state.line_diffs.get(&i);
+        spans.push(match gutter_diff {
+            Some(GutterStatus::Added) => Span::styled("+ ", Style::default().fg(theme.diff_add_fg)),
+            Some(GutterStatus::Modified) => Span::styled("| ", Style::default().fg(Color::Cyan)),
+            Some(GutterStatus::Deleted) => {
+                Span::styled("~ ", Style::default().fg(theme.diff_del_fg))
+            }
             None => Span::raw("  "),
         });
 
@@ -192,6 +195,12 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
             line_style = line_style.bg(theme.cursor_unfocused);
         } else if is_selected {
             line_style = line_style.bg(theme.select_range);
+        } else if let Some(diff) = gutter_diff {
+            match diff {
+                GutterStatus::Added => line_style = line_style.bg(theme.diff_add_bg),
+                GutterStatus::Deleted => line_style = line_style.bg(theme.diff_del_bg),
+                GutterStatus::Modified => line_style = line_style.bg(theme.tint_modified),
+            }
         }
 
         for span in &h_line.spans {

@@ -30,6 +30,7 @@ fn create_test_app() -> App {
         ai_tx,
         conflict_tx,
     );
+    app.set_primary_mode(crate::state::ui::PrimaryMode::Branches);
     app.refresh_filtered_branches();
     app
 }
@@ -77,6 +78,7 @@ fn test_ui_draw_empty_branches() {
     let (ai_tx, _) = mpsc::channel(1);
     let (conflict_tx, _) = mpsc::channel(1);
     let mut app = App::new(".", vec![], "main".to_string(), tx, ai_tx, conflict_tx);
+    app.set_primary_mode(crate::state::ui::PrimaryMode::Branches);
     app.refresh_filtered_branches();
     let (_, content) = render_terminal(&mut app, 120, 30);
     assert!(content.contains("No branches match"));

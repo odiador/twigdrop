@@ -58,12 +58,15 @@ pub fn render_stash_detail(f: &mut Frame, area: Rect, app: &App) {
             .borders(Borders::ALL),
     );
     f.render_widget(files_p, detail_chunks[0]);
-    let diff_p = Paragraph::new(app.repo.stash_diff.as_str())
+    let diff_lines = crate::ui::components::format_diff_with_gutters(&app.repo.stash_diff, &theme);
+    let diff_p = Paragraph::new(diff_lines)
         .block(
             Block::default()
-                .title(" Diff Preview ")
-                .borders(Borders::ALL),
+                .title(" Diff Preview [d/u: scroll] ")
+                .borders(Borders::ALL)
+                .border_style(theme.border),
         )
-        .scroll((app.ui.info_scroll, 0));
+        .scroll((app.ui.info_scroll, 0))
+        .wrap(ratatui::widgets::Wrap { trim: false });
     f.render_widget(diff_p, detail_chunks[1]);
 }

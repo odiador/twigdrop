@@ -108,12 +108,14 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(list, list_area);
 
     if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx) {
+        let total_files = app.repo.commit_files.len();
+        let files_height = (total_files as u16 + 2).clamp(7, 12);
         let detail_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(5),
-                Constraint::Length(7),
-                Constraint::Min(4),
+                Constraint::Length(files_height),
+                Constraint::Min(6),
             ])
             .split(details_area);
 
@@ -165,11 +167,30 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
         } else {
             theme.border.fg.unwrap_or(Color::DarkGray)
         };
+
+        let visible_rows = detail_chunks[1].height.saturating_sub(2) as usize;
+        let visible_rows = visible_rows.max(1);
+        let sel_idx = app.ui.selected_commit_file_idx;
+        let start_idx = if sel_idx >= visible_rows {
+            sel_idx + 1 - visible_rows
+        } else {
+            0
+        };
+        let end_idx = (start_idx + visible_rows).min(total_files);
+
+        let files_title = if total_files == 0 {
+            " Files (0) [Tab: switch] ".to_string()
+        } else {
+            format!(
+                " Files ({}) [{}/{}] [Tab: switch] ",
+                total_files,
+                sel_idx + 1,
+                total_files
+            )
+        };
+
         let files_block = Block::default()
-            .title(format!(
-                " Files ({}) [Tab: switch] ",
-                app.repo.commit_files.len()
-            ))
+            .title(files_title)
             .borders(Borders::ALL)
             .border_style(Style::default().fg(files_border_color));
 
@@ -177,8 +198,10 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
         if app.repo.commit_files.is_empty() {
             file_items.push(ListItem::new(" No files changed in this commit ").style(theme.dim));
         } else {
-            for (i, entry) in app.repo.commit_files.iter().enumerate() {
-                let is_selected = i == app.ui.selected_commit_file_idx;
+            for (i, entry) in app.repo.commit_files[start_idx..end_idx].iter().enumerate() {
+                let actual_idx = start_idx + i;
+                let is_selected = actual_idx == sel_idx;
+
                 let (badge, badge_color) = match entry.status {
                     FileStatus::Added => ("[A]", theme.merged.fg.unwrap_or(Color::Green)),
                     FileStatus::Modified => ("[M]", theme.warning.fg.unwrap_or(Color::Yellow)),
@@ -188,20 +211,48 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
                     _ => ("[·]", Color::Gray),
                 };
 
-                let mut text_style = Style::default();
-                if is_selected {
+                let pointer = if is_selected { "▸ " } else { "  " };
+
+                let (row_bg, row_fg) = if is_selected {
                     if files_focused {
-                        text_style = theme.select_hi;
+                        (Some(Color::Rgb(45, 65, 105)), Color::White)
                     } else {
-                        text_style = Style::default().bg(theme.select_soft);
+                        (Some(Color::Rgb(40, 42, 60)), Color::Rgb(220, 224, 240))
                     }
+                } else {
+                    (None, Color::Rgb(180, 185, 205))
+                };
+
+                let mut item_style = Style::default().fg(row_fg);
+                if let Some(bg) = row_bg {
+                    item_style = item_style.bg(bg);
+                }
+                if is_selected {
+                    item_style = item_style.add_modifier(Modifier::BOLD);
                 }
 
                 let line = Line::from(vec![
-                    Span::styled(format!("{badge} "), Style::default().fg(badge_color)),
-                    Span::styled(entry.path.to_string_lossy().to_string(), text_style),
-                ]);
-                file_items.push(ListItem::new(line).style(text_style));
+                    Span::styled(
+                        pointer,
+                        if is_selected {
+                            Style::default()
+                                .fg(Color::Yellow)
+                                .add_modifier(Modifier::BOLD)
+                        } else {
+                            item_style
+                        },
+                    ),
+                    Span::styled(
+                        format!("{badge} "),
+                        Style::default()
+                            .fg(badge_color)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(entry.path.to_string_lossy().to_string(), item_style),
+                ])
+                .style(item_style);
+
+                file_items.push(ListItem::new(line).style(item_style));
             }
         }
         let files_list = List::new(file_items).block(files_block);

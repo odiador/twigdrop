@@ -151,9 +151,12 @@ pub fn format_diff_with_gutters<'a>(diff: &str, theme: &Theme) -> Vec<Line<'a>> 
     let mut new_lineno = 1usize;
     let mut in_hunk = false;
 
-    let green = theme.merged.fg.unwrap_or(Color::Green);
-    let red = theme.danger.fg.unwrap_or(Color::Red);
-    let cyan = theme.nav.fg.unwrap_or(Color::Cyan);
+    let add_style = Style::default().fg(theme.diff_add_fg).bg(theme.diff_add_bg);
+    let del_style = Style::default().fg(theme.diff_del_fg).bg(theme.diff_del_bg);
+    let hunk_style = Style::default()
+        .fg(theme.diff_hunk_fg)
+        .bg(theme.diff_hunk_bg)
+        .add_modifier(Modifier::BOLD);
 
     for line in diff.lines() {
         if line.starts_with("@@") {
@@ -162,13 +165,13 @@ pub fn format_diff_with_gutters<'a>(diff: &str, theme: &Theme) -> Vec<Line<'a>> 
                 new_lineno = new_start;
                 in_hunk = true;
             }
-            lines.push(Line::from(vec![
-                Span::styled("───────┼── ", theme.dim),
-                Span::styled(
-                    line.to_string(),
-                    Style::default().fg(cyan).add_modifier(Modifier::BOLD),
-                ),
-            ]));
+            lines.push(
+                Line::from(vec![
+                    Span::styled("───────┼── ", hunk_style),
+                    Span::styled(line.to_string(), hunk_style),
+                ])
+                .style(hunk_style),
+            );
         } else if !in_hunk
             || line.starts_with("diff --git")
             || line.starts_with("index ")
@@ -180,22 +183,28 @@ pub fn format_diff_with_gutters<'a>(diff: &str, theme: &Theme) -> Vec<Line<'a>> 
                 Span::styled(line.to_string(), theme.dim),
             ]));
         } else if let Some(stripped) = line.strip_prefix('+') {
-            lines.push(Line::from(vec![
-                Span::styled("     ", theme.dim),
-                Span::styled(format!("{:>4} ", new_lineno), green),
-                Span::styled("│ ", theme.dim),
-                Span::styled("+ ", green),
-                Span::styled(stripped.to_string(), green),
-            ]));
+            lines.push(
+                Line::from(vec![
+                    Span::styled("     ", add_style),
+                    Span::styled(format!("{:>4} ", new_lineno), add_style),
+                    Span::styled("│ ", add_style),
+                    Span::styled("+ ", add_style.add_modifier(Modifier::BOLD)),
+                    Span::styled(stripped.to_string(), add_style),
+                ])
+                .style(add_style),
+            );
             new_lineno += 1;
         } else if let Some(stripped) = line.strip_prefix('-') {
-            lines.push(Line::from(vec![
-                Span::styled(format!("{:>4} ", old_lineno), red),
-                Span::styled("     ", theme.dim),
-                Span::styled("│ ", theme.dim),
-                Span::styled("- ", red),
-                Span::styled(stripped.to_string(), red),
-            ]));
+            lines.push(
+                Line::from(vec![
+                    Span::styled(format!("{:>4} ", old_lineno), del_style),
+                    Span::styled("     ", del_style),
+                    Span::styled("│ ", del_style),
+                    Span::styled("- ", del_style.add_modifier(Modifier::BOLD)),
+                    Span::styled(stripped.to_string(), del_style),
+                ])
+                .style(del_style),
+            );
             old_lineno += 1;
         } else if let Some(stripped) = line.strip_prefix(' ') {
             lines.push(Line::from(vec![
