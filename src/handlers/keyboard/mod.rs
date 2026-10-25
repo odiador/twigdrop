@@ -180,8 +180,18 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         }
         KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::ALT) => {
             app.toggle_primary_mode();
-            if app.ui.primary_mode == PrimaryMode::Files {
-                app.load_file_tree(path);
+            match app.ui.primary_mode {
+                PrimaryMode::Branches => {}
+                PrimaryMode::Files => app.load_file_tree(path),
+                PrimaryMode::Commits => {
+                    app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
+                    app.ui.selected_commit_idx = 0;
+                }
+                PrimaryMode::Stashes => {
+                    app.load_stashes(path);
+                    app.load_stash_detail(path);
+                    app.ui.selected_stash_idx = 0;
+                }
             }
             app.ui.track_history(app.ui.view());
             return false;
@@ -190,6 +200,17 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
         // but some terminals strip the flag — accept bare uppercase too
         // (mirrors `crate::input::from_key`). Lowercase variants stay reserved
         // for type-to-filter.
+        KeyCode::Char('B') => {
+            app.set_primary_mode(PrimaryMode::Branches);
+            app.ui.track_history(View::Branches);
+            return false;
+        }
+        KeyCode::Char('F') => {
+            app.set_primary_mode(PrimaryMode::Files);
+            app.load_file_tree(path);
+            app.ui.track_history(View::Files);
+            return false;
+        }
         KeyCode::Char('C') => {
             app.set_primary_mode(PrimaryMode::Commits);
             app.repo.commit_tree = crate::git::commands::get_commit_tree(path);

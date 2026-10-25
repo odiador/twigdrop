@@ -1,7 +1,9 @@
 use crate::events::{Event, GitEvent, TaskEvent};
 use crate::models::{Branch, ConflictBlock};
 use crate::state::ui::RebaseAction;
-use crate::state::{AppMode, FrameCache, PreviewState, PrimaryMode, RepositoryState, UiState};
+use crate::state::{
+    AppMode, FilePanel, FrameCache, PreviewState, PrimaryMode, RepositoryState, UiState,
+};
 use ratatui::style::{Color, Style};
 use ratatui::text::{Line, Span};
 use std::cell::RefCell;
@@ -103,6 +105,11 @@ impl App {
     }
 
     pub fn set_primary_mode(&mut self, mode: PrimaryMode) {
+        if self.ui.primary_mode != mode && matches!(self.ui.current_mode(), AppMode::CodePreview(_))
+        {
+            self.ui.pop_modal();
+            self.ui.active_panel = FilePanel::Directory;
+        }
         self.ui.primary_mode = mode;
         self.config.last_primary_mode = match mode {
             PrimaryMode::Branches => 0,
@@ -465,6 +472,9 @@ impl App {
         let mut new_tree = Vec::new();
         self.build_tree_recursive(path, "", 0, &mut new_tree);
         self.repo.file_tree = new_tree;
+        if self.ui.selected_file_idx >= self.repo.file_tree.len() {
+            self.ui.selected_file_idx = self.repo.file_tree.len().saturating_sub(1);
+        }
     }
 
     fn build_tree_recursive(

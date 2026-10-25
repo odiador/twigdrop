@@ -103,6 +103,13 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         );
     }
 
+    if app.repo.file_tree.is_empty() {
+        items.push(ListItem::new(Line::from(vec![
+            Span::raw("  "),
+            Span::styled("No files found", theme.dim),
+        ])));
+    }
+
     let list = List::new(items).block(block);
     f.render_widget(list, sidebar_area);
 

@@ -133,7 +133,9 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                     state.scroll_y -= 1;
                 }
             } else if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
-                if let AppMode::CodePreview(state) = app.ui.current_mode_mut()
+                if app.ui.active_panel == FilePanel::Directory {
+                    app.previous(path);
+                } else if let AppMode::CodePreview(state) = app.ui.current_mode_mut()
                     && state.scroll_y > 0
                 {
                     state.scroll_y -= 1;
@@ -156,7 +158,9 @@ pub fn handle_mouse(app: &mut App, event: MouseEvent, path: &str) {
                     }
                 }
             } else if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
-                if let AppMode::CodePreview(state) = app.ui.current_mode_mut() {
+                if app.ui.active_panel == FilePanel::Directory {
+                    app.next(path);
+                } else if let AppMode::CodePreview(state) = app.ui.current_mode_mut() {
                     let line_count = state.lines.len();
                     if state.scroll_y < line_count.saturating_sub(1) {
                         state.scroll_y += 1;
@@ -374,6 +378,9 @@ fn handle_directory_click(app: &mut App, row: usize, path: &str, col: usize) {
                     .to_string_lossy()
                     .to_string();
                 if let Some(preview) = app.create_preview_state(path, &rel_path) {
+                    if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
+                        app.ui.pop_modal();
+                    }
                     app.ui.push_modal(AppMode::CodePreview(preview));
                 }
             }

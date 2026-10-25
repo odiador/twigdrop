@@ -500,6 +500,7 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
                         }
                         SwitchTarget::View(View::Files) => {
                             app.set_primary_mode(PrimaryMode::Files);
+                            app.load_file_tree(path);
                             app.ui.track_history(View::Files);
                         }
                         SwitchTarget::View(View::Commits) => {
@@ -824,14 +825,22 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
             if key.code == KeyCode::Esc || key.code == KeyCode::Char('q') {
                 app.ui.pop_modal();
                 app.ui.active_panel = FilePanel::Directory;
+                Some(false)
+            } else if key.code == KeyCode::Tab
+                || key.code == KeyCode::BackTab
+                || key.modifiers.contains(KeyModifiers::ALT)
+                || key.modifiers.contains(KeyModifiers::CONTROL)
+            {
+                None
             } else if app.ui.active_panel == FilePanel::Preview {
                 let res = super::files::handle_preview_keyboard(&mut state, key.code);
                 if let AppMode::CodePreview(s) = app.ui.current_mode_mut() {
                     *s = state;
                 }
-                return Some(res);
+                Some(res)
+            } else {
+                None
             }
-            Some(false)
         }
         AppMode::CommandPalette(mut state) => {
             let visible_actions: Vec<_> = state

@@ -21,6 +21,9 @@ pub fn draw(f: &mut Frame, app: &mut App, path: &str) {
     if app.ui.show_nav_sidebar {
         app.refresh_sidebar_worktrees(path);
     }
+    if app.ui.primary_mode == PrimaryMode::Files && app.repo.file_tree.is_empty() {
+        app.load_file_tree(path);
+    }
 
     // Advance the busy spinner once per frame while background work runs.
     if app.is_busy() {
@@ -265,7 +268,8 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
     // 5. Modals and Overlays (overlay set owned by `AppMode::is_overlay`)
     let is_modal = !app.ui.modal_stack.is_empty();
     let is_overlay_modal = app.ui.current_mode().is_overlay();
-    if is_modal && !is_overlay_modal {
+    let is_code_preview = matches!(app.ui.current_mode(), AppMode::CodePreview(_));
+    if is_modal && !is_overlay_modal && !is_code_preview {
         let overlay = Rect::new(0, 0, f.area().width, f.area().height);
         f.render_widget(ratatui::widgets::Clear, overlay);
     }
@@ -278,7 +282,7 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
         AppMode::Filter => screens::render_filter(f, app),
         AppMode::Manage => screens::render_manage(f, app),
         AppMode::Diff => screens::render_diff(f, app),
-        AppMode::CodePreview(state) => screens::render_code_preview(f, app, f.area(), state),
+        AppMode::CodePreview(_) => {} // Rendered inline in render_directory_searcher
         AppMode::ConfirmDelete(names) => screens::render_confirm_delete(f, names, loc, &theme),
         AppMode::CreateBranch(input) => screens::render_create_branch(f, input, &theme),
         AppMode::RenameBranch(old, input) => screens::render_rename_branch(f, old, input, &theme),

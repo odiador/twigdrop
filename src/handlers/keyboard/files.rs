@@ -5,17 +5,33 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent};
 pub fn handle_preview_keyboard(state: &mut PreviewState, code: KeyCode) -> bool {
     let line_count = state.lines.len();
     match code {
-        KeyCode::Down if state.cursor_y < line_count.saturating_sub(1) => {
+        KeyCode::Down | KeyCode::Char('j') if state.cursor_y < line_count.saturating_sub(1) => {
             state.cursor_y += 1;
             if state.cursor_y >= state.scroll_y + 20 {
                 state.scroll_y += 1;
             }
         }
-        KeyCode::Up if state.cursor_y > 0 => {
+        KeyCode::Up | KeyCode::Char('k') if state.cursor_y > 0 => {
             state.cursor_y -= 1;
             if state.cursor_y < state.scroll_y {
                 state.scroll_y = state.cursor_y;
             }
+        }
+        KeyCode::PageDown => {
+            state.cursor_y = (state.cursor_y + 20).min(line_count.saturating_sub(1));
+            state.scroll_y = (state.scroll_y + 20).min(line_count.saturating_sub(1));
+        }
+        KeyCode::PageUp => {
+            state.cursor_y = state.cursor_y.saturating_sub(20);
+            state.scroll_y = state.scroll_y.saturating_sub(20);
+        }
+        KeyCode::Home => {
+            state.cursor_y = 0;
+            state.scroll_y = 0;
+        }
+        KeyCode::End => {
+            state.cursor_y = line_count.saturating_sub(1);
+            state.scroll_y = line_count.saturating_sub(20);
         }
         _ => {}
     }
@@ -150,6 +166,9 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 } else {
                     let rel_path = entry.path.to_string_lossy().to_string();
                     if let Some(preview) = app.create_preview_state(path, &rel_path) {
+                        if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
+                            app.ui.pop_modal();
+                        }
                         app.ui.push_modal(AppMode::CodePreview(preview));
                     }
                 }

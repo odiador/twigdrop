@@ -290,3 +290,105 @@ fn get_branch_commits_respects_limit() {
     assert_eq!(commits.len(), 4);
     assert_eq!(commits[0].message, "c5");
 }
+
+#[test]
+fn mode_switch_to_files_populates_file_tree() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use twigdrop::state::{AppMode, FilePanel, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+    let mut app = test_app(&p, vec![], "main");
+
+    // Start in Branches mode with empty file_tree
+    app.set_primary_mode(PrimaryMode::Branches);
+    app.repo.file_tree.clear();
+    assert_eq!(app.ui.primary_mode, PrimaryMode::Branches);
+    assert!(app.repo.file_tree.is_empty());
+
+    // Switch mode to Files (like via switcher or Alt+D)
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+
+    assert_eq!(app.ui.primary_mode, PrimaryMode::Files);
+    assert!(!app.repo.file_tree.is_empty());
+    assert!(
+        app.repo
+            .file_tree
+            .iter()
+            .any(|e| e.path.to_string_lossy().contains("README.md"))
+    );
+
+    // Open code preview
+    let preview = app.create_preview_state(&p, "README.md").expect("preview");
+    app.ui.push_modal(AppMode::CodePreview(preview));
+    assert!(matches!(app.ui.current_mode(), AppMode::CodePreview(_)));
+
+    // Verify drawing renders both the directory block and the preview title
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let content: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("Files"));
+    assert!(content.contains("Preview: README.md"));
+
+    // Switch away from Files mode to Branches: CodePreview modal should be cleaned up
+    app.set_primary_mode(PrimaryMode::Branches);
+    assert_eq!(app.ui.primary_mode, PrimaryMode::Branches);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+    assert_eq!(app.ui.active_panel, FilePanel::Directory);
+}
+
+#[test]
+fn code_preview_tab_toggles_focus_and_allows_directory_navigation() {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::{AppMode, FilePanel, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+    // Add another file so we have 2 files to navigate
+    std::fs::write(dir.path().join("LICENSE"), "MIT").expect("write license");
+    let mut app = test_app(&p, vec![], "main");
+
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+    assert_eq!(app.repo.file_tree.len(), 2);
+
+    // Open preview on first file
+    let rel_path = app.repo.file_tree[0].path.to_string_lossy().to_string();
+    let preview = app.create_preview_state(&p, &rel_path).expect("preview");
+    app.ui.push_modal(AppMode::CodePreview(preview));
+    assert_eq!(app.ui.active_panel, FilePanel::Directory);
+
+    // When focus is in Directory, down arrow navigates to second file
+    let down_key = KeyEvent::new(KeyCode::Down, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, down_key, &p);
+    assert_eq!(app.ui.selected_file_idx, 1);
+
+    // Tab key toggles focus to Preview panel
+    let tab_key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
+    assert_eq!(app.ui.active_panel, FilePanel::Preview);
+
+    // Tab key again toggles back to Directory panel
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
+    assert_eq!(app.ui.active_panel, FilePanel::Directory);
+
+    // Esc closes preview
+    let esc_key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc_key, &p);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+}
