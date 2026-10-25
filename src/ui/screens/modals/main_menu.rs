@@ -17,14 +17,15 @@ pub fn render_transparent_ascii(
         return;
     }
 
-    let max_width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(0) as u16;
-    let height = lines.len() as u16;
+    let max_width =
+        u16::try_from(lines.iter().map(|l| l.chars().count()).max().unwrap_or(0)).unwrap_or(0);
+    let height = u16::try_from(lines.len()).unwrap_or(0);
 
     let start_x = area.x + area.width.saturating_sub(max_width) / 2;
     let start_y = area.y + area.height.saturating_sub(height) / 2;
 
     for (row_idx, line) in lines.iter().enumerate() {
-        let y = start_y + row_idx as u16;
+        let y = start_y.saturating_add(u16::try_from(row_idx).unwrap_or(u16::MAX));
         if y >= area.bottom() {
             break;
         }

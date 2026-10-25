@@ -196,7 +196,7 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
         }
     };
     let status_prefix = if app.is_busy() {
-        let tick = app.frame_cache.borrow().spinner_tick as usize;
+        let tick = usize::try_from(app.frame_cache.borrow().spinner_tick).unwrap_or(0);
         let frames = crate::ui::theme::SPINNER_FRAMES;
         format!("{} {}", frames[tick % frames.len()], status_prefix)
     } else {

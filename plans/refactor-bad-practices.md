@@ -135,8 +135,8 @@ missing_errors_doc = "allow"
 ## Checklist
 
 - [x] Fase 1 — código muerto conectado o eliminado (0 `#[allow(dead_code)]`)
-- [ ] Fase 2 — ningún archivo >400 líneas con responsabilidades mezcladas
-- [ ] Fase 3 — 0 `run_git` fuera de `src/git` / `src/actions`
-- [ ] Fase 4 — 0 magic strings de branches sintéticas, remote, formatos y tiempos
-- [ ] Fase 5 — `GitError` tipado
-- [ ] Fase 6 — pedantic + CI
+- [x] Fase 2 — ningún archivo >400 líneas con responsabilidades mezcladas
+- [x] Fase 3 — 0 `run_git` fuera de `src/git` / `src/actions`
+- [x] Fase 4 — 0 magic strings de branches sintéticas, remote, formatos y tiempos
+- [x] Fase 5 — `GitError` tipado
+- [x] Fase 6 — pedantic + CI

@@ -114,10 +114,13 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
         let selected = branch_idx == app.ui.selected_branch_idx;
         let is_current = b.name == app.repo.current_branch;
 
-        app.frame_cache
-            .borrow_mut()
-            .branch_screen_positions
-            .push((actual_idx, table_area.y + 3 + i as u16));
+        app.frame_cache.borrow_mut().branch_screen_positions.push((
+            actual_idx,
+            table_area
+                .y
+                .saturating_add(3)
+                .saturating_add(u16::try_from(i).unwrap_or(u16::MAX)),
+        ));
 
         let (icons, color) = get_status_icons(&b.status, &theme);
         let (merge_text, merge_color) =

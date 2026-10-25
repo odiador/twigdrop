@@ -59,7 +59,10 @@ impl App {
 
         let mut app = Self {
             repo: RepositoryState::new(current_branch, branches),
-            ui: UiState::new(primary_mode, config.default_sidebar_width as u16),
+            ui: UiState::new(
+                primary_mode,
+                u16::try_from(config.default_sidebar_width).unwrap_or(30),
+            ),
             ai_state: AIState {
                 db: None,
                 ai_analysis: None,

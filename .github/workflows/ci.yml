@@ -21,7 +21,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Linting (Clippy)
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Run Tests
         run: cargo test

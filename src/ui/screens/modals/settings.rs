@@ -99,7 +99,8 @@ pub fn render_settings(f: &mut Frame, app: &App) {
 
     if app.ui.settings_state.selecting {
         let menu_width = 40;
-        let menu_height = app.ui.settings_state.choices.len().min(10) as u16 + 2;
+        let menu_height =
+            u16::try_from(app.ui.settings_state.choices.len().min(10)).unwrap_or(10) + 2;
 
         let center_x = inner.x + (inner.width / 2);
         let center_y = inner.y + (inner.height / 2);

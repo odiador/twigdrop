@@ -42,10 +42,12 @@ format:
 	cargo fmt
 
 lint:
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets -- -D warnings
 
 check:
-	cargo check
+	cargo fmt --check
+	cargo clippy --all-targets -- -D warnings
+	cargo test
 
 test:
 	cargo test
