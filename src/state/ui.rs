@@ -3,6 +3,13 @@ use crate::ui::animations::SnapAnimation;
 use std::collections::HashSet;
 use std::time::Instant;
 
+pub use crate::state::frame_cache::FrameCache;
+pub use crate::state::modals::{
+    CommandAction, CommandPaletteState, DatePickerField, DatePickerState, MainMenuState,
+    ModalState, QuickActionsState, SettingsState,
+};
+pub use crate::state::rebase::{RebaseAction, RebaseCommit, RebaseState};
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct PreviewState {
     pub file_path: String,
@@ -15,39 +22,19 @@ pub struct PreviewState {
     pub line_diffs: std::collections::HashMap<usize, GutterStatus>,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy, Default)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
 pub enum FilePanel {
     #[default]
     Directory,
     Preview,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy, Default)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
 pub enum BranchSortMode {
     #[default]
     Recent,
     PrunableFirst,
     Alphabetical,
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum DatePickerField {
-    Year,
-    Month,
-    Day,
-    Hour,
-    Minute,
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub struct DatePickerState {
-    pub year: i32,
-    pub month: u32,
-    pub day: u32,
-    pub hour: u32,
-    pub minute: u32,
-    pub second: u32,
-    pub active_field: DatePickerField,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -74,7 +61,7 @@ pub enum AppMode {
     CommandPalette(CommandPaletteState),
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum PrimaryMode {
     Branches,
     Files,
@@ -84,7 +71,7 @@ pub enum PrimaryMode {
 
 /// Canonical view: exactly one visible at a time.
 /// Spec: `docs/ARCHITECTURE.md` §3.
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum View {
     Branches,
     Files,
@@ -118,7 +105,7 @@ impl View {
 }
 
 /// App-switcher entry: a primary view or the help overlay.
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum SwitchTarget {
     View(View),
     Help,
@@ -157,81 +144,6 @@ impl AppMode {
                 | Self::ConfirmDelete(_)
         )
     }
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum CommandAction {
-    CheckoutBranch,
-    CreateBranch,
-    OpenSettings,
-    InteractiveRebase,
-    StashChanges,
-    PopStash,
-    Fetch,
-    Pull,
-    Push,
-    CommitChanges,
-    ContinueRebase,
-    AbortRebase,
-    AbortMerge,
-}
-
-#[derive(Default, PartialEq, Debug, Clone)]
-pub struct CommandPaletteState {
-    pub query: String,
-    pub selected: usize,
-    pub actions: Vec<(String, CommandAction)>,
-}
-
-#[derive(Default, Clone)]
-pub struct RebaseCommit {
-    pub hash: String,
-    pub original_message: String,
-    pub new_message: Option<String>,
-    pub action: RebaseAction,
-}
-
-#[derive(Default, Clone, PartialEq)]
-pub enum RebaseAction {
-    #[default]
-    Pick,
-    Reword,
-    Drop,
-    Squash,
-}
-
-#[derive(Default)]
-pub struct RebaseState {
-    pub commits: Vec<RebaseCommit>,
-    pub selected: usize,
-    pub editing: bool,
-    pub input: String,
-    pub ai_analyzing: bool,
-}
-
-#[derive(Default)]
-pub struct SettingsState {
-    pub selected: usize,
-    pub editing: bool,
-    pub selecting: bool,
-    pub choice_idx: usize,
-    pub choices: Vec<String>,
-    pub input: String,
-}
-
-#[derive(Default)]
-pub struct MainMenuState {
-    pub selected: usize,
-}
-
-#[derive(Default)]
-pub struct QuickActionsState {
-    pub selected: usize,
-    pub actions: Vec<String>,
-}
-
-pub struct ModalState {
-    pub mode: AppMode,
 }
 
 pub struct UiState {
@@ -291,33 +203,6 @@ pub struct UiState {
 
     // Animations
     pub snap_animation: Option<SnapAnimation>,
-}
-
-/// Per-frame render cache. Owned by `App` behind a `RefCell` so render
-/// (`ui::render`, `&App`) can record hit-test data without `&mut`.
-/// Scroll math stays pure in `UiState::branch_viewport`; this only stores
-/// the result plus mouse hit positions rebuilt each frame.
-#[derive(Default)]
-pub struct FrameCache {
-    pub list_start_index: usize,
-    pub branch_screen_positions: Vec<(usize, u16)>,
-    /// Spinner frame counter; advanced in `draw` while `App::is_busy()`.
-    pub spinner_tick: u64,
-}
-
-impl FrameCache {
-    /// Sync scroll cache; returns `(start, visible)`. Resets hit positions.
-    pub fn sync_branches(
-        &mut self,
-        selected: usize,
-        total: usize,
-        height: usize,
-    ) -> (usize, usize) {
-        let (start, visible) = UiState::branch_viewport(selected, total, height);
-        self.list_start_index = start;
-        self.branch_screen_positions.clear();
-        (start, visible)
-    }
 }
 
 impl UiState {
@@ -540,16 +425,6 @@ mod tests {
         // Clamped at the end.
         assert_eq!(U::branch_viewport(86, 87, 20), (67, 20));
         assert_eq!(U::branch_viewport(100, 87, 20), (67, 20));
-    }
-
-    #[test]
-    fn test_frame_cache_sync_resets_hits() {
-        let mut cache = FrameCache::default();
-        cache.branch_screen_positions.push((0, 3));
-        let (start, visible) = cache.sync_branches(0, 87, 20);
-        assert_eq!((start, visible), (0, 20));
-        assert_eq!(cache.list_start_index, start);
-        assert!(cache.branch_screen_positions.is_empty());
     }
 
     #[test]
