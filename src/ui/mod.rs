@@ -1,8 +1,11 @@
 pub mod animations;
 pub mod components;
 pub mod layout;
+pub mod markdown;
 pub mod screens;
 pub mod theme;
+
+pub use markdown::render_markdown;
 
 use ratatui::{
     Frame,
