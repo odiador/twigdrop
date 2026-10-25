@@ -515,3 +515,77 @@ fn commits_panel_tab_navigation_and_file_diff_explorer() {
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
     assert_eq!(app.ui.commit_panel, CommitPanel::Tree);
 }
+
+#[test]
+fn branches_active_only_tab_toggle_filters_stale_branches() {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::models::{Branch, BranchKind, BranchStatus, MergeStatus};
+    use twigdrop::state::PrimaryMode;
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    let active_branch = Branch {
+        name: "feature-active".to_string(),
+        kind: BranchKind::Real,
+        status: vec![BranchStatus::Ahead, BranchStatus::HasUniqueCommits],
+        merge_status: MergeStatus::Clean,
+        age: "1h ago".to_string(),
+        author: "Dev".to_string(),
+        commit_date: "2026-10-25".to_string(),
+        ahead_count: 2,
+        behind_count: 0,
+    };
+
+    let stale_branch = Branch {
+        name: "old-merged".to_string(),
+        kind: BranchKind::Real,
+        status: vec![BranchStatus::Merged],
+        merge_status: MergeStatus::Clean,
+        age: "30d ago".to_string(),
+        author: "Dev".to_string(),
+        commit_date: "2026-09-01".to_string(),
+        ahead_count: 0,
+        behind_count: 0,
+    };
+
+    let main_branch = Branch {
+        name: "main".to_string(),
+        kind: BranchKind::Real,
+        status: vec![BranchStatus::Local],
+        merge_status: MergeStatus::Clean,
+        age: "1d ago".to_string(),
+        author: "Dev".to_string(),
+        commit_date: "2026-10-24".to_string(),
+        ahead_count: 0,
+        behind_count: 0,
+    };
+
+    let mut app = test_app(&p, vec![main_branch, active_branch, stale_branch], "main");
+    app.set_primary_mode(PrimaryMode::Branches);
+    app.refresh_filtered_branches();
+
+    assert!(!app.ui.branches_active_only);
+    assert_eq!(app.ui.filtered_indices.len(), 3);
+
+    // Tab in Branches mode toggles Active Only filter
+    let tab_key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
+
+    assert!(app.ui.branches_active_only);
+    // stale_branch (Merged, 0 ahead, 0 behind, not main) must be excluded
+    let filtered_names: Vec<String> = app
+        .get_filtered_branches()
+        .into_iter()
+        .map(|b| b.name.clone())
+        .collect();
+
+    assert!(filtered_names.contains(&"main".to_string()));
+    assert!(filtered_names.contains(&"feature-active".to_string()));
+    assert!(!filtered_names.contains(&"old-merged".to_string()));
+
+    // Tab again restores all branches
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
+    assert!(!app.ui.branches_active_only);
+    assert_eq!(app.ui.filtered_indices.len(), 3);
+}

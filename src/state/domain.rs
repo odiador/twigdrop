@@ -7,6 +7,7 @@ use std::collections::HashMap;
 pub struct RepositoryState {
     pub branches: Vec<Branch>,
     pub current_branch: String,
+    pub head_commit: Option<crate::models::Commit>,
     pub git_file_statuses: HashMap<String, FileStatus>,
     pub file_tree: Vec<FileEntry>,
     pub stashes: Vec<StashEntry>,
@@ -34,6 +35,7 @@ impl RepositoryState {
         Self {
             branches,
             current_branch,
+            head_commit: None,
             git_file_statuses: HashMap::new(),
             file_tree: Vec::new(),
             stashes: Vec::new(),

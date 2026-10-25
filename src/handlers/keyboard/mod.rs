@@ -138,6 +138,16 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 );
                 return false;
             }
+            if app.ui.branches_active_only && app.ui.primary_mode == PrimaryMode::Branches {
+                app.ui.branches_active_only = false;
+                app.refresh_filtered_branches();
+                app.ui.notify(
+                    crate::state::toast::ToastKind::Info,
+                    "Filter: All branches".to_string(),
+                    None,
+                );
+                return false;
+            }
             if app.ui.commit_panel == crate::state::ui::CommitPanel::Files
                 && app.ui.primary_mode == PrimaryMode::Commits
             {
@@ -174,6 +184,19 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     crate::state::ui::CommitPanel::Tree => crate::state::ui::CommitPanel::Files,
                     crate::state::ui::CommitPanel::Files => crate::state::ui::CommitPanel::Tree,
                 };
+            } else if app.ui.primary_mode == PrimaryMode::Branches {
+                app.ui.branches_active_only = !app.ui.branches_active_only;
+                app.refresh_filtered_branches();
+                let label = if app.ui.branches_active_only {
+                    "Active & divergent branches only"
+                } else {
+                    "All branches"
+                };
+                app.ui.notify(
+                    crate::state::toast::ToastKind::Info,
+                    format!("Filter: {label}"),
+                    None,
+                );
             }
             return false;
         }

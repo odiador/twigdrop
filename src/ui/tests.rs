@@ -181,3 +181,13 @@ fn test_ui_draw_command_palette_overlay() {
     assert_eq!(corner_cell.bg, theme.backdrop_bg);
     assert_eq!(corner_cell.fg, theme.backdrop_fg);
 }
+
+#[test]
+fn test_ui_draw_current_branch_hero() {
+    let mut app = create_test_app();
+    let (_, content) = render_terminal(&mut app, 120, 30);
+    assert!(content.contains("Current Branch"));
+    assert!(content.contains("main"));
+    assert!(content.contains("Sync:"));
+    assert!(content.contains("Working tree:"));
+}

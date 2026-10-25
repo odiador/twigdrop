@@ -8,6 +8,10 @@ pub use crate::constants::DEFAULT_INSPECTOR_COMMIT_LIMIT as INSPECTOR_COMMIT_LIM
 impl App {
     pub fn refresh_branches(&mut self, path: &str) {
         self.repo.branches = crate::git::build_branches(path);
+        self.repo.head_commit = crate::git::get_branch_commits(path, &self.repo.current_branch, 1)
+            .into_iter()
+            .next();
+        self.repo.git_file_statuses = crate::git::files::get_git_file_statuses(path);
         // The analyzer re-checks every branch on trigger; show that in the UI.
         if !self.trigger_tx.is_closed() {
             for b in &mut self.repo.branches {
@@ -54,7 +58,18 @@ impl App {
                     true
                 };
 
-                status_match && search_match
+                let active_match = if self.ui.branches_active_only {
+                    b.name == self.repo.current_branch
+                        || b.ahead_count > 0
+                        || b.behind_count > 0
+                        || b.status
+                            .contains(&crate::models::BranchStatus::HasUniqueCommits)
+                        || b.status.contains(&crate::models::BranchStatus::Ahead)
+                } else {
+                    true
+                };
+
+                status_match && search_match && active_match
             })
             .map(|(i, _)| i)
             .collect();

@@ -22,6 +22,133 @@ const COL_FLEX_PCT: u16 = 30;
 /// Branch column share in narrow mode (author column collapsed).
 const COL_FLEX_NARROW_PCT: u16 = 40;
 
+pub fn render_current_branch_hero(f: &mut Frame, area: Rect, app: &App) {
+    let theme = app.theme();
+    let loc = app.locale();
+
+    let current_b = app
+        .repo
+        .branches
+        .iter()
+        .find(|b| b.name == app.repo.current_branch);
+
+    let filter_badge = if app.ui.branches_active_only {
+        Span::styled(
+            " [ACTIVE ONLY • Tab: all] ",
+            theme.warning.add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::styled(" [ALL BRANCHES • Tab: active only] ", theme.soft)
+    };
+
+    let hero_block = Block::default()
+        .title(Line::from(vec![
+            Span::styled(
+                " 🌿 Current Branch ",
+                theme.accent.add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("⎇ {} ", &app.repo.current_branch),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            filter_badge,
+        ]))
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Green));
+
+    // Line 1: Sync status & Health & Uncommitted workspace changes
+    let mut line1 = vec![Span::styled("Sync: ", theme.dim)];
+
+    if let Some(b) = current_b {
+        if b.ahead_count > 0 || b.behind_count > 0 {
+            if b.ahead_count > 0 {
+                line1.push(Span::styled(
+                    format!("↑{} ahead ", b.ahead_count),
+                    theme.warning.add_modifier(Modifier::BOLD),
+                ));
+            }
+            if b.behind_count > 0 {
+                line1.push(Span::styled(
+                    format!("↓{} behind ", b.behind_count),
+                    theme.accent2.add_modifier(Modifier::BOLD),
+                ));
+            }
+        } else if b.status.contains(&BranchStatus::RemoteTracked) {
+            line1.push(Span::styled("✓ Up to date with remote ", theme.merged));
+        } else {
+            line1.push(Span::styled("Local only (no upstream) ", theme.dim));
+        }
+
+        let (merge_text, merge_color) =
+            crate::ui::components::get_merge_status_display(&b.merge_status, loc, &theme);
+        line1.push(Span::styled("• Health: ", theme.dim));
+        line1.push(Span::styled(
+            format!("{merge_text} "),
+            Style::default().fg(merge_color),
+        ));
+    }
+
+    let staged = app
+        .repo
+        .git_file_statuses
+        .values()
+        .filter(|s| **s == crate::git::files::FileStatus::Staged)
+        .count();
+    let modified = app
+        .repo
+        .git_file_statuses
+        .values()
+        .filter(|s| **s == crate::git::files::FileStatus::Modified)
+        .count();
+    let untracked = app
+        .repo
+        .git_file_statuses
+        .values()
+        .filter(|s| **s == crate::git::files::FileStatus::Untracked)
+        .count();
+    let total_uncommitted = staged + modified + untracked;
+
+    line1.push(Span::styled("• Working tree: ", theme.dim));
+    if total_uncommitted == 0 {
+        line1.push(Span::styled("clean ", theme.merged));
+    } else {
+        let mut work_parts = Vec::new();
+        if staged > 0 {
+            work_parts.push(format!("{staged} staged"));
+        }
+        if modified > 0 {
+            work_parts.push(format!("{modified} modified"));
+        }
+        if untracked > 0 {
+            work_parts.push(format!("{untracked} untracked"));
+        }
+        line1.push(Span::styled(work_parts.join(", "), theme.warning));
+    }
+
+    // Line 2: HEAD commit
+    let mut line2 = vec![Span::styled("HEAD: ", theme.dim)];
+    if let Some(commit) = &app.repo.head_commit {
+        line2.push(Span::styled(
+            format!("{} ", &commit.hash),
+            Style::default().fg(Color::Yellow),
+        ));
+        line2.push(Span::styled(
+            commit.message.clone(),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ));
+        line2.push(Span::styled(format!(" ({})", commit.date), theme.dim));
+    } else {
+        line2.push(Span::styled("No commit information", theme.dim));
+    }
+
+    let hero_widget = Paragraph::new(vec![Line::from(line1), Line::from(line2)]).block(hero_block);
+    f.render_widget(hero_widget, area);
+}
+
 pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
     use crate::ui::layout::{INSPECTOR_SPLIT, SIDEBAR_SPLIT};
     let (table_area, maybe_inspector, maybe_sidebar) = if app.ui.show_inspector_drawer {
@@ -53,9 +180,23 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
         super::inspector::render_inspector_drawer(f, inspector_area, app);
     }
 
+    let (hero_area, actual_table_area) = if table_area.height >= 16 {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(6)])
+            .split(table_area);
+        (Some(chunks[0]), chunks[1])
+    } else {
+        (None, table_area)
+    };
+
+    if let Some(ha) = hero_area {
+        render_current_branch_hero(f, ha, app);
+    }
+
     let filtered_indices = app.ui.filtered_indices.clone();
     let branches_len = filtered_indices.len();
-    let inner_height = table_area.height.saturating_sub(4) as usize;
+    let inner_height = actual_table_area.height.saturating_sub(4) as usize;
 
     if inner_height == 0 {
         return;
@@ -65,7 +206,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
     // Frozen Catppuccin default: visual-noop vs previous Rgb() literals.
     let theme = app.theme();
     // Narrow terminals collapse the author column (UI_GUIDE §3).
-    let narrow = table_area.width < crate::ui::theme::NARROW_WIDTH;
+    let narrow = actual_table_area.width < crate::ui::theme::NARROW_WIDTH;
 
     // Designed empty state (UI_GUIDE §3) — never a bare header.
     if branches_len == 0 {
@@ -89,7 +230,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
                 .borders(Borders::ALL)
                 .border_style(theme.border),
         );
-        f.render_widget(empty, table_area);
+        f.render_widget(empty, actual_table_area);
         return;
     }
 
@@ -116,7 +257,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
 
         app.frame_cache.borrow_mut().branch_screen_positions.push((
             actual_idx,
-            table_area
+            actual_table_area
                 .y
                 .saturating_add(3)
                 .saturating_add(u16::try_from(i).unwrap_or(u16::MAX)),
@@ -127,6 +268,11 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
             crate::ui::components::get_merge_status_display(&b.merge_status, loc, &theme);
 
         let current_tag = if is_current { " (HEAD)" } else { "" };
+        let unique_tag = if b.status.contains(&BranchStatus::HasUniqueCommits) {
+            " [NEW COMMITS]"
+        } else {
+            ""
+        };
         let is_protected = app.config.is_protected(&b.name);
         let is_bulk_selected = app.ui.bulk_selected.contains(&b.name);
         let checkbox = if is_protected {
@@ -162,7 +308,7 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
             theme.muted.fg.unwrap_or(Color::Gray)
         };
 
-        let branch_name = format!("{}{}", b.name, current_tag);
+        let branch_name = format!("{}{}{}", b.name, current_tag, unique_tag);
         let author_str = format!("{} by {}", b.commit_date, b.author);
 
         let mut row_style = theme.base;
@@ -171,6 +317,10 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
             branch_style = branch_style
                 .add_modifier(Modifier::BOLD)
                 .fg(theme.success.fg.unwrap_or(Color::Green));
+        } else if b.status.contains(&BranchStatus::HasUniqueCommits) {
+            branch_style = branch_style
+                .add_modifier(Modifier::BOLD)
+                .fg(theme.warning.fg.unwrap_or(Color::Yellow));
         }
 
         if selected {
@@ -276,6 +426,15 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
                             format!(" {} ", loc.branches.title_branches),
                             theme.accent.add_modifier(Modifier::BOLD),
                         ),
+                        Span::styled(
+                            if app.ui.branches_active_only {
+                                "[ACTIVE ONLY] • "
+                            } else {
+                                ""
+                            },
+                            theme.warning.add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled("Tab: toggle filter • ", theme.muted),
                         Span::styled(format!("{} • ", loc.branches.type_to_filter), theme.subtle),
                         Span::styled(
                             format!("{}: {} • ", loc.branches.sort_label, sort_hint),
@@ -306,8 +465,8 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
         );
 
     if app.ui.current_mode() == &AppMode::Diff {
-        super::diff::render_diff_overlay(f, table_area, app);
+        super::diff::render_diff_overlay(f, actual_table_area, app);
     } else {
-        f.render_widget(table, table_area);
+        f.render_widget(table, actual_table_area);
     }
 }
