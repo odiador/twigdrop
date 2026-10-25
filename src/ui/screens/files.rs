@@ -47,10 +47,20 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
             " 📂 Files [Filter: \"{}\"] [Esc: clear] ",
             app.ui.files_search_query
         )
-    } else if app.ui.files_changed_only {
-        " 📂 Files [CHANGED ONLY] (c: all • Space: stage) ".to_string()
     } else {
-        " 📂 Files (Tab: focus • c: changed • Space: stage • /: search) ".to_string()
+        let mut badges = Vec::new();
+        if app.ui.files_changed_only {
+            badges.push("CHANGED ONLY");
+        }
+        if app.ui.show_hidden_files {
+            badges.push("+DOTFILES");
+        }
+        let badge_str = if badges.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", badges.join(" • "))
+        };
+        format!(" 📂 Files{badge_str} (.: dotfiles • c: changed • Space: stage • /: search) ")
     };
 
     let block = Block::default()
@@ -149,13 +159,67 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
     } else {
         theme.border.fg.unwrap_or(Color::DarkGray)
     };
+
+    let (header_area, body_area) = if area.height >= 10 {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(0)].as_ref())
+            .split(area);
+        (Some(chunks[0]), chunks[1])
+    } else {
+        (None, area)
+    };
+
+    if let Some(ha) = header_area {
+        let header_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(border_color));
+        let inner = header_block.inner(ha);
+        f.render_widget(header_block, ha);
+
+        let parts: Vec<&str> = state.file_path.split('/').collect();
+        let mut breadcrumb_spans = vec![Span::styled("📁 ", theme.accent2)];
+
+        for (idx, part) in parts.iter().enumerate() {
+            if idx + 1 == parts.len() {
+                breadcrumb_spans.push(Span::styled(
+                    (*part).to_string(),
+                    theme.base.add_modifier(ratatui::style::Modifier::BOLD),
+                ));
+            } else {
+                breadcrumb_spans.push(Span::styled((*part).to_string(), theme.soft));
+                breadcrumb_spans.push(Span::styled(" › ", theme.subtle));
+            }
+        }
+
+        breadcrumb_spans.push(Span::styled(
+            format!(
+                "  [Ln {}/{} │ {} lines] ",
+                state.cursor_y + 1,
+                state.lines.len(),
+                state.lines.len()
+            ),
+            theme.peach,
+        ));
+
+        breadcrumb_spans.push(Span::styled(
+            " (Tab: focus directory │ j/k: scroll) ",
+            theme.subtle,
+        ));
+
+        let p = Paragraph::new(Line::from(breadcrumb_spans));
+        f.render_widget(p, inner);
+    }
+
+    let block_title = format!(" Preview: {} ", state.file_path);
+
     let block = Block::default()
-        .title(format!(" Preview: {} (Tab: switch) ", state.file_path))
+        .title(block_title)
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color));
 
     let mut final_lines = Vec::new();
-    let visible_rows = area.height.saturating_sub(2) as usize;
+    let visible_rows = body_area.height.saturating_sub(2) as usize;
     let start_idx = state.scroll_y;
     const OVERSCAN_LINES: usize = 5;
     let end_idx = (start_idx + visible_rows + OVERSCAN_LINES).min(state.highlighted_lines.len());
@@ -163,7 +227,7 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
     for i in start_idx..end_idx {
         let h_line = &state.highlighted_lines[i];
         let mut spans = vec![Span::styled(
-            format!("{:>3} ", i + 1),
+            format!("{:>4} │ ", i + 1),
             Style::default().fg(Color::DarkGray),
         )];
         let gutter_diff = state.line_diffs.get(&i);
@@ -216,6 +280,9 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
         }
         final_lines.push(Line::from(spans).style(line_style));
     }
-    f.render_widget(Clear, area);
-    f.render_widget(Paragraph::new(Text::from(final_lines)).block(block), area);
+    f.render_widget(Clear, body_area);
+    f.render_widget(
+        Paragraph::new(Text::from(final_lines)).block(block),
+        body_area,
+    );
 }

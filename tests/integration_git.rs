@@ -678,3 +678,74 @@ fn pull_requests_mode_keyboard_navigation_and_tab_diff_toggle() {
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, f_key, &p);
     assert_eq!(app.ui.pr_filter, PrFilter::All);
 }
+
+#[test]
+fn dotfiles_toggle_and_vscode_breadcrumbs_preview() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::{AppMode, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    // Create a dotfile and a nested file
+    std::fs::write(dir.path().join(".env"), "SECRET=123").expect("write .env");
+    std::fs::create_dir_all(dir.path().join("src")).expect("mkdir src");
+    std::fs::write(dir.path().join("src/main.rs"), "fn main() {}\n").expect("write main.rs");
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+
+    // By default, hidden files are not shown
+    assert!(!app.ui.show_hidden_files);
+    let paths_before: Vec<String> = app
+        .ui
+        .filtered_file_indices
+        .iter()
+        .map(|&i| app.repo.file_tree[i].path.to_string_lossy().to_string())
+        .collect();
+    assert!(!paths_before.iter().any(|s| s.contains(".env")));
+
+    // Press '.' to toggle hidden dotfiles
+    let dot_key = KeyEvent::new(KeyCode::Char('.'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, dot_key, &p);
+    assert!(app.ui.show_hidden_files);
+
+    let paths_after: Vec<String> = app
+        .ui
+        .filtered_file_indices
+        .iter()
+        .map(|&i| app.repo.file_tree[i].path.to_string_lossy().to_string())
+        .collect();
+    assert!(paths_after.iter().any(|s| s.contains(".env")));
+
+    // Open code preview on src/main.rs
+    let preview = app
+        .create_preview_state(&p, "src/main.rs")
+        .expect("preview");
+    app.ui.push_modal(AppMode::CodePreview(preview));
+
+    // Render frame to verify breadcrumbs and line numbers
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let content: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("src"));
+    assert!(content.contains("main.rs"));
+    assert!(content.contains("1 │"));
+    assert!(content.contains("[Ln 1/"));
+}

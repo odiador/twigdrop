@@ -116,7 +116,7 @@ pub static ES: Locale = Locale {
     },
     footer: FooterStrings {
         branches_normal: " ↑/↓: mover │ Escribe: filtrar │ Esc: limpiar/menú │ ↵: gestionar │ Ctrl+F: filtro │ Ctrl+P: podar │ Ctrl+D: eliminar │ Ctrl+C: nueva │ Ctrl+K: paleta │ Shift+S: stash │ Shift+C: commits │ Alt+D: vista │ Ctrl+Q: salir ",
-        files_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: commits │ e: explorador │ v: IDE │ s: stage/unstage │ !: consola │ t: TTY │ ?: ayuda │ q: salir ",
+        files_normal: " ↑/↓: mover │ .: ocultos │ c: cambios │ s: stage │ e: explorador │ v: IDE │ Shift+Tab: selector │ q: salir ",
         commits_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: stashes │ Enter: detalles │ ?: ayuda │ q: salir ",
         stashes_normal: " ↑/↓: mover │ Shift+Tab: selector │ d: ramas │ a: aplicar │ ?: ayuda │ q: salir ",
         pull_requests_normal: " ↑/↓: mover │ Tab: pestañas │ f: filtro │ c: checkout │ o: web │ r: recargar │ Shift+Tab: cambiar │ q: salir ",

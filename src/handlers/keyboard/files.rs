@@ -65,6 +65,21 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.ui.files_search_active = true;
             false
         }
+        KeyCode::Char('.') | KeyCode::Char('H') => {
+            app.ui.show_hidden_files = !app.ui.show_hidden_files;
+            app.load_file_tree(path);
+            let label = if app.ui.show_hidden_files {
+                "Hidden files: Shown"
+            } else {
+                "Hidden files: Hidden"
+            };
+            app.ui.notify(
+                crate::state::toast::ToastKind::Info,
+                label.to_string(),
+                None,
+            );
+            false
+        }
         KeyCode::Char('c') | KeyCode::Char('m') => {
             app.ui.files_changed_only = !app.ui.files_changed_only;
             app.load_file_tree(path);

@@ -58,6 +58,7 @@ impl App {
             current_dir,
             depth,
             &self.repo.git_file_statuses,
+            self.ui.show_hidden_files,
         );
 
         for mut entry in entries {

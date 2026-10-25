@@ -160,6 +160,7 @@ pub fn build_file_tree(
     current_dir: &str,
     depth: usize,
     statuses: &std::collections::HashMap<String, FileStatus>,
+    show_hidden: bool,
 ) -> Vec<FileEntry> {
     let mut entries = vec![];
     let base_path = Path::new(root);
@@ -174,7 +175,7 @@ pub fn build_file_tree(
         .git_global(true)
         .git_exclude(true)
         .require_git(false) // Still work even if not in a git repo
-        .hidden(true) // Ignore hidden files by default
+        .hidden(!show_hidden)
         .build();
 
     let mut dir_entries = vec![];
