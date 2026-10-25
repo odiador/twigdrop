@@ -1,10 +1,12 @@
 pub mod commands;
 pub mod error;
 pub mod files;
+pub mod formats;
 pub mod stash;
 pub mod status;
 
 pub use error::GitError;
+pub use formats::*;
 pub use status::get_current_branch;
 
 use crate::git::commands::{run_git, run_git_with_status};
@@ -12,7 +14,10 @@ use crate::git::status::{
     get_branch_metadata, get_branches, get_merged_branches, get_stashed_branches,
     get_upstream_tracks, has_unique_commits,
 };
-use crate::models::{Branch, BranchStatus, ConflictBlock, GutterStatus, MergeStatus};
+use crate::models::{
+    Branch, BranchKind, BranchStatus, ConflictBlock, GutterStatus, MergeStatus,
+    SYNTHETIC_LOCAL_CHANGES, SYNTHETIC_STAGED_CHANGES,
+};
 use std::collections::HashMap;
 
 pub fn build_branches(path: &str) -> Vec<Branch> {
@@ -20,7 +25,8 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
 
     // Add Pseudo-branches for Local and Staged changes
     branches.push(Branch {
-        name: "*Local Changes*".to_string(),
+        name: SYNTHETIC_LOCAL_CHANGES.to_string(),
+        kind: BranchKind::LocalChanges,
         status: vec![BranchStatus::Local],
         merge_status: MergeStatus::NotAnalyzed,
         age: String::new(),
@@ -31,7 +37,8 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
     });
 
     branches.push(Branch {
-        name: "*Staged Changes*".to_string(),
+        name: SYNTHETIC_STAGED_CHANGES.to_string(),
+        kind: BranchKind::StagedChanges,
         status: vec![BranchStatus::Local],
         merge_status: MergeStatus::NotAnalyzed,
         age: String::new(),
@@ -101,6 +108,7 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
 
             Branch {
                 name,
+                kind: BranchKind::Real,
                 status,
                 merge_status: MergeStatus::NotAnalyzed,
                 age,
@@ -117,9 +125,9 @@ pub fn build_branches(path: &str) -> Vec<Branch> {
 }
 
 pub fn get_branch_info(path: &str, branch: &str) -> String {
-    if branch == "*Local Changes*" {
+    if branch == SYNTHETIC_LOCAL_CHANGES {
         return "Unstaged changes in working directory.".to_string();
-    } else if branch == "*Staged Changes*" {
+    } else if branch == SYNTHETIC_STAGED_CHANGES {
         return "Staged changes ready to be committed.".to_string();
     }
 
@@ -131,14 +139,14 @@ pub fn get_branch_info(path: &str, branch: &str) -> String {
 }
 
 pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
-    if branch == "*Local Changes*" {
+    if branch == SYNTHETIC_LOCAL_CHANGES {
         return run_git(path, &["diff", "--name-only"])
             .unwrap_or_default()
             .lines()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect();
-    } else if branch == "*Staged Changes*" {
+    } else if branch == SYNTHETIC_STAGED_CHANGES {
         return run_git(path, &["diff", "--cached", "--name-only"])
             .unwrap_or_default()
             .lines()
@@ -157,10 +165,10 @@ pub fn get_branch_diff_files(path: &str, branch: &str) -> Vec<String> {
 }
 
 pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
-    if branch == "*Local Changes*" {
+    if branch == SYNTHETIC_LOCAL_CHANGES {
         return run_git(path, &["diff", "--", file])
             .unwrap_or_else(|e| format!("Error loading diff: {e}"));
-    } else if branch == "*Staged Changes*" {
+    } else if branch == SYNTHETIC_STAGED_CHANGES {
         return run_git(path, &["diff", "--cached", "--", file])
             .unwrap_or_else(|e| format!("Error loading diff: {e}"));
     }
@@ -170,7 +178,7 @@ pub fn get_branch_file_diff(path: &str, branch: &str, file: &str) -> String {
 }
 
 pub fn get_branch_commits(path: &str, branch: &str, limit: usize) -> Vec<crate::models::Commit> {
-    let range = if branch == "*Local Changes*" || branch == "*Staged Changes*" {
+    let range = if branch == SYNTHETIC_LOCAL_CHANGES || branch == SYNTHETIC_STAGED_CHANGES {
         "HEAD"
     } else {
         branch
@@ -178,7 +186,7 @@ pub fn get_branch_commits(path: &str, branch: &str, limit: usize) -> Vec<crate::
 
     let n = limit.to_string();
     let out =
-        run_git(path, &["log", "-n", &n, range, "--format=%h|%s|%cr|%an"]).unwrap_or_default();
+        run_git(path, &["log", "-n", &n, range, FORMAT_COMMIT_WITH_METADATA]).unwrap_or_default();
 
     out.lines()
         .map(|line| {

@@ -14,7 +14,14 @@ use ratatui::{
 use std::{env, io};
 use tokio::sync::mpsc;
 
-use twigdrop::{app::App, events::Event, git, handlers, models, runtime::Runtime, ui};
+use twigdrop::{
+    app::App,
+    constants::{ANIMATION_FRAME_INTERVAL, IDLE_TICK_INTERVAL, INPUT_POLL_INTERVAL},
+    events::Event,
+    git, handlers, models,
+    runtime::Runtime,
+    ui,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -103,7 +110,7 @@ async fn main() -> Result<()> {
     let event_tx_clone = event_tx.clone();
     tokio::task::spawn_blocking(move || {
         loop {
-            if event::poll(std::time::Duration::from_millis(10)).unwrap_or(false)
+            if event::poll(INPUT_POLL_INTERVAL).unwrap_or(false)
                 && let Ok(crossterm_event) = event::read()
             {
                 match crossterm_event {
@@ -205,7 +212,7 @@ async fn run_app(
                         return Ok(());
                     }
                 }
-                _ = tokio::time::sleep(std::time::Duration::from_millis(16)) => {
+                _ = tokio::time::sleep(ANIMATION_FRAME_INTERVAL) => {
                     should_draw = true;
                 }
                 _ = wait_for_signal(&mut sigterm, &mut sigint) => {
@@ -229,7 +236,7 @@ async fn run_app(
                             return Ok(());
                         }
                     }
-                    _ = tokio::time::sleep(std::time::Duration::from_millis(250)) => {
+                    _ = tokio::time::sleep(IDLE_TICK_INTERVAL) => {
                         should_draw = true;
                     }
                     _ = wait_for_signal(&mut sigterm, &mut sigint) => {

@@ -96,14 +96,15 @@ impl App {
     }
 
     pub fn update_diff_highlighting(&self, state: &mut PreviewState) {
+        let theme = self.theme();
         state.highlighted_lines.clear();
         for line in &state.lines {
             let color = if line.starts_with('+') && !line.starts_with("+++") {
-                Color::Rgb(148, 156, 187) // Gray for index info
+                theme.muted.fg.unwrap_or(Color::Green)
             } else if line.starts_with("+++") || line.starts_with("---") {
-                Color::Rgb(180, 190, 254) // Lavender for file paths
+                theme.accent2.fg.unwrap_or(Color::Cyan)
             } else {
-                Color::Rgb(205, 214, 244) // Default text color
+                theme.base.fg.unwrap_or(Color::White)
             };
 
             let spans = vec![Span::styled(line.to_string(), Style::default().fg(color))];
@@ -111,7 +112,7 @@ impl App {
             if line.starts_with("@@") {
                 state.highlighted_lines.push(Line::from(vec![Span::styled(
                     " ".repeat(100),
-                    Style::default().bg(Color::Rgb(30, 30, 46)),
+                    Style::default().bg(theme.surface),
                 )]));
             }
 

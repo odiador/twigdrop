@@ -13,6 +13,7 @@ fn create_test_app() -> App {
     let (conflict_tx, _) = mpsc::channel(1);
     let branch = Branch {
         name: "main".to_string(),
+        kind: crate::models::BranchKind::Real,
         status: vec![BranchStatus::Merged],
         merge_status: MergeStatus::Clean,
         age: "1d ago".to_string(),

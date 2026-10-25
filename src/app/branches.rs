@@ -3,7 +3,7 @@ use crate::models::Branch;
 use crate::state::ui::PrimaryMode;
 
 /// Number of recent commits shown in the inspector panel.
-pub const INSPECTOR_COMMIT_LIMIT: usize = 4;
+pub use crate::constants::DEFAULT_INSPECTOR_COMMIT_LIMIT as INSPECTOR_COMMIT_LIMIT;
 
 impl App {
     pub fn refresh_branches(&mut self, path: &str) {

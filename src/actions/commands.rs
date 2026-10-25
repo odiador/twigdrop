@@ -3,8 +3,7 @@ use crate::git::error::GitError;
 use crate::state::ui::{RebaseAction, RebaseCommit};
 use std::fs;
 
-pub const DEFAULT_PROTECTED_BRANCHES: &[&str] =
-    &["main", "master", "develop", "dev", "staging", "production"];
+pub use crate::utils::config::DEFAULT_PROTECTED_BRANCHES;
 
 pub fn is_protected_branch(name: &str) -> bool {
     is_protected_branch_with(name, &[])
@@ -538,6 +537,7 @@ mod tests {
     fn make_test_branch(name: &str, status: Vec<BranchStatus>) -> Branch {
         Branch {
             name: name.to_string(),
+            kind: crate::models::BranchKind::Real,
             status,
             merge_status: MergeStatus::NotAnalyzed,
             age: "1 day ago".to_string(),

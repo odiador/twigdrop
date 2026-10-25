@@ -66,7 +66,7 @@ impl Runtime {
                         .await;
                 }
 
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                tokio::time::sleep(crate::constants::REFRESH_DEBOUNCE_INTERVAL).await;
             }
         });
     }

@@ -36,9 +36,21 @@ pub enum GutterStatus {
     Deleted,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
+pub enum BranchKind {
+    #[default]
+    Real,
+    LocalChanges,
+    StagedChanges,
+}
+
+pub const SYNTHETIC_LOCAL_CHANGES: &str = "*Local Changes*";
+pub const SYNTHETIC_STAGED_CHANGES: &str = "*Staged Changes*";
+
 #[derive(Debug, Clone)]
 pub struct Branch {
     pub name: String,
+    pub kind: BranchKind,
     pub status: Vec<BranchStatus>,
     pub merge_status: MergeStatus,
     pub age: String,
@@ -46,6 +58,13 @@ pub struct Branch {
     pub commit_date: String,
     pub ahead_count: usize,
     pub behind_count: usize,
+}
+
+impl Branch {
+    #[must_use]
+    pub fn is_synthetic(&self) -> bool {
+        self.kind != BranchKind::Real
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

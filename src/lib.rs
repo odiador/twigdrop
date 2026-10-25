@@ -1,6 +1,7 @@
 pub mod actions;
 pub mod ai;
 pub mod app;
+pub mod constants;
 pub mod db;
 pub mod events;
 pub mod git;

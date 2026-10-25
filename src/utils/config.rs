@@ -3,6 +3,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+pub const DEFAULT_PROTECTED_BRANCHES: &[&str] =
+    &["main", "master", "develop", "dev", "staging", "production"];
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProviderConfig {
     pub model: String,
