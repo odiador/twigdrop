@@ -118,6 +118,21 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             return false;
         }
         KeyCode::Esc => {
+            if app.ui.maximized_panel {
+                app.ui.maximized_panel = false;
+                app.ui.notify(
+                    crate::state::toast::ToastKind::Info,
+                    "Panel restored".to_string(),
+                    None,
+                );
+                return false;
+            }
+            if app.ui.files_search_active {
+                app.ui.files_search_active = false;
+                app.ui.files_search_query.clear();
+                app.refresh_filtered_files();
+                return false;
+            }
             if !app.ui.search_query.is_empty() {
                 app.ui.search_query.clear();
                 app.refresh_filtered_branches();
@@ -301,6 +316,17 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.load_pull_requests(path);
             app.ui.selected_pr_idx = 0;
             app.ui.track_history(View::PullRequests);
+            return false;
+        }
+        KeyCode::Char('Z') => {
+            app.ui.maximized_panel = !app.ui.maximized_panel;
+            let msg = if app.ui.maximized_panel {
+                "Panel maximized [Z: restore]"
+            } else {
+                "Panel restored"
+            };
+            app.ui
+                .notify(crate::state::toast::ToastKind::Info, msg.to_string(), None);
             return false;
         }
 

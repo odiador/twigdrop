@@ -805,3 +805,64 @@ fn folder_profile_modal_audit_and_scaffold() {
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc_key, &p);
     assert_eq!(*app.ui.current_mode(), AppMode::Normal);
 }
+
+#[test]
+fn test_score_maxing_zoom_and_quick_jump() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::{AppMode, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+    let readme = dir.path().join("README.md");
+    std::fs::write(&readme, "# Sample Project\nLine 2\nLine 3\n").expect("write readme");
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+
+    // Test Ctrl+P activates quick jump search
+    let ctrl_p = KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, ctrl_p, &p);
+    assert!(app.ui.files_search_active);
+
+    // Cancel search with Esc
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert!(!app.ui.files_search_active);
+
+    // Open CodePreview
+    let enter = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, enter, &p);
+    assert!(matches!(app.ui.current_mode(), AppMode::CodePreview(_)));
+
+    // Press Z to maximize preview panel
+    let z_key = KeyEvent::new(KeyCode::Char('Z'), KeyModifiers::SHIFT);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, z_key, &p);
+    assert!(app.ui.maximized_panel);
+
+    // Render frame to check scroll indicator and [Z: restore]
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let content: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("[Z: restore]"));
+    assert!(content.contains("[All]"));
+
+    // Press Esc to restore panel
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert!(!app.ui.maximized_panel);
+}

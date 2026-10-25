@@ -225,6 +225,33 @@ pub fn format_diff_with_gutters<'a>(diff: &str, theme: &Theme) -> Vec<Line<'a>> 
     lines
 }
 
+/// Computes an indicator string representing the vertical position of a viewport:
+/// `[All]`, `[Top]`, `[Bot]`, or `[XX%]`.
+#[must_use]
+pub fn scroll_indicator(offset: usize, visible: usize, total: usize) -> String {
+    if total == 0 || total <= visible {
+        "[All]".to_string()
+    } else if offset == 0 {
+        "[Top]".to_string()
+    } else if offset + visible >= total {
+        "[Bot]".to_string()
+    } else {
+        let pct = ((offset + visible) * 100) / total;
+        format!("[{}%]", pct.min(100))
+    }
+}
+
+/// Truncates a string with an ellipsis `…` if it exceeds `max_len` character display count.
+#[must_use]
+pub fn truncate_ellipsis(s: &str, max_len: usize) -> String {
+    if s.chars().count() > max_len && max_len > 1 {
+        let truncated: String = s.chars().take(max_len - 1).collect();
+        format!("{truncated}…")
+    } else {
+        s.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,5 +305,20 @@ mod tests {
         let diff_sample = "diff --git a/foo b/foo\n@@ -1,2 +1,2 @@\n-old\n+new\n context";
         let lines = format_diff_with_gutters(diff_sample, &theme);
         assert_eq!(lines.len(), 5);
+    }
+
+    #[test]
+    fn test_scroll_indicator() {
+        assert_eq!(scroll_indicator(0, 10, 5), "[All]");
+        assert_eq!(scroll_indicator(0, 10, 20), "[Top]");
+        assert_eq!(scroll_indicator(10, 10, 20), "[Bot]");
+        assert_eq!(scroll_indicator(5, 10, 30), "[50%]");
+    }
+
+    #[test]
+    fn test_truncate_ellipsis() {
+        assert_eq!(truncate_ellipsis("short", 10), "short");
+        assert_eq!(truncate_ellipsis("very-long-branch-name", 10), "very-long…");
+        assert_eq!(truncate_ellipsis("exact", 5), "exact");
     }
 }

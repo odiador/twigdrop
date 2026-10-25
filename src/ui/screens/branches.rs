@@ -308,8 +308,11 @@ pub fn render_main_list(f: &mut Frame, area: Rect, app: &App) {
             theme.muted.fg.unwrap_or(Color::Gray)
         };
 
-        let branch_name = format!("{}{}{}", b.name, current_tag, unique_tag);
-        let author_str = format!("{} by {}", b.commit_date, b.author);
+        let max_branch_w = if narrow { 26 } else { 40 };
+        let clean_name = crate::ui::components::truncate_ellipsis(&b.name, max_branch_w);
+        let branch_name = format!("{}{}{}", clean_name, current_tag, unique_tag);
+        let clean_author = crate::ui::components::truncate_ellipsis(&b.author, 18);
+        let author_str = format!("{} by {}", b.commit_date, clean_author);
 
         let mut row_style = theme.base;
         let mut branch_style = Style::default().fg(color);

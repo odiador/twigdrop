@@ -90,7 +90,12 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
 
             let mut line_style = Style::default();
             if is_selected && !commit.hash.is_empty() {
-                line_style = theme.select_hi;
+                let files_focused = app.ui.commit_panel == crate::state::ui::CommitPanel::Files;
+                line_style = if files_focused {
+                    Style::default().bg(theme.cursor_unfocused)
+                } else {
+                    theme.select_hi
+                };
             }
 
             items.push(ListItem::new(Line::from(all_spans)).style(line_style));
@@ -120,13 +125,22 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
     if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx) {
         let total_files = app.repo.commit_files.len();
         let files_height = (total_files as u16 + 2).clamp(7, 12);
-        let detail_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
+        let detail_constraints = if app.ui.maximized_panel {
+            [
+                Constraint::Length(0),
+                Constraint::Length(0),
+                Constraint::Min(6),
+            ]
+        } else {
+            [
                 Constraint::Length(5),
                 Constraint::Length(files_height),
                 Constraint::Min(6),
-            ])
+            ]
+        };
+        let detail_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(detail_constraints)
             .split(details_area);
 
         let stats_summary = app
@@ -162,14 +176,16 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
             ]),
         ];
 
-        let meta_block = Block::default()
-            .title(" Commit Details ")
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Yellow));
-        f.render_widget(
-            Paragraph::new(meta_lines).block(meta_block),
-            detail_chunks[0],
-        );
+        if !app.ui.maximized_panel {
+            let meta_block = Block::default()
+                .title(" Commit Details ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Yellow));
+            f.render_widget(
+                Paragraph::new(meta_lines).block(meta_block),
+                detail_chunks[0],
+            );
+        }
 
         let files_focused = app.ui.commit_panel == crate::state::ui::CommitPanel::Files;
         let files_border_color = if files_focused {
@@ -265,24 +281,16 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
                 file_items.push(ListItem::new(line).style(item_style));
             }
         }
-        let files_list = List::new(file_items).block(files_block);
-        f.render_widget(files_list, detail_chunks[1]);
+        if !app.ui.maximized_panel {
+            let files_list = List::new(file_items).block(files_block);
+            f.render_widget(files_list, detail_chunks[1]);
+        }
 
         let selected_file_name = app
             .repo
             .commit_files
             .get(app.ui.selected_commit_file_idx)
             .map(|f| f.path.to_string_lossy().to_string());
-
-        let diff_title = match &selected_file_name {
-            Some(name) => format!(" Diff: {} [d/u: scroll] ", name),
-            None => " Diff Preview [d/u: scroll] ".to_string(),
-        };
-
-        let diff_block = Block::default()
-            .title(diff_title)
-            .borders(Borders::ALL)
-            .border_style(theme.border);
 
         let diff_content = app
             .repo
@@ -292,6 +300,34 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
             .unwrap_or("");
 
         let diff_lines = crate::ui::components::format_diff_with_gutters(diff_content, &theme);
+        let diff_visible_rows = detail_chunks[2].height.saturating_sub(2) as usize;
+        let scroll_badge = crate::ui::components::scroll_indicator(
+            app.ui.info_scroll as usize,
+            diff_visible_rows,
+            diff_lines.len(),
+        );
+        let zoom_hint = if app.ui.maximized_panel {
+            "[Z: restore] "
+        } else {
+            "[Z: zoom] "
+        };
+
+        let diff_title = match &selected_file_name {
+            Some(name) => format!(
+                " Diff: {} {} {}[d/u: scroll] ",
+                name, scroll_badge, zoom_hint
+            ),
+            None => format!(" Diff Preview {} {}[d/u: scroll] ", scroll_badge, zoom_hint),
+        };
+
+        let diff_block = Block::default()
+            .title(diff_title)
+            .borders(Borders::ALL)
+            .border_style(if app.ui.maximized_panel {
+                theme.active_border
+            } else {
+                theme.border
+            });
         let diff_widget = Paragraph::new(diff_lines)
             .block(diff_block)
             .scroll((app.ui.info_scroll, 0))

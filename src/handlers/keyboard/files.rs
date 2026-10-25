@@ -1,6 +1,6 @@
 use crate::app::App;
 use crate::state::ui::{AppMode, PreviewState};
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn handle_preview_keyboard(state: &mut PreviewState, code: KeyCode) -> bool {
     let line_count = state.lines.len();
@@ -57,6 +57,13 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             _ => {}
         }
+        return false;
+    }
+
+    if key.modifiers.contains(KeyModifiers::CONTROL)
+        && (key.code == KeyCode::Char('p') || key.code == KeyCode::Char('P'))
+    {
+        app.ui.files_search_active = true;
         return false;
     }
 

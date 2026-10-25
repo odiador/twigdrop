@@ -13,18 +13,22 @@ use crate::ui::layout::PR_SPLIT;
 pub fn render_pull_requests(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(Clear, area);
 
+    let constraints = if app.ui.maximized_panel {
+        [Constraint::Length(0), Constraint::Min(0)]
+    } else {
+        [
+            Constraint::Percentage(PR_SPLIT.0),
+            Constraint::Percentage(PR_SPLIT.1),
+        ]
+    };
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(
-            [
-                Constraint::Percentage(PR_SPLIT.0),
-                Constraint::Percentage(PR_SPLIT.1),
-            ]
-            .as_ref(),
-        )
+        .constraints(constraints.as_ref())
         .split(area);
 
-    render_pr_list(f, chunks[0], app);
+    if !app.ui.maximized_panel {
+        render_pr_list(f, chunks[0], app);
+    }
     render_pr_details(f, chunks[1], app);
 }
 
@@ -273,30 +277,19 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(meta_p, header_inner);
 
     // 2. Content Area (Markdown Description or Unified Diff)
-    let content_title = if is_desc {
-        " Description (Markdown) [u/d: scroll] "
-    } else {
-        " Changes Diff [u/d: scroll] "
-    };
-
-    let content_block = Block::default()
-        .title(content_title)
-        .borders(Borders::ALL)
-        .border_style(theme.active_border);
-    let content_inner = content_block.inner(chunks[1]);
-    f.render_widget(content_block, chunks[1]);
-
-    if is_desc {
+    let visible_rows = chunks[1].height.saturating_sub(2) as usize;
+    let (total_lines, type_title, content_widget) = if is_desc {
         let md_content = if selected_pr.body.trim().is_empty() {
             "*No description provided for this pull request.*"
         } else {
             &selected_pr.body
         };
         let md_lines = crate::ui::markdown::render_markdown(md_content, &theme);
+        let len = md_lines.len();
         let p = Paragraph::new(md_lines)
             .scroll((app.ui.pr_scroll_y, 0))
             .wrap(Wrap { trim: false });
-        f.render_widget(p, content_inner);
+        (len, "Description (Markdown)", p)
     } else {
         let diff_text = app
             .repo
@@ -304,9 +297,33 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
             .as_deref()
             .unwrap_or("Loading diff from GitHub...");
         let diff_lines = crate::ui::components::format_diff_with_gutters(diff_text, &theme);
+        let len = diff_lines.len();
         let p = Paragraph::new(diff_lines)
             .scroll((app.ui.pr_scroll_y, 0))
             .wrap(Wrap { trim: false });
-        f.render_widget(p, content_inner);
-    }
+        (len, "Changes Diff", p)
+    };
+
+    let scroll_badge = crate::ui::components::scroll_indicator(
+        app.ui.pr_scroll_y as usize,
+        visible_rows,
+        total_lines,
+    );
+    let zoom_hint = if app.ui.maximized_panel {
+        "[Z: restore] "
+    } else {
+        "[Z: zoom] "
+    };
+    let content_title = format!(
+        " {} {} {}[u/d: scroll] ",
+        type_title, scroll_badge, zoom_hint
+    );
+
+    let content_block = Block::default()
+        .title(content_title)
+        .borders(Borders::ALL)
+        .border_style(theme.active_border);
+    let content_inner = content_block.inner(chunks[1]);
+    f.render_widget(content_block, chunks[1]);
+    f.render_widget(content_widget, content_inner);
 }

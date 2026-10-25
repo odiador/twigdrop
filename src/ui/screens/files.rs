@@ -14,15 +14,17 @@ use crate::state::ui::{AppMode, FilePanel, PreviewState};
 pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
     let theme = app.theme();
     let (sidebar_area, preview_area) = if let AppMode::CodePreview(state) = app.ui.current_mode() {
+        let constraints = if app.ui.maximized_panel {
+            [Constraint::Length(0), Constraint::Min(0)]
+        } else {
+            [
+                Constraint::Percentage(app.ui.sidebar_width),
+                Constraint::Min(0),
+            ]
+        };
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints(
-                [
-                    Constraint::Percentage(app.ui.sidebar_width),
-                    Constraint::Min(0),
-                ]
-                .as_ref(),
-            )
+            .constraints(constraints.as_ref())
             .split(area);
         (chunks[0], Some((chunks[1], state)))
     } else {
@@ -39,7 +41,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
 
     let title_str = if app.ui.files_search_active {
         format!(
-            " 📂 Search: {}_ [Enter: done • Esc: cancel] ",
+            " 🔍 Quick Jump: {}_ [Enter: done • Esc: cancel] ",
             app.ui.files_search_query
         )
     } else if !app.ui.files_search_query.is_empty() {
@@ -146,8 +148,10 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         ])));
     }
 
-    let list = List::new(items).block(block);
-    f.render_widget(list, sidebar_area);
+    if !app.ui.maximized_panel || preview_area.is_none() {
+        let list = List::new(items).block(block);
+        f.render_widget(list, sidebar_area);
+    }
 
     if let Some((pa, state)) = preview_area {
         render_code_preview(f, app, pa, state);
@@ -213,15 +217,29 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
         f.render_widget(p, inner);
     }
 
-    let block_title = format!(" Preview: {} ", state.file_path);
+    let visible_rows = body_area.height.saturating_sub(2) as usize;
+    let scroll_badge =
+        crate::ui::components::scroll_indicator(state.scroll_y, visible_rows, state.lines.len());
+    let zoom_hint = if app.ui.maximized_panel {
+        "[Z: restore] "
+    } else {
+        "[Z: zoom] "
+    };
+    let block_title = format!(
+        " Preview: {} {} {}",
+        state.file_path, scroll_badge, zoom_hint
+    );
 
     let block = Block::default()
         .title(block_title)
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(border_color));
+        .border_style(if app.ui.maximized_panel {
+            theme.active_border
+        } else {
+            Style::default().fg(border_color)
+        });
 
     let mut final_lines = Vec::new();
-    let visible_rows = body_area.height.saturating_sub(2) as usize;
     let start_idx = state.scroll_y;
     const OVERSCAN_LINES: usize = 5;
     let end_idx = (start_idx + visible_rows + OVERSCAN_LINES).min(state.highlighted_lines.len());

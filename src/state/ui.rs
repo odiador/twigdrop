@@ -259,6 +259,7 @@ pub struct UiState {
     pub show_inspector_drawer: bool,
     pub show_nav_sidebar: bool,
     pub nav_sidebar_selected: usize,
+    pub maximized_panel: bool,
 
     // Interaction State (modifiers are matched per-KeyEvent, never stored)
     pub last_click_time: Instant,
@@ -323,6 +324,7 @@ impl UiState {
             show_inspector_drawer: false,
             show_nav_sidebar: false,
             nav_sidebar_selected: 0,
+            maximized_panel: false,
             last_click_time: Instant::now(),
             last_click_row: None,
             open_paths: HashSet::new(),
