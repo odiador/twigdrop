@@ -37,13 +37,30 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         theme.border.fg.unwrap_or(Color::DarkGray)
     };
 
+    let title_str = if app.ui.files_search_active {
+        format!(
+            " 📂 Search: {}_ [Enter: done • Esc: cancel] ",
+            app.ui.files_search_query
+        )
+    } else if !app.ui.files_search_query.is_empty() {
+        format!(
+            " 📂 Files [Filter: \"{}\"] [Esc: clear] ",
+            app.ui.files_search_query
+        )
+    } else if app.ui.files_changed_only {
+        " 📂 Files [CHANGED ONLY] (c: all • Space: stage) ".to_string()
+    } else {
+        " 📂 Files (Tab: focus • c: changed • Space: stage • /: search) ".to_string()
+    };
+
     let block = Block::default()
-        .title(Line::from(" 📂 Files (Tab: switch focus) ").alignment(Alignment::Left))
+        .title(Line::from(title_str).alignment(Alignment::Left))
         .borders(Borders::ALL)
         .border_style(Style::default().fg(sidebar_border_color));
 
     let mut items = vec![];
-    for (i, entry) in app.repo.file_tree.iter().enumerate() {
+    for (display_idx, &tree_idx) in app.ui.filtered_file_indices.iter().enumerate() {
+        let entry = &app.repo.file_tree[tree_idx];
         let indent = "  ".repeat(entry.depth);
         let icon = if entry.is_dir {
             if entry.is_open {
@@ -80,7 +97,7 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
             style = style.bg(bg);
         }
 
-        if i == app.ui.selected_file_idx {
+        if display_idx == app.ui.selected_file_idx {
             let bg = if app.ui.active_panel == FilePanel::Directory {
                 Color::White
             } else {
@@ -103,10 +120,17 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
         );
     }
 
-    if app.repo.file_tree.is_empty() {
+    if items.is_empty() {
+        let msg = if app.ui.files_changed_only {
+            "No changed files in workspace"
+        } else if !app.ui.files_search_query.is_empty() {
+            "No files matching search"
+        } else {
+            "No files found"
+        };
         items.push(ListItem::new(Line::from(vec![
             Span::raw("  "),
-            Span::styled("No files found", theme.dim),
+            Span::styled(msg, theme.dim),
         ])));
     }
 

@@ -123,6 +123,27 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.ui.selected_branch_idx = 0;
                 return false;
             }
+            if !app.ui.files_search_query.is_empty() {
+                app.ui.files_search_query.clear();
+                app.refresh_filtered_files();
+                return false;
+            }
+            if app.ui.files_changed_only && app.ui.primary_mode == PrimaryMode::Files {
+                app.ui.files_changed_only = false;
+                app.load_file_tree(path);
+                app.ui.notify(
+                    crate::state::toast::ToastKind::Info,
+                    "Filter: All files".to_string(),
+                    None,
+                );
+                return false;
+            }
+            if app.ui.commit_panel == crate::state::ui::CommitPanel::Files
+                && app.ui.primary_mode == PrimaryMode::Commits
+            {
+                app.ui.commit_panel = crate::state::ui::CommitPanel::Tree;
+                return false;
+            }
             if app.ui.show_inspector_drawer || app.ui.show_nav_sidebar {
                 app.ui.show_inspector_drawer = false;
                 app.ui.show_nav_sidebar = false;
@@ -147,6 +168,11 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.ui.diff_panel = match app.ui.diff_panel {
                     FilePanel::Directory => FilePanel::Preview,
                     FilePanel::Preview => FilePanel::Directory,
+                };
+            } else if app.ui.primary_mode == PrimaryMode::Commits {
+                app.ui.commit_panel = match app.ui.commit_panel {
+                    crate::state::ui::CommitPanel::Tree => crate::state::ui::CommitPanel::Files,
+                    crate::state::ui::CommitPanel::Files => crate::state::ui::CommitPanel::Tree,
                 };
             }
             return false;
@@ -186,6 +212,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 PrimaryMode::Commits => {
                     app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
                     app.ui.selected_commit_idx = 0;
+                    app.fetch_current_commit_details(path);
                 }
                 PrimaryMode::Stashes => {
                     app.load_stashes(path);
@@ -215,6 +242,7 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             app.set_primary_mode(PrimaryMode::Commits);
             app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
             app.ui.selected_commit_idx = 0;
+            app.fetch_current_commit_details(path);
             app.ui.track_history(View::Commits);
             return false;
         }

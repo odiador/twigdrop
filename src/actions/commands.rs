@@ -166,6 +166,10 @@ pub fn unstage_file(path: &str, file_path: &str) -> Result<String, String> {
     }
 }
 
+pub fn get_commit_file_diff(path: &str, hash: &str, file_path: &str) -> Result<String, GitError> {
+    run_git(path, &["show", "--format=", "-p", hash, "--", file_path])
+}
+
 pub fn apply_resolution_to_file(
     repo_path: &str,
     file_path: &str,

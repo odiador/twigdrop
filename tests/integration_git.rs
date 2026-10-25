@@ -389,3 +389,129 @@ fn code_preview_tab_toggles_focus_and_allows_directory_navigation() {
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc_key, &p);
     assert_eq!(*app.ui.current_mode(), AppMode::Normal);
 }
+
+#[test]
+fn files_changed_only_filter_and_space_staging() {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::git::files::FileStatus;
+    use twigdrop::state::PrimaryMode;
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    // Create an uncommitted file and modify README.md
+    std::fs::write(dir.path().join("untracked.txt"), "hello").expect("write file");
+    std::fs::write(dir.path().join("README.md"), "modified content").expect("modify readme");
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+
+    assert!(!app.ui.files_changed_only);
+    assert_eq!(app.ui.filtered_file_indices.len(), app.repo.file_tree.len());
+
+    // Toggle changed only with 'c'
+    let c_key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, c_key, &p);
+    assert!(app.ui.files_changed_only);
+
+    // Every filtered entry must now be non-normal and non-ignored
+    for &idx in &app.ui.filtered_file_indices {
+        let entry = &app.repo.file_tree[idx];
+        assert_ne!(entry.status, FileStatus::Normal);
+        assert_ne!(entry.status, FileStatus::Ignored);
+    }
+
+    // Space key triggers instant staging with toast notification (no modal)
+    let space_key = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, space_key, &p);
+    assert!(app.ui.toast.is_some());
+    assert_eq!(*app.ui.current_mode(), twigdrop::state::AppMode::Normal);
+
+    // Pressing Space again unstages the file
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, space_key, &p);
+    assert!(app.ui.toast.is_some());
+
+    // Esc resets the changed-only filter
+    let esc_key = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc_key, &p);
+    assert!(!app.ui.files_changed_only);
+}
+
+#[test]
+fn commits_panel_tab_navigation_and_file_diff_explorer() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::{CommitPanel, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    // Create a commit that changes two files
+    std::fs::write(dir.path().join("file_a.txt"), "line 1\nline 2\n").expect("write");
+    std::fs::write(dir.path().join("file_b.txt"), "line b\n").expect("write");
+    let repo = git2::Repository::open(&p).unwrap();
+    let mut index = repo.index().unwrap();
+    index.add_path(std::path::Path::new("file_a.txt")).unwrap();
+    index.add_path(std::path::Path::new("file_b.txt")).unwrap();
+    index.write().unwrap();
+    let tree_id = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_id).unwrap();
+    let parent = repo.head().unwrap().peel_to_commit().unwrap();
+    let sig = git2::Signature::now("Tester", "test@example.com").unwrap();
+    repo.commit(
+        Some("HEAD"),
+        &sig,
+        &sig,
+        "feat: add files a and b",
+        &tree,
+        &[&parent],
+    )
+    .unwrap();
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::Commits);
+    app.repo.commit_tree = twigdrop::git::commands::get_commit_tree(&p);
+    app.ui.selected_commit_idx = 0;
+    app.fetch_current_commit_details(&p);
+
+    assert_eq!(app.ui.commit_panel, CommitPanel::Tree);
+    assert!(!app.repo.commit_files.is_empty());
+    assert!(app.repo.commit_file_diff.is_some());
+
+    // Tab key switches to CommitPanel::Files
+    let tab_key = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
+    assert_eq!(app.ui.commit_panel, CommitPanel::Files);
+
+    // Navigate to next file in commit with 'j'
+    let j_key = KeyEvent::new(KeyCode::Char('j'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, j_key, &p);
+    assert_eq!(app.ui.selected_commit_file_idx, 1);
+    assert!(app.repo.commit_file_diff.is_some());
+
+    // Render frame to ensure draw doesn't panic and displays formatted diff
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let buffer = terminal.backend().buffer();
+    let content: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("Files"));
+    assert!(content.contains("Diff:"));
+
+    // Tab switches back to CommitPanel::Tree
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab_key, &p);
+    assert_eq!(app.ui.commit_panel, CommitPanel::Tree);
+}

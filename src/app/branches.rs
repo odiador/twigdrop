@@ -123,9 +123,33 @@ impl App {
             let (stats, diff) = crate::git::commands::get_commit_details(path, &commit.hash);
             self.repo.commit_stats = Some(stats);
             self.repo.commit_diff = Some(diff);
+            self.repo.commit_files = crate::git::files::get_commit_files(path, &commit.hash);
+            if self.ui.selected_commit_file_idx >= self.repo.commit_files.len() {
+                self.ui.selected_commit_file_idx = 0;
+            }
+            self.fetch_selected_commit_file_diff(path);
         } else {
             self.repo.commit_stats = None;
             self.repo.commit_diff = None;
+            self.repo.commit_files.clear();
+            self.repo.commit_file_diff = None;
+        }
+    }
+
+    pub fn fetch_selected_commit_file_diff(&mut self, path: &str) {
+        if let Some(commit) = self.repo.commit_tree.get(self.ui.selected_commit_idx) {
+            if let Some(entry) = self.repo.commit_files.get(self.ui.selected_commit_file_idx) {
+                let file_path = entry.path.to_string_lossy().replace('\\', "/");
+                match crate::actions::commands::get_commit_file_diff(path, &commit.hash, &file_path)
+                {
+                    Ok(diff) => self.repo.commit_file_diff = Some(diff),
+                    Err(_) => self.repo.commit_file_diff = None,
+                }
+            } else {
+                self.repo.commit_file_diff = None;
+            }
+        } else {
+            self.repo.commit_file_diff = None;
         }
     }
 
@@ -187,13 +211,23 @@ impl App {
                 }
             }
             PrimaryMode::Files => {
-                if self.ui.selected_file_idx < self.repo.file_tree.len().saturating_sub(1) {
+                let max = self.ui.filtered_file_indices.len().saturating_sub(1);
+                if self.ui.selected_file_idx < max {
                     self.ui.selected_file_idx += 1;
                 }
             }
             PrimaryMode::Commits => {
-                if self.ui.selected_commit_idx < self.repo.commit_tree.len().saturating_sub(1) {
+                if self.ui.commit_panel == crate::state::ui::CommitPanel::Files {
+                    if self.ui.selected_commit_file_idx + 1 < self.repo.commit_files.len() {
+                        self.ui.selected_commit_file_idx += 1;
+                        self.ui.info_scroll = 0;
+                        self.fetch_selected_commit_file_diff(path);
+                    }
+                } else if self.ui.selected_commit_idx
+                    < self.repo.commit_tree.len().saturating_sub(1)
+                {
                     self.ui.selected_commit_idx += 1;
+                    self.ui.info_scroll = 0;
                     self.fetch_current_commit_details(path);
                 }
             }
@@ -218,8 +252,15 @@ impl App {
                 }
             }
             PrimaryMode::Commits => {
-                if self.ui.selected_commit_idx > 0 {
+                if self.ui.commit_panel == crate::state::ui::CommitPanel::Files {
+                    if self.ui.selected_commit_file_idx > 0 {
+                        self.ui.selected_commit_file_idx -= 1;
+                        self.ui.info_scroll = 0;
+                        self.fetch_selected_commit_file_diff(path);
+                    }
+                } else if self.ui.selected_commit_idx > 0 {
                     self.ui.selected_commit_idx -= 1;
+                    self.ui.info_scroll = 0;
                     self.fetch_current_commit_details(path);
                 }
             }

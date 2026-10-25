@@ -30,6 +30,13 @@ pub enum FilePanel {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
+pub enum CommitPanel {
+    #[default]
+    Tree,
+    Files,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Default)]
 pub enum BranchSortMode {
     #[default]
     Recent,
@@ -169,6 +176,10 @@ pub struct UiState {
     pub search_query: String,
     pub filtered_indices: Vec<usize>,
     pub bulk_selected: HashSet<String>,
+    pub files_changed_only: bool,
+    pub files_search_query: String,
+    pub files_search_active: bool,
+    pub filtered_file_indices: Vec<usize>,
 
     // UI State
     pub sidebar_width: u16,
@@ -176,6 +187,7 @@ pub struct UiState {
     pub show_terminal: bool,
     pub active_panel: FilePanel,
     pub diff_panel: FilePanel,
+    pub commit_panel: CommitPanel,
     pub branch_sort_mode: BranchSortMode,
     pub show_inspector_drawer: bool,
     pub show_nav_sidebar: bool,
@@ -224,11 +236,16 @@ impl UiState {
             search_query: String::new(),
             filtered_indices: Vec::new(),
             bulk_selected: HashSet::new(),
+            files_changed_only: false,
+            files_search_query: String::new(),
+            files_search_active: false,
+            filtered_file_indices: Vec::new(),
             sidebar_width,
             needs_clear: false,
             show_terminal: false,
             active_panel: FilePanel::Directory,
             diff_panel: FilePanel::Directory,
+            commit_panel: CommitPanel::Tree,
             branch_sort_mode: BranchSortMode::Recent,
             show_inspector_drawer: false,
             show_nav_sidebar: false,

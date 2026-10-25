@@ -39,7 +39,64 @@ pub fn handle_preview_keyboard(state: &mut PreviewState, code: KeyCode) -> bool 
 }
 
 pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
+    if app.ui.files_search_active {
+        match key.code {
+            KeyCode::Esc => {
+                app.ui.files_search_active = false;
+            }
+            KeyCode::Enter => {
+                app.ui.files_search_active = false;
+            }
+            KeyCode::Backspace => {
+                app.ui.files_search_query.pop();
+                app.refresh_filtered_files();
+            }
+            KeyCode::Char(c) => {
+                app.ui.files_search_query.push(c);
+                app.refresh_filtered_files();
+            }
+            _ => {}
+        }
+        return false;
+    }
+
     match key.code {
+        KeyCode::Char('/') => {
+            app.ui.files_search_active = true;
+            false
+        }
+        KeyCode::Char('c') | KeyCode::Char('m') => {
+            app.ui.files_changed_only = !app.ui.files_changed_only;
+            app.load_file_tree(path);
+            let label = if app.ui.files_changed_only {
+                "Changed files only"
+            } else {
+                "All files"
+            };
+            app.ui.notify(
+                crate::state::toast::ToastKind::Info,
+                format!("Filter: {label}"),
+                None,
+            );
+            false
+        }
+        KeyCode::Esc => {
+            if !app.ui.files_search_query.is_empty() {
+                app.ui.files_search_query.clear();
+                app.refresh_filtered_files();
+            } else if app.ui.files_changed_only {
+                app.ui.files_changed_only = false;
+                app.load_file_tree(path);
+                app.ui.notify(
+                    crate::state::toast::ToastKind::Info,
+                    "Filter: All files".to_string(),
+                    None,
+                );
+            } else {
+                app.ui.primary_mode = crate::state::ui::PrimaryMode::Branches;
+            }
+            false
+        }
         KeyCode::Char('[') if app.ui.sidebar_width > 10 => {
             app.ui.sidebar_width -= 2;
             app.ui.needs_clear = true;
@@ -54,17 +111,16 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             let alt = key
                 .modifiers
                 .contains(ratatui::crossterm::event::KeyModifiers::ALT);
-            let target_path =
-                if alt && let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
-                    std::path::PathBuf::from(path).join(&entry.path)
-                } else {
-                    std::path::PathBuf::from(path)
-                };
+            let target_path = if alt && let Some(entry) = app.selected_file() {
+                std::path::PathBuf::from(path).join(&entry.path)
+            } else {
+                std::path::PathBuf::from(path)
+            };
             crate::utils::terminal::open_folder(&target_path);
             false
         }
         KeyCode::Char('v') => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
+            if let Some(entry) = app.selected_file() {
                 let alt = key
                     .modifiers
                     .contains(ratatui::crossterm::event::KeyModifiers::ALT);
@@ -78,7 +134,7 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('a') => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
+            if let Some(entry) = app.selected_file() {
                 let alt = key
                     .modifiers
                     .contains(ratatui::crossterm::event::KeyModifiers::ALT);
@@ -92,7 +148,7 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Char('t') => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
+            if let Some(entry) = app.selected_file() {
                 let full_path = std::path::PathBuf::from(path).join(&entry.path);
                 let dir = if entry.is_dir {
                     full_path
@@ -106,8 +162,8 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             }
             false
         }
-        KeyCode::Char('s') => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx)
+        KeyCode::Char(' ') | KeyCode::Char('s') => {
+            if let Some(entry) = app.selected_file()
                 && !entry.is_dir
             {
                 let rel_path = entry.path.to_string_lossy().to_string().replace('\\', "/");
@@ -120,17 +176,19 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 match result {
                     Ok(msg) => {
                         app.load_file_tree(path);
-                        app.ui.push_modal(AppMode::Message(msg));
+                        app.ui
+                            .notify(crate::state::toast::ToastKind::Success, msg, None);
                     }
                     Err(e) => {
-                        app.ui.push_modal(AppMode::Message(e));
+                        app.ui
+                            .notify(crate::state::toast::ToastKind::Error, e, None);
                     }
                 }
             }
             false
         }
         KeyCode::Left => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
+            if let Some(entry) = app.selected_file().cloned() {
                 if entry.is_dir && entry.is_open {
                     app.toggle_file_dir(path);
                 } else if entry.depth > 0 {
@@ -138,7 +196,9 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                     let mut i = app.ui.selected_file_idx;
                     while i > 0 {
                         i -= 1;
-                        if app.repo.file_tree[i].depth < current_depth {
+                        if let Some(&tree_idx) = app.ui.filtered_file_indices.get(i)
+                            && app.repo.file_tree[tree_idx].depth < current_depth
+                        {
                             app.ui.selected_file_idx = i;
                             break;
                         }
@@ -148,19 +208,19 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             false
         }
         KeyCode::Right => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx)
+            if let Some(entry) = app.selected_file().cloned()
                 && entry.is_dir
             {
                 if !entry.is_open {
                     app.toggle_file_dir(path);
-                } else if app.ui.selected_file_idx + 1 < app.repo.file_tree.len() {
+                } else if app.ui.selected_file_idx + 1 < app.ui.filtered_file_indices.len() {
                     app.ui.selected_file_idx += 1;
                 }
             }
             false
         }
         KeyCode::Enter => {
-            if let Some(entry) = app.repo.file_tree.get(app.ui.selected_file_idx) {
+            if let Some(entry) = app.selected_file().cloned() {
                 if entry.is_dir {
                     app.toggle_file_dir(path);
                 } else {

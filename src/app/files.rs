@@ -1,4 +1,5 @@
 use super::App;
+use crate::git::files::FileStatus;
 
 impl App {
     pub fn load_file_tree(&mut self, path: &str) {
@@ -6,9 +7,43 @@ impl App {
         let mut new_tree = Vec::new();
         self.build_tree_recursive(path, "", 0, &mut new_tree);
         self.repo.file_tree = new_tree;
-        if self.ui.selected_file_idx >= self.repo.file_tree.len() {
-            self.ui.selected_file_idx = self.repo.file_tree.len().saturating_sub(1);
+        self.refresh_filtered_files();
+    }
+
+    pub fn refresh_filtered_files(&mut self) {
+        self.ui.filtered_file_indices = self
+            .repo
+            .file_tree
+            .iter()
+            .enumerate()
+            .filter(|(_, entry)| {
+                if self.ui.files_changed_only
+                    && matches!(entry.status, FileStatus::Normal | FileStatus::Ignored)
+                {
+                    return false;
+                }
+                if !self.ui.files_search_query.is_empty() {
+                    let path_str = entry.path.to_string_lossy().to_lowercase();
+                    if !path_str.contains(&self.ui.files_search_query.to_lowercase()) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|(i, _)| i)
+            .collect();
+
+        let max = self.ui.filtered_file_indices.len().saturating_sub(1);
+        if self.ui.selected_file_idx > max {
+            self.ui.selected_file_idx = max;
         }
+    }
+
+    pub fn selected_file(&self) -> Option<&crate::git::files::FileEntry> {
+        self.ui
+            .filtered_file_indices
+            .get(self.ui.selected_file_idx)
+            .and_then(|&i| self.repo.file_tree.get(i))
     }
 
     fn build_tree_recursive(
@@ -27,7 +62,10 @@ impl App {
 
         for mut entry in entries {
             let path_str = entry.path.to_string_lossy().to_string();
-            let is_open = self.ui.open_paths.contains(&path_str);
+            let is_open = self.ui.open_paths.contains(&path_str)
+                || (self.ui.files_changed_only
+                    && entry.status != FileStatus::Normal
+                    && entry.status != FileStatus::Ignored);
             entry.is_open = is_open;
 
             tree.push(entry.clone());
@@ -39,11 +77,9 @@ impl App {
     }
 
     pub fn toggle_file_dir(&mut self, path_str: &str) {
-        if self.ui.selected_file_idx >= self.repo.file_tree.len() {
+        let Some(entry) = self.selected_file().cloned() else {
             return;
-        }
-
-        let entry = &self.repo.file_tree[self.ui.selected_file_idx];
+        };
         if !entry.is_dir {
             return;
         }
@@ -58,5 +94,6 @@ impl App {
         let mut new_tree = Vec::new();
         self.build_tree_recursive(path_str, "", 0, &mut new_tree);
         self.repo.file_tree = new_tree;
+        self.refresh_filtered_files();
     }
 }

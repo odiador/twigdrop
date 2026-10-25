@@ -1,6 +1,7 @@
 use crate::models::{BranchStatus, MergeStatus};
 use crate::ui::theme::Theme;
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
 
 pub fn get_status_icons(status: &[BranchStatus], theme: &Theme) -> (String, Color) {
     let mut icons = String::new();
@@ -113,6 +114,108 @@ pub fn apply_dimmed_backdrop(
     }
 }
 
+pub fn parse_hunk_header(line: &str) -> Option<(usize, usize)> {
+    if !line.starts_with("@@") {
+        return None;
+    }
+    let parts: Vec<&str> = line.split("@@").collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let range_str = parts[1].trim();
+    let mut tokens = range_str.split_whitespace();
+    let old_token = tokens.next()?;
+    let new_token = tokens.next()?;
+
+    let parse_start = |token: &str, prefix: char| -> Option<usize> {
+        let s = token.strip_prefix(prefix)?;
+        let start_str = s.split(',').next()?;
+        start_str.parse::<usize>().ok()
+    };
+
+    let old_start = parse_start(old_token, '-')?;
+    let new_start = parse_start(new_token, '+')?;
+    Some((old_start, new_start))
+}
+
+pub fn format_diff_with_gutters<'a>(diff: &str, theme: &Theme) -> Vec<Line<'a>> {
+    if diff.trim().is_empty() {
+        return vec![Line::from(Span::styled(
+            " (No diff for this commit/file) ",
+            theme.dim,
+        ))];
+    }
+
+    let mut lines = Vec::new();
+    let mut old_lineno = 1usize;
+    let mut new_lineno = 1usize;
+    let mut in_hunk = false;
+
+    let green = theme.merged.fg.unwrap_or(Color::Green);
+    let red = theme.danger.fg.unwrap_or(Color::Red);
+    let cyan = theme.nav.fg.unwrap_or(Color::Cyan);
+
+    for line in diff.lines() {
+        if line.starts_with("@@") {
+            if let Some((old_start, new_start)) = parse_hunk_header(line) {
+                old_lineno = old_start;
+                new_lineno = new_start;
+                in_hunk = true;
+            }
+            lines.push(Line::from(vec![
+                Span::styled("───────┼── ", theme.dim),
+                Span::styled(
+                    line.to_string(),
+                    Style::default().fg(cyan).add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        } else if !in_hunk
+            || line.starts_with("diff --git")
+            || line.starts_with("index ")
+            || line.starts_with("--- ")
+            || line.starts_with("+++ ")
+        {
+            lines.push(Line::from(vec![
+                Span::styled("       │   ", theme.dim),
+                Span::styled(line.to_string(), theme.dim),
+            ]));
+        } else if let Some(stripped) = line.strip_prefix('+') {
+            lines.push(Line::from(vec![
+                Span::styled("     ", theme.dim),
+                Span::styled(format!("{:>4} ", new_lineno), green),
+                Span::styled("│ ", theme.dim),
+                Span::styled("+ ", green),
+                Span::styled(stripped.to_string(), green),
+            ]));
+            new_lineno += 1;
+        } else if let Some(stripped) = line.strip_prefix('-') {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{:>4} ", old_lineno), red),
+                Span::styled("     ", theme.dim),
+                Span::styled("│ ", theme.dim),
+                Span::styled("- ", red),
+                Span::styled(stripped.to_string(), red),
+            ]));
+            old_lineno += 1;
+        } else if let Some(stripped) = line.strip_prefix(' ') {
+            lines.push(Line::from(vec![
+                Span::styled(format!("{:>4} ", old_lineno), theme.dim),
+                Span::styled(format!("{:>4} ", new_lineno), theme.dim),
+                Span::styled("│   ", theme.dim),
+                Span::styled(stripped.to_string(), theme.base),
+            ]));
+            old_lineno += 1;
+            new_lineno += 1;
+        } else {
+            lines.push(Line::from(vec![
+                Span::styled("       │   ", theme.dim),
+                Span::styled(line.to_string(), theme.dim),
+            ]));
+        }
+    }
+    lines
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +246,28 @@ mod tests {
         assert_ne!(dark.base, light.base);
         assert_ne!(dark.surface, light.surface);
         assert_ne!(dark.success, light.success);
+    }
+
+    #[test]
+    fn test_parse_hunk_header_variants() {
+        assert_eq!(
+            parse_hunk_header("@@ -42,10 +42,12 @@ format:"),
+            Some((42, 42))
+        );
+        assert_eq!(parse_hunk_header("@@ -1 +1 @@"), Some((1, 1)));
+        assert_eq!(parse_hunk_header("@@ -0,0 +1,5 @@"), Some((0, 1)));
+        assert_eq!(parse_hunk_header("not a hunk"), None);
+        assert_eq!(parse_hunk_header("@@ malformed @@"), None);
+    }
+
+    #[test]
+    fn test_format_diff_with_gutters() {
+        let theme = Theme::dark_default();
+        let empty_diff = format_diff_with_gutters("", &theme);
+        assert_eq!(empty_diff.len(), 1);
+
+        let diff_sample = "diff --git a/foo b/foo\n@@ -1,2 +1,2 @@\n-old\n+new\n context";
+        let lines = format_diff_with_gutters(diff_sample, &theme);
+        assert_eq!(lines.len(), 5);
     }
 }

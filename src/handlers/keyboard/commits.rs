@@ -5,20 +5,73 @@ use chrono::Datelike;
 use chrono::Timelike;
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 
-pub fn handle_commits_keyboard(app: &mut App, key: KeyEvent, _path: &str) -> bool {
+pub fn handle_commits_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
     match key.code {
-        KeyCode::Up | KeyCode::Char('k') if app.ui.selected_commit_idx > 0 => {
-            app.ui.selected_commit_idx -= 1;
+        KeyCode::Tab => {
+            app.ui.commit_panel = match app.ui.commit_panel {
+                crate::state::ui::CommitPanel::Tree => crate::state::ui::CommitPanel::Files,
+                crate::state::ui::CommitPanel::Files => crate::state::ui::CommitPanel::Tree,
+            };
             false
         }
-        KeyCode::Down | KeyCode::Char('j')
-            if app.ui.selected_commit_idx < app.repo.commit_tree.len().saturating_sub(1) =>
+        KeyCode::Right | KeyCode::Char('l')
+            if app.ui.commit_panel == crate::state::ui::CommitPanel::Tree =>
         {
-            app.ui.selected_commit_idx += 1;
+            if !app.repo.commit_files.is_empty() {
+                app.ui.commit_panel = crate::state::ui::CommitPanel::Files;
+            }
+            false
+        }
+        KeyCode::Left | KeyCode::Char('h')
+            if app.ui.commit_panel == crate::state::ui::CommitPanel::Files =>
+        {
+            app.ui.commit_panel = crate::state::ui::CommitPanel::Tree;
+            false
+        }
+        KeyCode::Up | KeyCode::Char('k') => {
+            app.previous(path);
+            false
+        }
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.next(path);
+            false
+        }
+        KeyCode::Char('d') | KeyCode::PageDown => {
+            app.ui.info_scroll = app.ui.info_scroll.saturating_add(5);
+            false
+        }
+        KeyCode::Char('u') | KeyCode::PageUp => {
+            app.ui.info_scroll = app.ui.info_scroll.saturating_sub(5);
+            false
+        }
+        KeyCode::Char('U') if app.ui.commit_panel == crate::state::ui::CommitPanel::Files => {
+            if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx)
+                && let Some(entry) = app.repo.commit_files.get(app.ui.selected_commit_file_idx)
+            {
+                let file_path = entry.path.to_string_lossy().to_string();
+                let hash = commit.hash.clone();
+                let msg = match crate::actions::commands::move_file_changes_forward(
+                    path, &hash, &file_path,
+                ) {
+                    Ok(m) => m,
+                    Err(e) => format!("Error: {e}"),
+                };
+                app.ui
+                    .notify(crate::state::toast::ToastKind::Success, msg, None);
+                app.repo.commit_tree = crate::git::commands::get_commit_tree(path);
+                app.fetch_current_commit_details(path);
+            }
             false
         }
         KeyCode::Enter => {
-            if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx)
+            if app.ui.commit_panel == crate::state::ui::CommitPanel::Files {
+                if let Some(entry) = app.repo.commit_files.get(app.ui.selected_commit_file_idx) {
+                    let rel_path = entry.path.to_string_lossy().to_string();
+                    if let Some(preview) = app.create_preview_state(path, &rel_path) {
+                        app.ui.push_modal(AppMode::CodePreview(preview));
+                    }
+                }
+            } else if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx)
                 && !commit.hash.is_empty()
             {
                 app.ui
@@ -28,7 +81,11 @@ pub fn handle_commits_keyboard(app: &mut App, key: KeyEvent, _path: &str) -> boo
             false
         }
         KeyCode::Esc | KeyCode::Char('q') => {
-            app.ui.primary_mode = PrimaryMode::Branches;
+            if app.ui.commit_panel == crate::state::ui::CommitPanel::Files {
+                app.ui.commit_panel = crate::state::ui::CommitPanel::Tree;
+            } else {
+                app.ui.primary_mode = PrimaryMode::Branches;
+            }
             false
         }
         _ => false,

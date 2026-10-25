@@ -87,34 +87,48 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
         }
     }
 
+    let tree_border_style = if app.ui.commit_panel == crate::state::ui::CommitPanel::Tree {
+        Style::default().fg(Color::Cyan)
+    } else {
+        theme.border
+    };
+
+    let list_title = if app.ui.commit_panel == crate::state::ui::CommitPanel::Tree {
+        " Git Commit Tree (All Branches) [Tab: focus files] "
+    } else {
+        " Git Commit Tree (All Branches) "
+    };
+
     let list = List::new(items).block(
         Block::default()
-            .title(" Git Commit Tree (All Branches) ")
+            .title(list_title)
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan)),
+            .border_style(tree_border_style),
     );
     f.render_widget(list, list_area);
 
-    let details_block = Block::default()
-        .title(" Commit Details ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Yellow));
-
     if let Some(commit) = app.repo.commit_tree.get(app.ui.selected_commit_idx) {
-        let stats = app
+        let detail_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(5),
+                Constraint::Length(7),
+                Constraint::Min(4),
+            ])
+            .split(details_area);
+
+        let stats_summary = app
             .repo
             .commit_stats
             .as_deref()
-            .unwrap_or("Loading stats...");
-        let diff = app.repo.commit_diff.as_deref().unwrap_or("Loading diff...");
+            .and_then(|s| s.lines().last())
+            .unwrap_or("");
 
-        let mut detail_lines = vec![
+        let meta_lines = vec![
             Line::from(vec![
                 Span::styled("Hash: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(&commit.hash, Style::default().fg(Color::Yellow)),
-            ]),
-            Line::from(vec![
-                Span::styled("Author: ", Style::default().fg(Color::DarkGray)),
+                Span::styled("  Author: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(&commit.author, Style::default().fg(Color::White)),
             ]),
             Line::from(vec![
@@ -130,43 +144,103 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
                         .add_modifier(Modifier::BOLD),
                 ),
             ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "Stats:",
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
-            )),
-            Line::from(stats),
-            Line::from(""),
-            Line::from(Span::styled(
-                "Diff Preview:",
-                Style::default()
-                    .fg(Color::DarkGray)
-                    .add_modifier(Modifier::BOLD),
-            )),
+            Line::from(vec![
+                Span::styled("Stats: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(stats_summary, Style::default().fg(Color::Yellow)),
+            ]),
         ];
 
-        for line in diff.lines() {
-            let style = if line.starts_with('+') {
-                Style::default().fg(Color::Green)
-            } else if line.starts_with('-') {
-                Style::default().fg(Color::Red)
-            } else if line.starts_with("@@") {
-                Style::default().fg(Color::Cyan)
-            } else {
-                Style::default().fg(Color::Gray)
-            };
-            detail_lines.push(Line::from(Span::styled(line, style)));
-        }
+        let meta_block = Block::default()
+            .title(" Commit Details ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow));
+        f.render_widget(
+            Paragraph::new(meta_lines).block(meta_block),
+            detail_chunks[0],
+        );
 
-        let p = Paragraph::new(detail_lines)
-            .block(details_block)
+        let files_focused = app.ui.commit_panel == crate::state::ui::CommitPanel::Files;
+        let files_border_color = if files_focused {
+            theme.nav.fg.unwrap_or(Color::Yellow)
+        } else {
+            theme.border.fg.unwrap_or(Color::DarkGray)
+        };
+        let files_block = Block::default()
+            .title(format!(
+                " Files ({}) [Tab: switch] ",
+                app.repo.commit_files.len()
+            ))
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(files_border_color));
+
+        let mut file_items = vec![];
+        if app.repo.commit_files.is_empty() {
+            file_items.push(ListItem::new(" No files changed in this commit ").style(theme.dim));
+        } else {
+            for (i, entry) in app.repo.commit_files.iter().enumerate() {
+                let is_selected = i == app.ui.selected_commit_file_idx;
+                let (badge, badge_color) = match entry.status {
+                    FileStatus::Added => ("[A]", theme.merged.fg.unwrap_or(Color::Green)),
+                    FileStatus::Modified => ("[M]", theme.warning.fg.unwrap_or(Color::Yellow)),
+                    FileStatus::Deleted => ("[D]", theme.danger.fg.unwrap_or(Color::Red)),
+                    FileStatus::Staged => ("[S]", theme.info.fg.unwrap_or(Color::Blue)),
+                    FileStatus::Conflict => ("[C]", theme.danger.fg.unwrap_or(Color::Red)),
+                    _ => ("[·]", Color::Gray),
+                };
+
+                let mut text_style = Style::default();
+                if is_selected {
+                    if files_focused {
+                        text_style = theme.select_hi;
+                    } else {
+                        text_style = Style::default().bg(theme.select_soft);
+                    }
+                }
+
+                let line = Line::from(vec![
+                    Span::styled(format!("{badge} "), Style::default().fg(badge_color)),
+                    Span::styled(entry.path.to_string_lossy().to_string(), text_style),
+                ]);
+                file_items.push(ListItem::new(line).style(text_style));
+            }
+        }
+        let files_list = List::new(file_items).block(files_block);
+        f.render_widget(files_list, detail_chunks[1]);
+
+        let selected_file_name = app
+            .repo
+            .commit_files
+            .get(app.ui.selected_commit_file_idx)
+            .map(|f| f.path.to_string_lossy().to_string());
+
+        let diff_title = match &selected_file_name {
+            Some(name) => format!(" Diff: {} [d/u: scroll] ", name),
+            None => " Diff Preview [d/u: scroll] ".to_string(),
+        };
+
+        let diff_block = Block::default()
+            .title(diff_title)
+            .borders(Borders::ALL)
+            .border_style(theme.border);
+
+        let diff_content = app
+            .repo
+            .commit_file_diff
+            .as_deref()
+            .or(app.repo.commit_diff.as_deref())
+            .unwrap_or("");
+
+        let diff_lines = crate::ui::components::format_diff_with_gutters(diff_content, &theme);
+        let diff_widget = Paragraph::new(diff_lines)
+            .block(diff_block)
             .scroll((app.ui.info_scroll, 0))
             .wrap(ratatui::widgets::Wrap { trim: false });
-
-        f.render_widget(p, details_area);
+        f.render_widget(diff_widget, detail_chunks[2]);
     } else {
+        let details_block = Block::default()
+            .title(" Commit Details ")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Yellow));
         f.render_widget(
             Paragraph::new("No commit selected").block(details_block),
             details_area,
