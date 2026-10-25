@@ -241,9 +241,17 @@ impl App {
                 } else if self.ui.selected_commit_idx
                     < self.repo.commit_tree.len().saturating_sub(1)
                 {
-                    self.ui.selected_commit_idx += 1;
-                    self.ui.info_scroll = 0;
-                    self.fetch_current_commit_details(path);
+                    let mut next_idx = self.ui.selected_commit_idx + 1;
+                    while next_idx < self.repo.commit_tree.len()
+                        && self.repo.commit_tree[next_idx].hash.is_empty()
+                    {
+                        next_idx += 1;
+                    }
+                    if next_idx < self.repo.commit_tree.len() {
+                        self.ui.selected_commit_idx = next_idx;
+                        self.ui.info_scroll = 0;
+                        self.fetch_current_commit_details(path);
+                    }
                 }
             }
             PrimaryMode::Stashes => {
@@ -282,9 +290,15 @@ impl App {
                         self.fetch_selected_commit_file_diff(path);
                     }
                 } else if self.ui.selected_commit_idx > 0 {
-                    self.ui.selected_commit_idx -= 1;
-                    self.ui.info_scroll = 0;
-                    self.fetch_current_commit_details(path);
+                    let mut prev_idx = self.ui.selected_commit_idx - 1;
+                    while prev_idx > 0 && self.repo.commit_tree[prev_idx].hash.is_empty() {
+                        prev_idx -= 1;
+                    }
+                    if !self.repo.commit_tree[prev_idx].hash.is_empty() {
+                        self.ui.selected_commit_idx = prev_idx;
+                        self.ui.info_scroll = 0;
+                        self.fetch_current_commit_details(path);
+                    }
                 }
             }
             PrimaryMode::Stashes => {

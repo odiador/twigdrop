@@ -52,34 +52,44 @@ pub fn render_commits(f: &mut Frame, area: Rect, app: &App) {
                 graph_spans.push(Span::styled(ch.to_string(), Style::default().fg(color)));
             }
 
-            let mut commit_spans = vec![Span::styled(
-                format!(" {} ", commit.hash),
-                Style::default().fg(Color::Yellow),
-            )];
+            let mut all_spans = graph_spans;
 
-            if !commit.branch_info.is_empty() {
-                commit_spans.push(Span::styled(
-                    format!(" {} ", commit.branch_info),
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
+            if !commit.hash.is_empty() {
+                all_spans.push(Span::styled(
+                    format!(" {} ", commit.hash),
+                    Style::default().fg(Color::Yellow),
                 ));
+
+                if !commit.branch_info.is_empty() {
+                    all_spans.push(Span::styled(
+                        format!(" {} ", commit.branch_info),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ));
+                }
+
+                if !commit.date.is_empty() {
+                    all_spans.push(Span::styled(
+                        format!(" {} ", commit.date),
+                        Style::default().fg(Color::Cyan),
+                    ));
+                }
+
+                if !commit.author.is_empty() {
+                    all_spans.push(Span::styled(format!(" [{}] ", commit.author), theme.muted2));
+                }
+
+                if !commit.message.is_empty() {
+                    all_spans.push(Span::styled(
+                        commit.message.clone(),
+                        Style::default().fg(Color::White),
+                    ));
+                }
             }
 
-            commit_spans.extend(vec![
-                Span::styled(
-                    format!(" {} ", commit.date),
-                    Style::default().fg(Color::Cyan),
-                ),
-                Span::styled(format!(" [{}] ", commit.author), theme.muted2),
-                Span::styled(commit.message.clone(), Style::default().fg(Color::White)),
-            ]);
-
-            let mut all_spans = graph_spans;
-            all_spans.append(&mut commit_spans);
-
             let mut line_style = Style::default();
-            if is_selected {
+            if is_selected && !commit.hash.is_empty() {
                 line_style = theme.select_hi;
             }
 
