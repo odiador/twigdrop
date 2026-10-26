@@ -293,15 +293,18 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
     let header_inner = header_block.inner(chunks[0]);
     f.render_widget(header_block, chunks[0]);
 
+    let action_hint = if is_checks {
+        " (Tab: tabs │ d/u: select check │ Enter: open log │ a: approve │ o: web)"
+    } else {
+        " (Tab: tabs │ a: approve │ x: request changes │ m: comment │ c: checkout │ o: web)"
+    };
+
     let meta_lines = vec![
         Line::from(vec![
             Span::styled(" [ 1: Description ] ", tab_desc_style),
             Span::styled(" [ 2: Diff ] ", tab_diff_style),
             Span::styled(checks_badge_label, tab_checks_style),
-            Span::styled(
-                " (Tab: tabs │ a: approve │ x: request changes │ m: comment │ c: checkout │ o: web)",
-                theme.subtle,
-            ),
+            Span::styled(action_hint, theme.subtle),
         ]),
         Line::from(vec![
             Span::styled(
@@ -364,7 +367,9 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
                     theme.muted,
                 )));
             } else {
-                for c in list {
+                for (idx, c) in list.iter().enumerate() {
+                    let is_focused = idx == app.ui.pr_check_idx;
+                    let pointer = if is_focused { "▸ " } else { "  " };
                     let (icon, icon_style) = match c.bucket.as_str() {
                         "pass" => (" ✓ ", theme.success.add_modifier(Modifier::BOLD)),
                         "fail" | "cancel" => (" ✗ ", theme.danger.add_modifier(Modifier::BOLD)),
@@ -376,19 +381,50 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
                     } else {
                         format!("{} - {}", c.state, c.description)
                     };
-                    check_lines.push(Line::from(vec![
-                        Span::styled(icon, icon_style),
-                        Span::styled(
-                            format!("{:<28} ", c.name),
-                            theme.base.add_modifier(Modifier::BOLD),
-                        ),
-                        Span::styled(desc, theme.soft),
-                    ]));
+                    let mut line_style = Style::default();
+                    if is_focused {
+                        line_style = line_style.bg(theme.select_soft);
+                    }
+                    check_lines.push(
+                        Line::from(vec![
+                            Span::styled(
+                                pointer,
+                                if is_focused {
+                                    theme.accent.add_modifier(Modifier::BOLD)
+                                } else {
+                                    theme.subtle
+                                },
+                            ),
+                            Span::styled(icon, icon_style),
+                            Span::styled(
+                                format!("{:<28} ", c.name),
+                                theme.base.add_modifier(Modifier::BOLD),
+                            ),
+                            Span::styled(desc, theme.soft),
+                        ])
+                        .style(line_style),
+                    );
                     if !c.link.is_empty() {
-                        check_lines.push(Line::from(vec![
-                            Span::raw("     ↳ URL: "),
-                            Span::styled(&c.link, theme.subtle),
-                        ]));
+                        let link_hint = if is_focused {
+                            " [Enter: open log] "
+                        } else {
+                            ""
+                        };
+                        check_lines.push(
+                            Line::from(vec![
+                                Span::raw("     ↳ URL: "),
+                                Span::styled(
+                                    &c.link,
+                                    if is_focused {
+                                        theme.nav.add_modifier(Modifier::UNDERLINED)
+                                    } else {
+                                        theme.subtle
+                                    },
+                                ),
+                                Span::styled(link_hint, theme.accent2),
+                            ])
+                            .style(line_style),
+                        );
                     }
                     check_lines.push(Line::default());
                 }
@@ -416,10 +452,17 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
     } else {
         "[Z: zoom] "
     };
-    let content_title = format!(
-        " {} {} {}[u/d: scroll] ",
-        type_title, scroll_badge, zoom_hint
-    );
+    let content_title = if is_checks {
+        format!(
+            " {} {} {}[d/u: navigate • Enter: open log] ",
+            type_title, scroll_badge, zoom_hint
+        )
+    } else {
+        format!(
+            " {} {} {}[u/d: scroll] ",
+            type_title, scroll_badge, zoom_hint
+        )
+    };
 
     let content_block = Block::default()
         .title(content_title)

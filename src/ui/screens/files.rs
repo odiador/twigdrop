@@ -124,14 +124,44 @@ pub fn render_directory_searcher(f: &mut Frame, area: Rect, app: &App) {
             };
             style = style.bg(bg).fg(fg);
         }
-        items.push(
-            ListItem::new(Line::from(vec![
-                Span::raw(indent),
-                Span::raw(icon),
-                Span::styled(name.to_string(), style),
-            ]))
-            .style(style),
-        );
+
+        let mut line_spans = vec![Span::raw(indent), Span::raw(icon)];
+        if !app.ui.files_search_query.is_empty() {
+            let query_lower = app.ui.files_search_query.to_lowercase();
+            let name_lower = name.to_lowercase();
+            if let Some(pos) = name_lower.find(&query_lower) {
+                let match_end = pos + query_lower.len();
+                let highlight_style = if display_idx == app.ui.selected_file_idx
+                    && app.ui.active_panel == FilePanel::Directory
+                {
+                    style.add_modifier(
+                        ratatui::style::Modifier::UNDERLINED | ratatui::style::Modifier::BOLD,
+                    )
+                } else {
+                    style
+                        .add_modifier(
+                            ratatui::style::Modifier::UNDERLINED | ratatui::style::Modifier::BOLD,
+                        )
+                        .fg(theme.accent.fg.unwrap_or(Color::Yellow))
+                };
+                if pos > 0 {
+                    line_spans.push(Span::styled(name[..pos].to_string(), style));
+                }
+                line_spans.push(Span::styled(
+                    name[pos..match_end].to_string(),
+                    highlight_style,
+                ));
+                if match_end < name.len() {
+                    line_spans.push(Span::styled(name[match_end..].to_string(), style));
+                }
+            } else {
+                line_spans.push(Span::styled(name.to_string(), style));
+            }
+        } else {
+            line_spans.push(Span::styled(name.to_string(), style));
+        }
+
+        items.push(ListItem::new(Line::from(line_spans)).style(style));
     }
 
     if items.is_empty() {
@@ -226,7 +256,7 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
         }
 
         breadcrumb_spans.push(Span::styled(
-            " (b: blame • n/N: hunk • Tab: switch │ j/k: scroll) ",
+            " (b: blame • B: commit • n/N: hunk • Tab: switch │ j/k: scroll) ",
             theme.subtle,
         ));
 

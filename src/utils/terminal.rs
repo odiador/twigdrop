@@ -35,6 +35,28 @@ pub fn open_folder(dir: &Path) {
     {
         let _ = Command::new("xdg-open").arg(dir).spawn();
     }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("cmd").args(["/C", "start", "", dir]).spawn();
+    }
+}
+
+pub fn open_url(url: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg(url).spawn();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = Command::new("xdg-open").arg(url).spawn();
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    }
 }
 
 fn is_ghostty_available() -> bool {

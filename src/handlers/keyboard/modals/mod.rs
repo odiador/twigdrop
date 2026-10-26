@@ -49,7 +49,7 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
         AppMode::RenameBranch(old, input) => {
             branch_ops::handle_rename_branch(app, key, path, old, input)
         }
-        AppMode::CodePreview(state) => code_preview::handle(app, key, state),
+        AppMode::CodePreview(state) => code_preview::handle(app, key, state, path),
         AppMode::CommandPalette(state) => command_palette::handle(app, key, path, state),
         AppMode::FolderProfile(state) => folder_profile::handle(app, state, key, path),
         AppMode::PrReview(state) => pr_review::handle(app, key, state, path),

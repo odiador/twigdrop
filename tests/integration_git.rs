@@ -944,6 +944,13 @@ fn test_pr_ci_checks_and_review_modals() {
         .join("\n");
     assert!(content_checks.contains("test-suite"));
     assert!(content_checks.contains("All unit tests passed"));
+    assert!(content_checks.contains("▸"));
+    assert!(content_checks.contains("open log"));
+
+    // Press Enter to open check log in browser
+    let enter_key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, enter_key, &p);
+    assert!(app.ui.toast.is_some());
 
     // Press Tab to cycle back to Description
     let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
@@ -1130,4 +1137,20 @@ fn test_inline_blame_toggle_and_hunk_jump() {
     if let AppMode::CodePreview(s) = app.ui.current_mode() {
         assert_eq!(s.cursor_y, 19);
     }
+
+    // Press 'B' to inspect commit details from blame
+    let key_b_shift = KeyEvent::new(KeyCode::Char('B'), KeyModifiers::SHIFT);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_b_shift, &p);
+    assert!(
+        matches!(app.ui.current_mode(), AppMode::Message(msg) if msg.contains("Commit:") && msg.contains("Author:"))
+    );
+
+    // Esc closes message modal and returns to CodePreview
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert!(matches!(app.ui.current_mode(), AppMode::CodePreview(_)));
+
+    // Second Esc closes CodePreview and returns to normal
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
 }

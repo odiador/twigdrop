@@ -2,7 +2,7 @@ use crate::app::App;
 use crate::state::ui::{AppMode, FilePanel, PreviewState};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub fn handle(app: &mut App, key: KeyEvent, mut state: PreviewState) -> Option<bool> {
+pub fn handle(app: &mut App, key: KeyEvent, mut state: PreviewState, path: &str) -> Option<bool> {
     if key.code == KeyCode::Char('Z') {
         app.ui.maximized_panel = !app.ui.maximized_panel;
         let msg = if app.ui.maximized_panel {
@@ -77,6 +77,27 @@ pub fn handle(app: &mut App, key: KeyEvent, mut state: PreviewState) -> Option<b
         }
         if let AppMode::CodePreview(s) = app.ui.current_mode_mut() {
             *s = state;
+        }
+        Some(false)
+    } else if key.code == KeyCode::Char('B') {
+        if let Some(blame) = state.line_blames.get(&state.cursor_y) {
+            let commit_hash = &blame.commit;
+            let (stats, diff) = crate::git::commands::get_commit_details(path, commit_hash);
+            let msg = format!(
+                "Commit: {}\nAuthor: {}\nDate:   {}\n\nChanged files & stats:\n{}\n\nDiff excerpt:\n{}",
+                commit_hash,
+                blame.author,
+                blame.date,
+                stats.trim(),
+                diff.lines().take(30).collect::<Vec<_>>().join("\n")
+            );
+            app.ui.push_modal(AppMode::Message(msg));
+        } else {
+            app.ui.notify(
+                crate::state::toast::ToastKind::Info,
+                "No blame info for current line".to_string(),
+                None,
+            );
         }
         Some(false)
     } else if key.code == KeyCode::Tab

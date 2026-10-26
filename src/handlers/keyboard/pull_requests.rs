@@ -8,6 +8,7 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
             if app.ui.selected_pr_idx < app.repo.pull_requests.len().saturating_sub(1) {
                 app.ui.selected_pr_idx += 1;
                 app.ui.pr_scroll_y = 0;
+                app.ui.pr_check_idx = 0;
                 app.fetch_current_pr_diff(path);
             }
             false
@@ -16,6 +17,7 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
             if app.ui.selected_pr_idx > 0 {
                 app.ui.selected_pr_idx -= 1;
                 app.ui.pr_scroll_y = 0;
+                app.ui.pr_check_idx = 0;
                 app.fetch_current_pr_diff(path);
             }
             false
@@ -27,6 +29,7 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
                 PrTab::Checks => PrTab::Description,
             };
             app.ui.pr_scroll_y = 0;
+            app.ui.pr_check_idx = 0;
             if app.ui.pr_tab == PrTab::Diff && app.repo.pr_diff.is_none() {
                 app.fetch_current_pr_diff(path);
             } else if app.ui.pr_tab == PrTab::Checks {
@@ -50,6 +53,7 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
         KeyCode::Char('3') => {
             app.ui.pr_tab = PrTab::Checks;
             app.ui.pr_scroll_y = 0;
+            app.ui.pr_check_idx = 0;
             app.fetch_current_pr_checks(path);
             false
         }
@@ -158,11 +162,54 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
             false
         }
         KeyCode::Char('d') => {
-            app.ui.pr_scroll_y = app.ui.pr_scroll_y.saturating_add(5);
+            if app.ui.pr_tab == PrTab::Checks {
+                if let Some(pr) = app.repo.pull_requests.get(app.ui.selected_pr_idx) {
+                    let total = app
+                        .repo
+                        .pr_checks
+                        .get(&pr.number)
+                        .map(|c| c.len())
+                        .unwrap_or(0);
+                    if total > 0 && app.ui.pr_check_idx + 1 < total {
+                        app.ui.pr_check_idx += 1;
+                    }
+                }
+            } else {
+                app.ui.pr_scroll_y = app.ui.pr_scroll_y.saturating_add(5);
+            }
             false
         }
         KeyCode::Char('u') => {
-            app.ui.pr_scroll_y = app.ui.pr_scroll_y.saturating_sub(5);
+            if app.ui.pr_tab == PrTab::Checks {
+                if app.ui.pr_check_idx > 0 {
+                    app.ui.pr_check_idx -= 1;
+                }
+            } else {
+                app.ui.pr_scroll_y = app.ui.pr_scroll_y.saturating_sub(5);
+            }
+            false
+        }
+        KeyCode::Enter => {
+            if app.ui.pr_tab == PrTab::Checks
+                && let Some(pr) = app.repo.pull_requests.get(app.ui.selected_pr_idx)
+                && let Some(checks) = app.repo.pr_checks.get(&pr.number)
+                && let Some(check) = checks.get(app.ui.pr_check_idx)
+            {
+                if !check.link.is_empty() {
+                    crate::utils::terminal::open_url(&check.link);
+                    app.ui.notify(
+                        crate::state::toast::ToastKind::Info,
+                        format!("Opened check log: {}", check.name),
+                        None,
+                    );
+                } else {
+                    app.ui.notify(
+                        crate::state::toast::ToastKind::Info,
+                        format!("No URL available for check: {}", check.name),
+                        None,
+                    );
+                }
+            }
             false
         }
         KeyCode::PageDown => {

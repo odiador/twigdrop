@@ -315,6 +315,7 @@ pub struct UiState {
     pub pr_tab: PrTab,
     pub pr_filter: PrFilter,
     pub pr_scroll_y: u16,
+    pub pr_check_idx: usize,
 
     // Scrolling
     pub info_scroll: u16,
@@ -386,6 +387,7 @@ impl UiState {
             pr_tab: PrTab::Description,
             pr_filter: PrFilter::Open,
             pr_scroll_y: 0,
+            pr_check_idx: 0,
             info_scroll: 0,
             current_filter: None,
             search_query: String::new(),
