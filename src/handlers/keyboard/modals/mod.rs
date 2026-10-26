@@ -3,6 +3,7 @@ pub mod code_preview;
 pub mod command_palette;
 pub mod conflict_resolver;
 pub mod date_picker;
+pub mod discard_hunk;
 pub mod filter;
 pub mod folder_profile;
 pub mod help;
@@ -55,6 +56,7 @@ pub fn handle_modal_keyboard(app: &mut App, key: KeyEvent, path: &str) -> Option
         AppMode::FolderProfile(state) => folder_profile::handle(app, state, key, path),
         AppMode::PrReview(state) => pr_review::handle(app, key, state, path),
         AppMode::ConflictResolver(state) => conflict_resolver::handle(app, key, state, path),
+        AppMode::ConfirmDiscardHunk(state) => discard_hunk::handle(app, key, state, path),
         AppMode::Diff => Some(super::diff::handle_diff_keyboard(app, key, path)),
         AppMode::Help => help::handle(app, key),
     }

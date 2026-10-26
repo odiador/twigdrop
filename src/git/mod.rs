@@ -4,6 +4,7 @@ pub mod conflicts;
 pub mod error;
 pub mod files;
 pub mod formats;
+pub mod hunks;
 pub mod stash;
 pub mod status;
 

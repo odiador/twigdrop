@@ -1388,3 +1388,151 @@ fn test_visual_conflict_resolver_interactive_and_command_palette() {
     assert_eq!(*app.ui.current_mode(), AppMode::Normal);
     assert!(!twigdrop::git::status::is_merging(&p));
 }
+
+#[test]
+fn test_partial_hunk_staging_and_discarding_flow() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::{AppMode, FilePanel, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    // 1. Create a 50-line file and commit it
+    let file_path = dir.path().join("code.txt");
+    let mut lines = Vec::new();
+    for i in 1..=50 {
+        lines.push(format!("original line {i}"));
+    }
+    std::fs::write(&file_path, lines.join("\n") + "\n").expect("write code.txt");
+
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["add", "code.txt"])
+        .output()
+        .expect("git add");
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["commit", "-m", "add code.txt"])
+        .output()
+        .expect("git commit");
+
+    // 2. Introduce 2 modifications far apart (line 5 and line 35)
+    lines[4] = "MODIFIED LINE 5".to_string();
+    lines[34] = "MODIFIED LINE 35".to_string();
+    std::fs::write(&file_path, lines.join("\n") + "\n").expect("modify code.txt");
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::Files);
+    app.load_file_tree(&p);
+
+    // 3. Open CodePreview for code.txt
+    let preview = app.create_preview_state(&p, "code.txt").expect("preview");
+    app.ui.active_panel = FilePanel::Preview;
+    app.ui.push_modal(AppMode::CodePreview(preview));
+    assert!(matches!(app.ui.current_mode(), AppMode::CodePreview(_)));
+
+    // 4. Cursor starts at line 0 (1st line). Jump to first change with 'n'
+    let key_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_n, &p);
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert_eq!(s.cursor_y, 4, "Cursor jumped to line 5 (0-indexed 4)");
+    }
+
+    // 5. Render frame to check hunk active badge & shortcuts
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let content: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content.contains("[HUNK: Space stage • d discard]"));
+
+    // 6. Press Space to stage hunk 1 (line 5)
+    let space = KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, space, &p);
+
+    // Verify in git: hunk 1 is staged, hunk 2 is unstaged
+    let cached_diff = std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["diff", "--cached", "--", "code.txt"])
+        .output()
+        .expect("git diff --cached");
+    let cached_str = String::from_utf8_lossy(&cached_diff.stdout);
+    assert!(cached_str.contains("MODIFIED LINE 5"));
+    assert!(!cached_str.contains("MODIFIED LINE 35"));
+
+    let unstaged_diff = std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["diff", "--", "code.txt"])
+        .output()
+        .expect("git diff");
+    let unstaged_str = String::from_utf8_lossy(&unstaged_diff.stdout);
+    assert!(!unstaged_str.contains("MODIFIED LINE 5"));
+    assert!(unstaged_str.contains("MODIFIED LINE 35"));
+
+    // 7. Press Space again to unstage hunk 1
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, space, &p);
+    let cached_diff2 = std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["diff", "--cached", "--", "code.txt"])
+        .output()
+        .expect("git diff --cached");
+    let cached_str2 = String::from_utf8_lossy(&cached_diff2.stdout);
+    assert!(cached_str2.is_empty(), "Staged diff should now be empty");
+
+    // Stage hunk 1 again
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, space, &p);
+
+    // 8. Jump to second hunk with 'n'
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_n, &p);
+    if let AppMode::CodePreview(s) = app.ui.current_mode() {
+        assert_eq!(s.cursor_y, 34, "Cursor jumped to line 35 (0-indexed 34)");
+    }
+
+    // 9. Press 'd' to discard hunk 2
+    let key_d = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_d, &p);
+
+    // Confirm discard modal should be active
+    assert!(matches!(
+        app.ui.current_mode(),
+        AppMode::ConfirmDiscardHunk(_)
+    ));
+
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+    let content_discard: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content_discard.contains("Confirm Discard Hunk"));
+    assert!(content_discard.contains("code.txt"));
+
+    // 10. Press 'y' to confirm discard
+    let key_y = KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_y, &p);
+
+    // Modal popped back to CodePreview
+    assert!(matches!(app.ui.current_mode(), AppMode::CodePreview(_)));
+
+    // Verify file on disk: line 35 is restored, line 5 still modified
+    let content_file = std::fs::read_to_string(&file_path).expect("read file");
+    assert!(content_file.contains("original line 35"));
+    assert!(!content_file.contains("MODIFIED LINE 35"));
+    assert!(content_file.contains("MODIFIED LINE 5"));
+}

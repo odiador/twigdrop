@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::state::ui::{AppMode, PreviewState};
+use crate::state::ui::{AppMode, FilePanel, PreviewState};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub fn handle_preview_keyboard(state: &mut PreviewState, code: KeyCode) -> bool {
@@ -270,6 +270,7 @@ pub fn handle_files_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                         if matches!(app.ui.current_mode(), AppMode::CodePreview(_)) {
                             app.ui.pop_modal();
                         }
+                        app.ui.active_panel = FilePanel::Preview;
                         app.ui.push_modal(AppMode::CodePreview(preview));
                     }
                 }

@@ -2,6 +2,7 @@ pub mod branch_ops;
 pub mod command_palette;
 pub mod conflict_resolver;
 pub mod date_picker;
+pub mod discard_hunk;
 pub mod filter;
 pub mod folder_profile;
 pub mod help;
@@ -17,6 +18,7 @@ pub use branch_ops::{render_confirm_delete, render_create_branch, render_rename_
 pub use command_palette::render_command_palette;
 pub use conflict_resolver::render_conflict_resolver;
 pub use date_picker::render_date_picker;
+pub use discard_hunk::render_confirm_discard_hunk;
 pub use filter::render_filter;
 pub use folder_profile::render_folder_profile;
 pub use help::{ASCII_LOGO, render_help, render_help_content};

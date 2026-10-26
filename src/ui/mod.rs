@@ -319,6 +319,7 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
         AppMode::FolderProfile(state) => screens::render_folder_profile(f, app, state),
         AppMode::PrReview(state) => screens::render_pr_review(f, app, state),
         AppMode::ConflictResolver(state) => screens::render_conflict_resolver(f, app, state),
+        AppMode::ConfirmDiscardHunk(state) => screens::render_confirm_discard_hunk(f, app, state),
     }
 }
 

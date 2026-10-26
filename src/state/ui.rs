@@ -182,6 +182,15 @@ pub struct ConflictResolverState {
     pub selected_hunk_idx: usize,
 }
 
+#[derive(Default, PartialEq, Eq, Debug, Clone)]
+pub struct ConfirmDiscardHunkState {
+    pub file_path: String,
+    pub hunk_idx: usize,
+    pub new_start: usize,
+    pub new_lines: usize,
+    pub raw_patch: String,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum AppMode {
     Normal,
@@ -207,6 +216,7 @@ pub enum AppMode {
     FolderProfile(FolderProfileState),
     PrReview(PrReviewModalState),
     ConflictResolver(ConflictResolverState),
+    ConfirmDiscardHunk(ConfirmDiscardHunkState),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -304,6 +314,7 @@ impl AppMode {
                 | Self::FolderProfile(_)
                 | Self::PrReview(_)
                 | Self::ConflictResolver(_)
+                | Self::ConfirmDiscardHunk(_)
         )
     }
 }

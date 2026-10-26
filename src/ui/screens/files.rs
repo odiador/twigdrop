@@ -238,6 +238,13 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
             theme.peach,
         ));
 
+        if state.line_diffs.contains_key(&state.cursor_y) {
+            breadcrumb_spans.push(Span::styled(
+                " [HUNK: Space stage • d discard] ",
+                theme.peach.add_modifier(ratatui::style::Modifier::BOLD),
+            ));
+        }
+
         if let Some(blame) = state.line_blames.get(&state.cursor_y) {
             let author_short = if blame.author.len() > 14 {
                 format!("{}…", &blame.author[..13])
@@ -256,7 +263,7 @@ pub fn render_code_preview(f: &mut Frame, app: &App, area: Rect, state: &Preview
         }
 
         breadcrumb_spans.push(Span::styled(
-            " (b: blame • B: commit • n/N: hunk • Tab: switch │ j/k: scroll) ",
+            " (Space: stage • d: discard • n/N: hunk • b: blame • B: commit • Tab: switch) ",
             theme.subtle,
         ));
 

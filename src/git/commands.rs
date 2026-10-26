@@ -33,6 +33,39 @@ pub(crate) fn run_git_with_status(path: &str, args: &[&str]) -> Result<(String, 
     }
 }
 
+pub(crate) fn run_git_with_stdin(
+    path: &str,
+    args: &[&str],
+    input: &str,
+) -> Result<String, GitError> {
+    use std::io::Write;
+    let mut child = Command::new("git")
+        .current_dir(path)
+        .args(args)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input.as_bytes())?;
+    }
+
+    let output = child.wait_with_output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+
+    if output.status.success() {
+        Ok(stdout)
+    } else {
+        Err(GitError::Command(if stderr.is_empty() {
+            stdout
+        } else {
+            stderr
+        }))
+    }
+}
+
 use std::path::{Path, PathBuf};
 
 pub fn is_inside_git_work_tree(path: &str) -> bool {
