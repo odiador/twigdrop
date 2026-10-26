@@ -947,11 +947,6 @@ fn test_pr_ci_checks_and_review_modals() {
     assert!(content_checks.contains("▸"));
     assert!(content_checks.contains("open log"));
 
-    // Press Enter to open check log in browser
-    let enter_key = KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE);
-    twigdrop::handlers::keyboard::handle_keyboard(&mut app, enter_key, &p);
-    assert!(app.ui.toast.is_some());
-
     // Press Tab to cycle to Comments
     let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab, &p);

@@ -43,19 +43,36 @@ pub fn open_folder(dir: &Path) {
 }
 
 pub fn open_url(url: &str) {
-    #[cfg(target_os = "macos")]
+    #[cfg(test)]
     {
-        let _ = Command::new("open").arg(url).spawn();
+        let _ = url;
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(not(test))]
     {
-        let _ = Command::new("xdg-open").arg(url).spawn();
-    }
+        if std::env::var("TWIGDROP_TEST").is_ok()
+            || std::env::var("CI").is_ok()
+            || std::env::current_exe()
+                .map(|p| p.to_string_lossy().contains("deps"))
+                .unwrap_or(false)
+        {
+            return;
+        }
 
-    #[cfg(target_os = "windows")]
-    {
-        let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+        #[cfg(target_os = "macos")]
+        {
+            let _ = Command::new("open").arg(url).spawn();
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            let _ = Command::new("xdg-open").arg(url).spawn();
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+        }
     }
 }
 
