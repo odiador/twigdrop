@@ -32,6 +32,8 @@ pub struct RepositoryState {
     pub pr_diff: Option<String>,
     pub pr_error: Option<String>,
     pub pr_checks: HashMap<u64, Vec<crate::models::PrCheck>>,
+    pub pr_comments: HashMap<u64, Vec<crate::models::PrComment>>,
+    pub conflicting_files: Vec<String>,
 }
 
 impl RepositoryState {
@@ -60,6 +62,8 @@ impl RepositoryState {
             pr_diff: None,
             pr_error: None,
             pr_checks: HashMap::new(),
+            pr_comments: HashMap::new(),
+            conflicting_files: Vec::new(),
         }
     }
 }

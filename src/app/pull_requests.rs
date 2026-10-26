@@ -13,12 +13,14 @@ impl App {
                 }
                 self.fetch_current_pr_diff(path);
                 self.fetch_current_pr_checks(path);
+                self.fetch_current_pr_comments(path);
             }
             Err(e) => {
                 self.repo.pull_requests.clear();
                 self.repo.pr_error = Some(e.to_string());
                 self.repo.pr_diff = None;
                 self.repo.pr_checks.clear();
+                self.repo.pr_comments.clear();
             }
         }
     }
@@ -42,6 +44,18 @@ impl App {
                 && let Ok(checks) = github::get_pull_request_checks(path, pr_number)
             {
                 e.insert(checks);
+            }
+        }
+    }
+
+    pub fn fetch_current_pr_comments(&mut self, path: &str) {
+        if let Some(pr) = self.repo.pull_requests.get(self.ui.selected_pr_idx) {
+            let pr_number = pr.number;
+            if let std::collections::hash_map::Entry::Vacant(e) =
+                self.repo.pr_comments.entry(pr_number)
+                && let Ok(comments) = github::get_pull_request_comments(path, pr_number)
+            {
+                e.insert(comments);
             }
         }
     }

@@ -35,6 +35,7 @@ pub enum CommandAction {
     ContinueRebase,
     AbortRebase,
     AbortMerge,
+    ResolveConflicts,
 }
 
 #[derive(Default, PartialEq, Eq, Debug, Clone)]

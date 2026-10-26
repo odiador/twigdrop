@@ -58,6 +58,13 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             let loc = app.locale();
             // In-progress rebase/merge actions go first so they are easy to reach.
             let mut actions = Vec::new();
+            let conflicting = crate::git::status::get_conflicting_files(path);
+            if !conflicting.is_empty() {
+                actions.push((
+                    format!("⚡ Resolve Conflicts ({} files)", conflicting.len()),
+                    CommandAction::ResolveConflicts,
+                ));
+            }
             if crate::git::status::is_rebasing(path) {
                 actions.push((
                     loc.modals.cmd_continue_rebase.to_string(),
@@ -217,13 +224,16 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
                 app.ui.pr_tab = match app.ui.pr_tab {
                     crate::state::ui::PrTab::Description => crate::state::ui::PrTab::Diff,
                     crate::state::ui::PrTab::Diff => crate::state::ui::PrTab::Checks,
-                    crate::state::ui::PrTab::Checks => crate::state::ui::PrTab::Description,
+                    crate::state::ui::PrTab::Checks => crate::state::ui::PrTab::Comments,
+                    crate::state::ui::PrTab::Comments => crate::state::ui::PrTab::Description,
                 };
                 app.ui.pr_scroll_y = 0;
                 if app.ui.pr_tab == crate::state::ui::PrTab::Diff && app.repo.pr_diff.is_none() {
                     app.fetch_current_pr_diff(path);
                 } else if app.ui.pr_tab == crate::state::ui::PrTab::Checks {
                     app.fetch_current_pr_checks(path);
+                } else if app.ui.pr_tab == crate::state::ui::PrTab::Comments {
+                    app.fetch_current_pr_comments(path);
                 }
             }
             return false;
@@ -330,6 +340,27 @@ pub fn handle_keyboard(app: &mut App, key: KeyEvent, path: &str) -> bool {
             };
             app.ui
                 .notify(crate::state::toast::ToastKind::Info, msg.to_string(), None);
+            return false;
+        }
+        KeyCode::Char('X') => {
+            let files = crate::git::status::get_conflicting_files(path);
+            if !files.is_empty() {
+                let hunks = crate::git::conflicts::parse_file_conflicts(path, &files[0]);
+                app.ui.push_modal(AppMode::ConflictResolver(
+                    crate::state::ui::ConflictResolverState {
+                        files,
+                        selected_file_idx: 0,
+                        hunks,
+                        selected_hunk_idx: 0,
+                    },
+                ));
+            } else {
+                app.ui.notify(
+                    crate::state::toast::ToastKind::Info,
+                    "No conflicting files detected".to_string(),
+                    None,
+                );
+            }
             return false;
         }
 

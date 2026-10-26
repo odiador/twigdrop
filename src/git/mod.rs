@@ -1,5 +1,6 @@
 pub mod blame;
 pub mod commands;
+pub mod conflicts;
 pub mod error;
 pub mod files;
 pub mod formats;

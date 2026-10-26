@@ -240,6 +240,7 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
     let is_desc = app.ui.pr_tab == PrTab::Description;
     let is_diff = app.ui.pr_tab == PrTab::Diff;
     let is_checks = app.ui.pr_tab == PrTab::Checks;
+    let is_comments = app.ui.pr_tab == PrTab::Comments;
 
     let tab_desc_style = if is_desc {
         Style::default()
@@ -268,6 +269,15 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
         theme.subtle
     };
 
+    let tab_comments_style = if is_comments {
+        Style::default()
+            .bg(theme.surface)
+            .fg(theme.accent.fg.unwrap_or(Color::Magenta))
+            .add_modifier(Modifier::BOLD)
+    } else {
+        theme.subtle
+    };
+
     let checks_count = app
         .repo
         .pr_checks
@@ -286,6 +296,18 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
         " [ 3: Checks ] ".to_string()
     };
 
+    let comments_count = app
+        .repo
+        .pr_comments
+        .get(&selected_pr.number)
+        .map(|c| c.len())
+        .unwrap_or(0);
+    let comments_badge_label = if comments_count > 0 {
+        format!(" [ 4: Discussion ({comments_count}) ] ")
+    } else {
+        " [ 4: Discussion ] ".to_string()
+    };
+
     let header_block = Block::default()
         .title(" Pull Request Overview ")
         .borders(Borders::ALL)
@@ -295,6 +317,8 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
 
     let action_hint = if is_checks {
         " (Tab: tabs │ d/u: select check │ Enter: open log │ a: approve │ o: web)"
+    } else if is_comments {
+        " (Tab: tabs │ u/d: scroll discussion │ m: add comment │ a: approve │ o: web)"
     } else {
         " (Tab: tabs │ a: approve │ x: request changes │ m: comment │ c: checkout │ o: web)"
     };
@@ -304,6 +328,7 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
             Span::styled(" [ 1: Description ] ", tab_desc_style),
             Span::styled(" [ 2: Diff ] ", tab_diff_style),
             Span::styled(checks_badge_label, tab_checks_style),
+            Span::styled(comments_badge_label, tab_comments_style),
             Span::styled(action_hint, theme.subtle),
         ]),
         Line::from(vec![
@@ -356,7 +381,7 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
             .scroll((app.ui.pr_scroll_y, 0))
             .wrap(Wrap { trim: false });
         (len, "Changes Diff", p)
-    } else {
+    } else if is_checks {
         let checks = app.repo.pr_checks.get(&selected_pr.number);
         let mut check_lines = Vec::new();
         check_lines.push(Line::default());
@@ -440,6 +465,48 @@ fn render_pr_details(f: &mut Frame, area: Rect, app: &App) {
             .scroll((app.ui.pr_scroll_y, 0))
             .wrap(Wrap { trim: false });
         (len, "CI Checks", p)
+    } else {
+        let comments = app.repo.pr_comments.get(&selected_pr.number);
+        let mut comment_lines = Vec::new();
+        comment_lines.push(Line::default());
+        if let Some(list) = comments {
+            if list.is_empty() {
+                comment_lines.push(Line::from(Span::styled(
+                    "  No discussion comments yet on this pull request.",
+                    theme.muted,
+                )));
+            } else {
+                for (idx, c) in list.iter().enumerate() {
+                    let header_line = Line::from(vec![
+                        Span::styled(
+                            format!(" #{} 💬 @{} ", idx + 1, c.author.login),
+                            theme.accent.add_modifier(Modifier::BOLD),
+                        ),
+                        Span::styled(format!(" • {} ", c.created_at), theme.subtle),
+                    ]);
+                    comment_lines.push(header_line);
+                    comment_lines.push(Line::default());
+                    let rendered = crate::ui::markdown::render_markdown(&c.body, &theme);
+                    comment_lines.extend(rendered);
+                    comment_lines.push(Line::default());
+                    comment_lines.push(Line::from(Span::styled(
+                        "────────────────────────────────────────",
+                        theme.dim,
+                    )));
+                    comment_lines.push(Line::default());
+                }
+            }
+        } else {
+            comment_lines.push(Line::from(Span::styled(
+                "  Loading comments from GitHub...",
+                theme.subtle,
+            )));
+        }
+        let len = comment_lines.len();
+        let p = Paragraph::new(comment_lines)
+            .scroll((app.ui.pr_scroll_y, 0))
+            .wrap(Wrap { trim: false });
+        (len, "Discussion", p)
     };
 
     let scroll_badge = crate::ui::components::scroll_indicator(

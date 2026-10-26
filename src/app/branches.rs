@@ -12,6 +12,7 @@ impl App {
             .into_iter()
             .next();
         self.repo.git_file_statuses = crate::git::files::get_git_file_statuses(path);
+        self.repo.conflicting_files = crate::git::status::get_conflicting_files(path);
         // The analyzer re-checks every branch on trigger; show that in the UI.
         if !self.trigger_tx.is_closed() {
             for b in &mut self.repo.branches {

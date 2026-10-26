@@ -108,6 +108,14 @@ pub struct PullRequest {
     pub body: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PrComment {
+    pub author: PullRequestAuthor,
+    pub body: String,
+    #[serde(rename = "createdAt", default)]
+    pub created_at: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum CiStatus {
     #[default]

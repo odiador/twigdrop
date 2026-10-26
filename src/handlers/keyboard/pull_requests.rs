@@ -26,7 +26,8 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
             app.ui.pr_tab = match app.ui.pr_tab {
                 PrTab::Description => PrTab::Diff,
                 PrTab::Diff => PrTab::Checks,
-                PrTab::Checks => PrTab::Description,
+                PrTab::Checks => PrTab::Comments,
+                PrTab::Comments => PrTab::Description,
             };
             app.ui.pr_scroll_y = 0;
             app.ui.pr_check_idx = 0;
@@ -34,6 +35,8 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
                 app.fetch_current_pr_diff(path);
             } else if app.ui.pr_tab == PrTab::Checks {
                 app.fetch_current_pr_checks(path);
+            } else if app.ui.pr_tab == PrTab::Comments {
+                app.fetch_current_pr_comments(path);
             }
             false
         }
@@ -55,6 +58,12 @@ pub fn handle_pull_requests_keyboard(app: &mut App, key: KeyEvent, path: &str) -
             app.ui.pr_scroll_y = 0;
             app.ui.pr_check_idx = 0;
             app.fetch_current_pr_checks(path);
+            false
+        }
+        KeyCode::Char('4') => {
+            app.ui.pr_tab = PrTab::Comments;
+            app.ui.pr_scroll_y = 0;
+            app.fetch_current_pr_comments(path);
             false
         }
         KeyCode::Char('a') => {

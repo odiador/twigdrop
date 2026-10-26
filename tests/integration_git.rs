@@ -952,8 +952,12 @@ fn test_pr_ci_checks_and_review_modals() {
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, enter_key, &p);
     assert!(app.ui.toast.is_some());
 
-    // Press Tab to cycle back to Description
+    // Press Tab to cycle to Comments
     let tab = KeyEvent::new(KeyCode::Tab, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab, &p);
+    assert_eq!(app.ui.pr_tab, PrTab::Comments);
+
+    // Press Tab again to cycle back to Description
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, tab, &p);
     assert_eq!(app.ui.pr_tab, PrTab::Description);
 
@@ -1153,4 +1157,234 @@ fn test_inline_blame_toggle_and_hunk_jump() {
     // Second Esc closes CodePreview and returns to normal
     twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
     assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+}
+
+#[test]
+fn test_pr_discussion_tab_and_markdown_rendering() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use std::collections::HashMap;
+    use twigdrop::models::{PrComment, PullRequest, PullRequestAuthor};
+    use twigdrop::state::{PrTab, PrimaryMode};
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    let mut app = test_app(&p, vec![], "main");
+    app.set_primary_mode(PrimaryMode::PullRequests);
+
+    let pr = PullRequest {
+        number: 100,
+        title: "Support OAuth2 login".to_string(),
+        author: PullRequestAuthor {
+            login: "alice".to_string(),
+        },
+        head_ref_name: "feature/oauth".to_string(),
+        base_ref_name: "main".to_string(),
+        url: "https://github.com/example/repo/pull/100".to_string(),
+        state: "OPEN".to_string(),
+        updated_at: "2026-10-25T19:00:00Z".to_string(),
+        body: "Implements GitHub and Google SSO".to_string(),
+    };
+    app.repo.pull_requests = vec![pr];
+    app.ui.selected_pr_idx = 0;
+
+    let comment = PrComment {
+        author: PullRequestAuthor {
+            login: "reviewer_bob".to_string(),
+        },
+        body: "Great work! Please ensure **expired tokens** are handled correctly:\n```rust\nlet expired = true;\n```".to_string(),
+        created_at: "2026-10-25T20:00:00Z".to_string(),
+    };
+    let mut comments_map = HashMap::new();
+    comments_map.insert(100, vec![comment]);
+    app.repo.pr_comments = comments_map;
+
+    // Press '4' to jump directly to Discussion tab
+    let key_4 = KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_4, &p);
+    assert_eq!(app.ui.pr_tab, PrTab::Comments);
+
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let content: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content.contains("[ 4: Discussion (1) ]"));
+    assert!(content.contains("@reviewer_bob"));
+    assert!(content.contains("Great work!"));
+    assert!(content.contains("expired tokens"));
+
+    // Test scrolling in discussion
+    let down_key = KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, down_key, &p);
+    assert_eq!(app.ui.pr_scroll_y, 5);
+
+    // Press '1' to jump back to Description tab
+    let key_1 = KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_1, &p);
+    assert_eq!(app.ui.pr_tab, PrTab::Description);
+    assert_eq!(app.ui.pr_scroll_y, 0);
+}
+
+#[test]
+fn test_visual_conflict_resolver_interactive_and_command_palette() {
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    use twigdrop::state::AppMode;
+
+    let dir = init_repo();
+    let p = repo_path(&dir);
+
+    // 1. Create a base file and commit on main
+    let main_file = dir.path().join("conflict.txt");
+    std::fs::write(&main_file, "Line 1: base\nLine 2: base\n").expect("write base");
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["add", "conflict.txt"])
+        .output()
+        .expect("git add");
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["commit", "-m", "add conflict.txt"])
+        .output()
+        .expect("git commit");
+
+    // 2. Create feature branch and modify line 2
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["checkout", "-b", "feature-branch"])
+        .output()
+        .expect("git checkout -b");
+    std::fs::write(&main_file, "Line 1: base\nLine 2: feature modification\n")
+        .expect("write feature");
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["commit", "-am", "feature commit"])
+        .output()
+        .expect("git commit feature");
+
+    // 3. Switch back to main and modify line 2 differently
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["checkout", "main"])
+        .output()
+        .expect("git checkout main");
+    std::fs::write(
+        &main_file,
+        "Line 1: base\nLine 2: main branch modification\n",
+    )
+    .expect("write main");
+    std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["commit", "-am", "main commit"])
+        .output()
+        .expect("git commit main");
+
+    // 4. Merge feature-branch into main to trigger a real git conflict
+    let merge_output = std::process::Command::new("git")
+        .current_dir(&p)
+        .args(["merge", "feature-branch"])
+        .output()
+        .expect("git merge");
+    assert!(!merge_output.status.success(), "Merge should conflict");
+
+    // 5. Initialize app and verify conflict detection
+    let mut app = test_app(&p, vec![], "main");
+    app.refresh_branches(&p);
+    assert_eq!(app.repo.conflicting_files, vec!["conflict.txt"]);
+
+    // Render frame to check status bar conflict badge
+    let backend = TestBackend::new(140, 40);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+
+    let content: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(content.contains("CONFLICTS (1) [X: Resolve]"));
+
+    // 6. Test Command Palette has "Resolve Conflicts" as top action
+    let ctrl_k = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::CONTROL);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, ctrl_k, &p);
+    assert!(matches!(app.ui.current_mode(), AppMode::CommandPalette(_)));
+    if let AppMode::CommandPalette(s) = app.ui.current_mode() {
+        assert!(s.actions[0].0.contains("Resolve Conflicts"));
+    }
+
+    // Close command palette with Esc
+    let esc = KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, esc, &p);
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+
+    // 7. Open Visual Conflict Resolver with 'X'
+    let key_x_shift = KeyEvent::new(KeyCode::Char('X'), KeyModifiers::SHIFT);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_x_shift, &p);
+    assert!(matches!(
+        app.ui.current_mode(),
+        AppMode::ConflictResolver(_)
+    ));
+
+    terminal
+        .draw(|f| twigdrop::ui::draw(f, &mut app, &p))
+        .unwrap();
+    let content_resolver: String = (0..terminal.backend().buffer().area.height)
+        .map(|y| {
+            (0..terminal.backend().buffer().area.width)
+                .map(|x| terminal.backend().buffer()[(x, y)].symbol())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(content_resolver.contains("Visual 3-Way Conflict Resolver"));
+    assert!(content_resolver.contains("conflict.txt"));
+    assert!(content_resolver.contains("[o: Accept Ours]"));
+    assert!(content_resolver.contains("[t: Accept Theirs]"));
+    assert!(content_resolver.contains("OURS / CURRENT"));
+    assert!(content_resolver.contains("THEIRS / INCOMING"));
+
+    // 8. Press 'o' to Accept Ours
+    let key_o = KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_o, &p);
+
+    // Verify resolved content on disk
+    let file_content = std::fs::read_to_string(&main_file).expect("read resolved file");
+    assert!(file_content.contains("Line 2: main branch modification"));
+    assert!(!file_content.contains("<<<<<<<"));
+    assert!(!file_content.contains(">>>>>>>"));
+
+    // Check git index: file should be auto-staged and conflicts cleared
+    let conflicting = twigdrop::git::status::get_conflicting_files(&p);
+    assert!(
+        conflicting.is_empty(),
+        "All conflicts should be resolved in index"
+    );
+
+    // 9. Press 'c' to commit the merge
+    let key_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::NONE);
+    twigdrop::handlers::keyboard::handle_keyboard(&mut app, key_c, &p);
+
+    // Modal should be popped and merge finalized
+    assert_eq!(*app.ui.current_mode(), AppMode::Normal);
+    assert!(!twigdrop::git::status::is_merging(&p));
 }

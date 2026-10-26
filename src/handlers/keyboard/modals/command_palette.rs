@@ -106,6 +106,27 @@ pub fn handle(
                         app.refresh_branches(path);
                         app.ui.push_modal(AppMode::Message(msg));
                     }
+                    CommandAction::ResolveConflicts => {
+                        let files = crate::git::status::get_conflicting_files(path);
+                        if !files.is_empty() {
+                            let hunks =
+                                crate::git::conflicts::parse_file_conflicts(path, &files[0]);
+                            app.ui.push_modal(AppMode::ConflictResolver(
+                                crate::state::ui::ConflictResolverState {
+                                    files,
+                                    selected_file_idx: 0,
+                                    hunks,
+                                    selected_hunk_idx: 0,
+                                },
+                            ));
+                        } else {
+                            app.ui.notify(
+                                crate::state::toast::ToastKind::Info,
+                                "No merge or rebase conflicts found.".to_string(),
+                                None,
+                            );
+                        }
+                    }
                 }
             } else {
                 app.ui.pop_modal();

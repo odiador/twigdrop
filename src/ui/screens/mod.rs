@@ -15,10 +15,10 @@ pub use commits::{
 pub use diff::render_diff;
 pub use files::{render_code_preview, render_directory_searcher};
 pub use modals::{
-    render_command_palette, render_confirm_delete, render_create_branch, render_date_picker,
-    render_filter, render_folder_profile, render_help, render_main_menu, render_manage,
-    render_message, render_pr_review, render_quick_actions, render_rename_branch, render_settings,
-    render_shell, render_switcher,
+    render_command_palette, render_confirm_delete, render_conflict_resolver, render_create_branch,
+    render_date_picker, render_filter, render_folder_profile, render_help, render_main_menu,
+    render_manage, render_message, render_pr_review, render_quick_actions, render_rename_branch,
+    render_settings, render_shell, render_switcher,
 };
 pub use pull_requests::render_pull_requests;
 pub use stashes::render_stash_detail;

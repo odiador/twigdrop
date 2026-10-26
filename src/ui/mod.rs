@@ -231,16 +231,27 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
     };
 
     let theme = app.theme();
-    let footer_line = ratatui::text::Line::from(vec![
-        ratatui::text::Span::styled(
-            status_prefix,
-            theme.nav.add_modifier(ratatui::style::Modifier::BOLD),
-        ),
-        ratatui::text::Span::styled(
-            footer_shortcuts,
-            ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray),
-        ),
-    ]);
+    let mut footer_spans = vec![ratatui::text::Span::styled(
+        status_prefix,
+        theme.nav.add_modifier(ratatui::style::Modifier::BOLD),
+    )];
+
+    if !app.repo.conflicting_files.is_empty() {
+        footer_spans.push(ratatui::text::Span::styled(
+            format!(
+                " ⚠️ CONFLICTS ({}) [X: Resolve] │",
+                app.repo.conflicting_files.len()
+            ),
+            theme.danger.add_modifier(ratatui::style::Modifier::BOLD),
+        ));
+    }
+
+    footer_spans.push(ratatui::text::Span::styled(
+        footer_shortcuts,
+        ratatui::style::Style::default().fg(ratatui::style::Color::DarkGray),
+    ));
+
+    let footer_line = ratatui::text::Line::from(footer_spans);
 
     let footer = ratatui::widgets::Paragraph::new(footer_line);
     f.render_widget(footer, footer_area);
@@ -307,6 +318,7 @@ pub fn render_chrome(f: &mut Frame, app: &App, toast_area: Option<Rect>, footer_
         AppMode::CommandPalette(state) => screens::render_command_palette(f, state, loc, &theme),
         AppMode::FolderProfile(state) => screens::render_folder_profile(f, app, state),
         AppMode::PrReview(state) => screens::render_pr_review(f, app, state),
+        AppMode::ConflictResolver(state) => screens::render_conflict_resolver(f, app, state),
     }
 }
 

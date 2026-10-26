@@ -115,6 +115,7 @@ pub enum PrTab {
     Description,
     Diff,
     Checks,
+    Comments,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -173,6 +174,14 @@ impl PrFilter {
     }
 }
 
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub struct ConflictResolverState {
+    pub files: Vec<String>,
+    pub selected_file_idx: usize,
+    pub hunks: Vec<crate::git::conflicts::ConflictHunk>,
+    pub selected_hunk_idx: usize,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum AppMode {
     Normal,
@@ -197,6 +206,7 @@ pub enum AppMode {
     CommandPalette(CommandPaletteState),
     FolderProfile(FolderProfileState),
     PrReview(PrReviewModalState),
+    ConflictResolver(ConflictResolverState),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -293,6 +303,7 @@ impl AppMode {
                 | Self::ConfirmDelete(_)
                 | Self::FolderProfile(_)
                 | Self::PrReview(_)
+                | Self::ConflictResolver(_)
         )
     }
 }

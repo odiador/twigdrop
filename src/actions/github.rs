@@ -186,6 +186,35 @@ pub fn comment_pull_request(path: &str, number: u64, body: &str) -> Result<Strin
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+#[derive(serde::Deserialize)]
+struct PrViewCommentsResponse {
+    #[serde(default)]
+    comments: Vec<crate::models::PrComment>,
+}
+
+/// Retrieves comments and discussion threads for a pull request using `gh pr view --json comments`.
+pub fn get_pull_request_comments(
+    path: &str,
+    number: u64,
+) -> Result<Vec<crate::models::PrComment>, GitError> {
+    let output = Command::new("gh")
+        .current_dir(path)
+        .args(["pr", "view", &number.to_string(), "--json", "comments"])
+        .output()?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        return Err(GitError::Command(format!(
+            "gh pr view comments failed: {stderr}"
+        )));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed: PrViewCommentsResponse = serde_json::from_str(&stdout)
+        .map_err(|e| GitError::Command(format!("Failed to parse PR comments JSON: {e}")))?;
+    Ok(parsed.comments)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,5 +277,24 @@ mod tests {
 
         let empty_status = crate::models::compute_ci_status(&[]);
         assert_eq!(empty_status, crate::models::CiStatus::Unknown);
+    }
+
+    #[test]
+    fn test_deserialize_comments_json() {
+        let json_data = r#"{
+            "comments": [
+                {
+                    "author": { "login": "alice" },
+                    "body": "Looks great! Ready to merge.",
+                    "createdAt": "2026-10-25T14:30:00Z"
+                }
+            ]
+        }"#;
+
+        let parsed: PrViewCommentsResponse = serde_json::from_str(json_data).unwrap();
+        assert_eq!(parsed.comments.len(), 1);
+        assert_eq!(parsed.comments[0].author.login, "alice");
+        assert_eq!(parsed.comments[0].body, "Looks great! Ready to merge.");
+        assert_eq!(parsed.comments[0].created_at, "2026-10-25T14:30:00Z");
     }
 }

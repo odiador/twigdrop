@@ -1,5 +1,6 @@
 pub mod branch_ops;
 pub mod command_palette;
+pub mod conflict_resolver;
 pub mod date_picker;
 pub mod filter;
 pub mod folder_profile;
@@ -14,6 +15,7 @@ pub mod switcher;
 
 pub use branch_ops::{render_confirm_delete, render_create_branch, render_rename_branch};
 pub use command_palette::render_command_palette;
+pub use conflict_resolver::render_conflict_resolver;
 pub use date_picker::render_date_picker;
 pub use filter::render_filter;
 pub use folder_profile::render_folder_profile;
